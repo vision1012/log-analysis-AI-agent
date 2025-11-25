@@ -1,5 +1,5 @@
 # log-analysis-AI-agent
-**Authors:**  
+**Developers:**  
 - Jay Paun  
 - Preet Patel  
 
