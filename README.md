@@ -18,7 +18,7 @@ log-analysis-ai-agent/
 │
 ├── agent/
 │   ├── agent_core.py
-│   ├── tools.py      ← your utilities wrapped as tools
+│   ├── tools.py              ← utilities wrapped as callable AI tools
 │   ├── reasoning.py
 │
 ├── utilities/
@@ -30,10 +30,10 @@ log-analysis-ai-agent/
 │   ├── time_slice.py
 │
 ├── ui/
-│   ├── app.py        ← Streamlit or FastAPI app
+│   ├── app.py                ← Streamlit or FastAPI web UI
 │
 ├── data/
-│   ├── input/
-│   ├── output/
+│   ├── input/                ← raw log files
+│   ├── output/               ← generated processed files
 │
 └── README.md
