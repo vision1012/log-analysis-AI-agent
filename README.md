@@ -1,14 +1,13 @@
 # log-analysis-AI-agent
-Jay Paun
-Preet Patel 
+**Authors:**  
+- Jay Paun  
+- Preet Patel  
 
-
-Features:
-
-•	ErrorSplitter
-•	LogSummary
-•	StackTrace
-•	error_lines
-•	search_on_keyword
-•	time slicing
-•	root-cause extraction
+## Features
+- ErrorSplitter  
+- LogSummary  
+- StackTrace  
+- error_lines  
+- search_on_keyword  
+- time slicing  
+- root-cause extraction  
