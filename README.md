@@ -1,5 +1,5 @@
 # log-analysis-AI-agent
-**Developers:**  
+** Genz Developers:**  
 - Jay Paun  
 - Preet Patel  
 
