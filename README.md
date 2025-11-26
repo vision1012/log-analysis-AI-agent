@@ -43,3 +43,4 @@ log-analysis-ai-agent/
 Data URLs:
 
 https://github.com/logpai/loghub
+https://www.kaggle.com/datasets/ayenuryrr/loghub-hdfs-hadoop-distributed-file-system-data
