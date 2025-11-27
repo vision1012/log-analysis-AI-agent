@@ -69,7 +69,7 @@ log-analysis-AI-agent/
 
 ## 🔮 Coming Soon  
 
-- Streamlit-based Web UI  
+- ReactJS-based Web UI  
 - Automated pipeline for log ingestion  
 - Real-time log monitoring system with alerts  
 - LLM-enhanced advanced log reasoning  
