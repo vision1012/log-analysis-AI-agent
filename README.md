@@ -65,12 +65,21 @@ log-analysis-AI-agent/
 │   ├── stacktrace.py        # Stacktrace parsing and analysis
 │   └── time_slice.py        # Filter logs by time windows
 └── 📄 README.md             # Project documentation
+```
 
+## 🔮 Coming Soon  
 
-🔮 Coming Soon
+- Streamlit-based Web UI  
+- Automated pipeline for log ingestion  
+- Real-time log monitoring system with alerts  
+- LLM-enhanced advanced log reasoning  
+- Visualization dashboard for anomalies  
 
-Streamlit-based Web UI
-Automated pipeline for log ingestion
-Real-time log monitoring system with alerts
-LLM-enhanced advanced log reasoning
-Visualization dashboard for anomalies
+---
+
+## ⭐ Vision  
+
+Logs are messy.  
+Debugging is slow.  
+Our goal: Make log analysis **smarter, faster, and fully automated** using AI.
+
