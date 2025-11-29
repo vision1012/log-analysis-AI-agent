@@ -1,6 +1,6 @@
 # 🚀 Log Analysis AI Agent  
 
-An intelligent, end-to-end **AI-powered log analysis system** designed to streamline debugging, accelerate incident response, and extract actionable insights from complex logs.
+An intelligent, end-to-end **AI-powered log analysis system** designed to streamline debugging, accelerate incident response, and extract actionable insights from complex logs..
 
 ---
 
