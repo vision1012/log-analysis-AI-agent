@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from typing import Union, List
 import os
+import tempfile
 
 
 def slice_by_time(log_content: Union[str, List[str]], start_time: datetime, end_time: datetime) -> List[str]:
@@ -67,8 +68,7 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
     Returns:
         datetime or None: Parsed timestamp if found, None otherwise.
     """
-    # Check for Unix timestamps first (before dateutil tries to parse them as dates)
-    # Unix timestamp (milliseconds - 13 digits) - check before dateutil
+    # Unix timestamp (milliseconds - 13 digits)
     match = re.search(r'\b(1[0-9]{12}|[2-9][0-9]{12})\b', line)
     if match:
         try:
@@ -77,7 +77,7 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
         except (ValueError, OSError):
             pass
     
-    # Unix timestamp (seconds - 10 digits) - check before dateutil
+    # Unix timestamp (seconds - 10 digits)
     match = re.search(r'\b(1[0-9]{9}|[2-9][0-9]{9})\b', line)
     if match:
         try:
@@ -86,35 +86,7 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
         except (ValueError, OSError):
             pass
     
-    # Try parsing with dateutil if available (handles most formats automatically)
-    try:
-        from dateutil import parser
-        # Try to find any date-like pattern in the line (excluding Unix timestamps)
-        date_patterns = [
-            r'\d{4}[-/]\d{2}[-/]\d{2}',  # YYYY-MM-DD or YYYY/MM/DD
-            r'\d{2}[-/]\d{2}[-/]\d{4}',  # MM-DD-YYYY or DD-MM-YYYY
-            r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*',  # Month names
-        ]
-        
-        for pattern in date_patterns:
-            match = re.search(pattern, line, re.IGNORECASE)
-            if match:
-                # Try to extract a larger context around the match
-                start_idx = max(0, match.start() - 30)
-                end_idx = min(len(line), match.end() + 50)
-                context = line[start_idx:end_idx]
-                
-                try:
-                    # dateutil can parse many formats automatically
-                    parsed = parser.parse(context, fuzzy=True, default=datetime(1970, 1, 1))
-                    if parsed.year > 1970 and parsed.year < 2100:  # Reasonable year range
-                        return parsed
-                except (ValueError, parser.ParserError, OverflowError):
-                    continue
-    except ImportError:
-        pass  # Continue with manual parsing
-    
-    # Manual format parsing (for when dateutil is not available)
+    # Manual format parsing
     
     # ISO 8601 formats: 2024-01-01T10:00:00 or 2024-01-01 10:00:00
     iso_patterns = [
@@ -263,3 +235,33 @@ def slice_by_time_range(log_file: str, start_time: datetime, end_time: datetime)
         list of str: Log lines that fall within the time range.
     """
     return slice_by_time(log_file, start_time, end_time)
+
+
+def slice_by_time_to_file(log_content: Union[str, List[str]], start_time: datetime, end_time: datetime, output_file: Union[str, None] = None) -> str:
+    """
+    Extract log lines within a time range and write them to a file.
+    
+    Args:
+        log_content (str or list of str): The log file path, log content as string, or list of log lines.
+        start_time (datetime): Start time for filtering (inclusive).
+        end_time (datetime): End time for filtering (inclusive).
+        output_file (str, optional): Path to output file. If None, creates a temporary file.
+    
+    Returns:
+        str: Path to the output file containing the filtered log lines.
+    """
+    # Get filtered lines
+    filtered_lines = slice_by_time(log_content, start_time, end_time)
+    
+    # Write to file
+    if output_file:
+        # Write to specified file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(filtered_lines))
+        return output_file
+    else:
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8', suffix='.log')
+        temp_file.write('\n'.join(filtered_lines))
+        temp_file.close()
+        return temp_file.name

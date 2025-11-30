@@ -2,7 +2,7 @@ import unittest
 import os
 import tempfile
 from datetime import datetime, timedelta
-from utilities.time_slice import slice_by_time, slice_by_time_range, _extract_timestamp
+from utilities.time_slice import slice_by_time, slice_by_time_range, slice_by_time_to_file, _extract_timestamp
 
 
 class TestTimeSlice(unittest.TestCase):
@@ -523,6 +523,226 @@ Jan  1 10:25:00 Syslog format log"""
         end = datetime(2024, 1, 1, 0, 1, 0)
         result = slice_by_time(log_content, start, end)
         self.assertEqual(len(result), 2)
+
+    # ========== File Output Tests ==========
+    
+    def test_slice_by_time_to_file_temp_file(self):
+        """Test slice_by_time_to_file creates a temporary file"""
+        log_content = """2024-01-01T09:30:00 Early log
+2024-01-01T10:15:00 Middle log
+2024-01-01T10:45:00 Later log
+2024-01-01T11:30:00 Late log"""
+        
+        output_file = slice_by_time_to_file(log_content, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        # Verify file exists
+        self.assertTrue(os.path.exists(output_file))
+        
+        # Verify file extension
+        self.assertTrue(output_file.endswith('.log'))
+        
+        # Verify file content
+        with open(output_file, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("2024-01-01T10:15:00 Middle log", lines)
+            self.assertIn("2024-01-01T10:45:00 Later log", lines)
+            self.assertNotIn("2024-01-01T09:30:00 Early log", lines)
+            self.assertNotIn("2024-01-01T11:30:00 Late log", lines)
+
+    def test_slice_by_time_to_file_specified_file(self):
+        """Test slice_by_time_to_file writes to specified file path"""
+        log_content = """2024-01-01T10:15:00 Log 1
+2024-01-01T10:30:00 Log 2"""
+        
+        # Create output file in temp directory
+        output_path = os.path.join(tempfile.gettempdir(), 'test_filtered.log')
+        self.temp_files.append(output_path)
+        
+        result_path = slice_by_time_to_file(
+            log_content, 
+            self.test_start_time, 
+            self.test_end_time, 
+            output_file=output_path
+        )
+        
+        # Verify correct path returned
+        self.assertEqual(result_path, output_path)
+        
+        # Verify file exists
+        self.assertTrue(os.path.exists(output_path))
+        
+        # Verify file content
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            self.assertIn("2024-01-01T10:15:00 Log 1", content)
+            self.assertIn("2024-01-01T10:30:00 Log 2", content)
+
+    def test_slice_by_time_to_file_with_file_input(self):
+        """Test slice_by_time_to_file with file path as input"""
+        log_content = """2024-01-01T09:30:00 Early log
+2024-01-01T10:15:00 Middle log
+2024-01-01T10:45:00 Later log"""
+        
+        input_file = self._create_temp_log_file(log_content)
+        output_file = slice_by_time_to_file(input_file, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        # Verify output file exists
+        self.assertTrue(os.path.exists(output_file))
+        
+        # Verify content
+        with open(output_file, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+            self.assertEqual(len(lines), 2)
+
+    def test_slice_by_time_to_file_empty_result(self):
+        """Test slice_by_time_to_file with no matching logs"""
+        log_content = """2024-01-01T08:00:00 Early log
+2024-01-01T12:00:00 Late log"""
+        
+        output_file = slice_by_time_to_file(log_content, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        # File should still be created
+        self.assertTrue(os.path.exists(output_file))
+        
+        # File should be empty
+        with open(output_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            self.assertEqual(content, "")
+
+    def test_slice_by_time_to_file_directory_creation(self):
+        """Test slice_by_time_to_file creates file in specified directory"""
+        log_content = """2024-01-01T10:15:00 Test log"""
+        
+        # Create a temp directory
+        temp_dir = tempfile.mkdtemp()
+        self.temp_files.append(temp_dir)  # Will be cleaned up
+        
+        output_path = os.path.join(temp_dir, 'filtered', 'output.log')
+        self.temp_files.append(output_path)
+        
+        # Create parent directory first (function doesn't create directories)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        result_path = slice_by_time_to_file(
+            log_content,
+            self.test_start_time,
+            self.test_end_time,
+            output_file=output_path
+        )
+        
+        # Verify file exists
+        self.assertTrue(os.path.exists(output_path))
+        self.assertEqual(result_path, output_path)
+        
+        # Clean up directory
+        import shutil
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass
+
+    def test_slice_by_time_to_file_relative_path(self):
+        """Test slice_by_time_to_file with relative file path"""
+        log_content = """2024-01-01T10:15:00 Test log"""
+        
+        # Use relative path in temp directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_dir = os.getcwd()
+            try:
+                os.chdir(temp_dir)
+                output_file = 'relative_output.log'
+                self.temp_files.append(os.path.join(temp_dir, output_file))
+                
+                result_path = slice_by_time_to_file(
+                    log_content,
+                    self.test_start_time,
+                    self.test_end_time,
+                    output_file=output_file
+                )
+                
+                # Verify file exists
+                self.assertTrue(os.path.exists(output_file))
+                self.assertEqual(result_path, output_file)
+            finally:
+                os.chdir(original_dir)
+
+    def test_slice_by_time_to_file_file_content_verification(self):
+        """Test that file content matches filtered results exactly"""
+        log_content = """2024-01-01T10:15:00 First log
+2024-01-01T10:30:00 Second log
+2024-01-01T10:45:00 Third log"""
+        
+        # Get list result
+        list_result = slice_by_time(log_content, self.test_start_time, self.test_end_time)
+        
+        # Get file result
+        output_file = slice_by_time_to_file(log_content, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        # Read file content
+        with open(output_file, 'r', encoding='utf-8') as f:
+            file_lines = f.read().splitlines()
+        
+        # Compare results
+        self.assertEqual(len(list_result), len(file_lines))
+        for i, line in enumerate(list_result):
+            self.assertEqual(line, file_lines[i])
+
+    def test_slice_by_time_to_file_preserves_line_order(self):
+        """Test that file output preserves the original line order"""
+        log_content = """2024-01-01T09:30:00 Before range
+2024-01-01T10:15:00 First in range
+2024-01-01T10:30:00 Second in range
+2024-01-01T10:45:00 Third in range
+2024-01-01T11:30:00 After range"""
+        
+        output_file = slice_by_time_to_file(log_content, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        with open(output_file, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        
+        # Verify order - should have exactly 3 lines in range
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(lines[0].startswith("2024-01-01T10:15:00"))
+        self.assertTrue(lines[1].startswith("2024-01-01T10:30:00"))
+        self.assertTrue(lines[2].startswith("2024-01-01T10:45:00"))
+
+    def test_slice_by_time_to_file_temp_file_location(self):
+        """Test that temporary file is created in system temp directory"""
+        log_content = """2024-01-01T10:15:00 Test log"""
+        
+        output_file = slice_by_time_to_file(log_content, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        # Verify file exists
+        self.assertTrue(os.path.exists(output_file))
+        
+        # Verify it's in a temp directory (or at least a valid path)
+        self.assertTrue(os.path.isabs(output_file) or output_file.startswith('/tmp'))
+        
+        # Verify file has .log extension
+        self.assertTrue(output_file.endswith('.log'))
+
+    def test_slice_by_time_to_file_with_list_input(self):
+        """Test slice_by_time_to_file with list of lines as input"""
+        log_content = [
+            "2024-01-01T09:30:00 Early log",
+            "2024-01-01T10:15:00 Middle log",
+            "2024-01-01T10:45:00 Later log"
+        ]
+        
+        output_file = slice_by_time_to_file(log_content, self.test_start_time, self.test_end_time)
+        self.temp_files.append(output_file)
+        
+        self.assertTrue(os.path.exists(output_file))
+        with open(output_file, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+            self.assertEqual(len(lines), 2)
 
 
 if __name__ == '__main__':
