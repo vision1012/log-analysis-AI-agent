@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from typing import Union, List
 import os
+import tempfile
 
 
 def slice_by_time(log_content: Union[str, List[str]], start_time: datetime, end_time: datetime) -> List[str]:
@@ -234,3 +235,33 @@ def slice_by_time_range(log_file: str, start_time: datetime, end_time: datetime)
         list of str: Log lines that fall within the time range.
     """
     return slice_by_time(log_file, start_time, end_time)
+
+
+def slice_by_time_to_file(log_content: Union[str, List[str]], start_time: datetime, end_time: datetime, output_file: Union[str, None] = None) -> str:
+    """
+    Extract log lines within a time range and write them to a file.
+    
+    Args:
+        log_content (str or list of str): The log file path, log content as string, or list of log lines.
+        start_time (datetime): Start time for filtering (inclusive).
+        end_time (datetime): End time for filtering (inclusive).
+        output_file (str, optional): Path to output file. If None, creates a temporary file.
+    
+    Returns:
+        str: Path to the output file containing the filtered log lines.
+    """
+    # Get filtered lines
+    filtered_lines = slice_by_time(log_content, start_time, end_time)
+    
+    # Write to file
+    if output_file:
+        # Write to specified file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(filtered_lines))
+        return output_file
+    else:
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8', suffix='.log')
+        temp_file.write('\n'.join(filtered_lines))
+        temp_file.close()
+        return temp_file.name
