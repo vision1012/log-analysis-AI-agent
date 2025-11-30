@@ -40,6 +40,10 @@ def slice_by_time(log_content: Union[str, List[str]], start_time: datetime, end_
         if timestamp is None:
             continue
         
+        # Convert timezone-aware timestamps to naive for comparison
+        if timestamp.tzinfo is not None:
+            timestamp = timestamp.replace(tzinfo=None)
+        
         # Check if timestamp is within range
         if start_time <= timestamp <= end_time:
             filtered_lines.append(line.rstrip('\n'))
@@ -63,15 +67,33 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
     Returns:
         datetime or None: Parsed timestamp if found, None otherwise.
     """
+    # Check for Unix timestamps first (before dateutil tries to parse them as dates)
+    # Unix timestamp (milliseconds - 13 digits) - check before dateutil
+    match = re.search(r'\b(1[0-9]{12}|[2-9][0-9]{12})\b', line)
+    if match:
+        try:
+            ts = int(match.group(1)) / 1000
+            return datetime.fromtimestamp(ts)
+        except (ValueError, OSError):
+            pass
+    
+    # Unix timestamp (seconds - 10 digits) - check before dateutil
+    match = re.search(r'\b(1[0-9]{9}|[2-9][0-9]{9})\b', line)
+    if match:
+        try:
+            ts = int(match.group(1))
+            return datetime.fromtimestamp(ts)
+        except (ValueError, OSError):
+            pass
+    
     # Try parsing with dateutil if available (handles most formats automatically)
     try:
         from dateutil import parser
-        # Try to find any date-like pattern in the line
+        # Try to find any date-like pattern in the line (excluding Unix timestamps)
         date_patterns = [
             r'\d{4}[-/]\d{2}[-/]\d{2}',  # YYYY-MM-DD or YYYY/MM/DD
             r'\d{2}[-/]\d{2}[-/]\d{4}',  # MM-DD-YYYY or DD-MM-YYYY
             r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*',  # Month names
-            r'\b\d{10,13}\b',  # Unix timestamps
         ]
         
         for pattern in date_patterns:
@@ -87,7 +109,7 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
                     parsed = parser.parse(context, fuzzy=True, default=datetime(1970, 1, 1))
                     if parsed.year > 1970 and parsed.year < 2100:  # Reasonable year range
                         return parsed
-                except (ValueError, parser.ParserError):
+                except (ValueError, parser.ParserError, OverflowError):
                     continue
     except ImportError:
         pass  # Continue with manual parsing
@@ -180,23 +202,6 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
         except ValueError:
             pass
     
-    # Unix timestamp (seconds - 10 digits)
-    match = re.search(r'\b(1[0-9]{9}|[2-9][0-9]{9})\b', line)
-    if match:
-        try:
-            ts = int(match.group(1))
-            return datetime.fromtimestamp(ts)
-        except (ValueError, OSError):
-            pass
-    
-    # Unix timestamp (milliseconds - 13 digits)
-    match = re.search(r'\b(1[0-9]{12}|[2-9][0-9]{12})\b', line)
-    if match:
-        try:
-            ts = int(match.group(1)) / 1000
-            return datetime.fromtimestamp(ts)
-        except (ValueError, OSError):
-            pass
     
     # Format: MM/DD/YYYY HH:MM:SS
     match = re.search(r'(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})', line)
