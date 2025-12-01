@@ -5,17 +5,7 @@ import os
 
 
 def slice_by_time(log_content: Union[str, List[str]], start_time: datetime, end_time: datetime) -> List[str]:
-    """
-    Extract log lines that fall within the specified time range.
     
-    Args:
-        log_content (str or list of str): The log file path, log content as string, or list of log lines.
-        start_time (datetime): Start time for filtering (inclusive).
-        end_time (datetime): End time for filtering (inclusive).
-    
-    Returns:
-        list of str: Log lines that fall within the time range.
-    """
     # Handle file path input
     if isinstance(log_content, str) and os.path.isfile(log_content):
         with open(log_content, 'r', encoding='utf-8', errors='ignore') as f:
@@ -48,21 +38,7 @@ def slice_by_time(log_content: Union[str, List[str]], start_time: datetime, end_
 
 
 def _extract_timestamp(line: str) -> Union[datetime, None]:
-    """
-    Extract timestamp from a log line. Supports various common timestamp formats including:
-    - ISO 8601 formats (with/without timezone, with/without microseconds)
-    - Unix timestamps (seconds and milliseconds)
-    - Common log formats (Apache, Nginx, syslog)
-    - RFC 3339, RFC 2822 formats
-    - Various date formats (US, European, etc.)
-    - 12-hour format with AM/PM
     
-    Args:
-        line (str): A log line.
-    
-    Returns:
-        datetime or None: Parsed timestamp if found, None otherwise.
-    """
     # Try parsing with dateutil if available (handles most formats automatically)
     try:
         from dateutil import parser
@@ -246,15 +222,5 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
 
 
 def slice_by_time_range(log_file: str, start_time: datetime, end_time: datetime) -> List[str]:
-    """
-    Convenience function to slice logs from a file by time range.
     
-    Args:
-        log_file (str): Path to the log file.
-        start_time (datetime): Start time for filtering (inclusive).
-        end_time (datetime): End time for filtering (inclusive).
-    
-    Returns:
-        list of str: Log lines that fall within the time range.
-    """
     return slice_by_time(log_file, start_time, end_time)
