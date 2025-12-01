@@ -5,8 +5,8 @@ An intelligent, end-to-end **AI-powered log analysis system** designed to stream
 ---
 
 ## 👨‍💻 Genz Developers  
-- **Jay Paun (Does Coding)**  
-- **Preet Patel (Presses merge button and enjoy Chipotle)**
+- **Jay Paun**  
+- **Preet Patel**
 
 ---
 
