@@ -1,0 +1,7 @@
+2025-12-02 12:01:05.012 [ERROR] Payment gateway transaction failed for order ID 998877: HTTP Status 503 Service Unavailable.
+2025-12-02 12:01:55.012 [ERROR] Disk space critically low on volume /data: 5% remaining.
+2025-12-02 12:02:25.890 [ERROR] NullPointerException encountered while rendering dashboard widget 'UserStats'.
+2025-12-02 12:03:00.901 [ERROR] Authentication failed for user 'unknown.user': Invalid credentials.
+2025-12-02 12:03:35.012 [ERROR] Failed to send email notification to 'admin@example.com': SMTP server connection timeout.
+2025-12-02 12:04:00.567 [ERROR] Unexpected API response format from external weather service.
+2025-12-02 12:04:30.345 [ERROR] File not found: '/app/data/users.csv' needed for import job.
