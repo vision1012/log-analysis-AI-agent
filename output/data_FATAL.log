@@ -1,4 +1,0 @@
-2025-12-02 12:01:25.234 [FATAL] Critical system dependency 'AuthService' is unresponsive; application cannot continue.
-2025-12-02 12:02:40.789 [FATAL] Main application thread encountered an unexpected interruption. System stopping.
-2025-12-02 12:03:25.456 [FATAL] Required license key expired. Application refusing to run.
-2025-12-02 12:04:15.456 [FATAL] Database migration script failed during application startup.

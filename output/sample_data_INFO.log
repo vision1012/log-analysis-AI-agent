@@ -1,0 +1,16 @@
+2025-01-12 09:15:02 [INFO] AuthService - User login initiated user=jay
+2025-01-12 09:15:08 [INFO] NotificationService - Email sent user=jay
+2025-01-12 09:15:09 [INFO] ReportService - Generating weekly report
+2025-01-12 09:15:12 [INFO] System - Cleanup completed
+2025-02-03 14:22:12 [INFO] PaymentService - Payment request received orderId=2111
+2025-02-03 14:22:16 [INFO] ShippingService - Preparing package shipment
+2025-02-03 14:22:18 [INFO] CacheService - Cache hit key=order_2111
+2025-02-03 14:22:20 [INFO] AuthService - User authenticated user=preet
+2025-02-03 14:22:25 [INFO] MetricsService - Latency recorded=210ms endpoint=/payment
+2025-02-03 14:22:29 [INFO] System - Heartbeat OK
+2025-03-18 11:01:10 [INFO] DeploymentService - Starting deploy v3.1.0
+2025-03-18 11:01:14 [INFO] UserService - Profile update user=jay
+2025-03-18 11:01:17 [INFO] LogoutService - User logged out user=preet
+2025-03-18 11:01:19 [INFO] Scheduler - Next job scheduled 12:00
+2025-03-18 11:01:24 [INFO] System - Memory usage 77%
+2025-03-18 11:01:26 [INFO] System - Disk space remaining=12GB
