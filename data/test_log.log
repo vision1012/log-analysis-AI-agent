@@ -1,0 +1,6 @@
+2024-01-01 10:00:00 [ERROR] Test error message 1
+2024-01-01 10:01:00 [INFO] Test info message
+2024-01-01 10:02:00 [ERROR] Test error message 2
+2024-01-01 10:03:00 [FATAL] Test fatal message
+2024-01-01 10:04:00 [WARN] Test warning message
+2024-01-01 10:05:00 [DEBUG] Test debug message

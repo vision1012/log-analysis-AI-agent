@@ -192,92 +192,55 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
     # Available log levels
     available_levels = ['ERROR', 'FATAL', 'CRITICAL', 'WARN', 'WARNING', 'INFO', 'DEBUG', 'TRACE']
     
-    # Parse log levels - either from parameter or user input
+    # Always show menu and prompt user for log level numbers
     selected_levels = []
     
-    if log_levels is not None:
-        # Use provided log levels
-        if isinstance(log_levels, str):
-            # Split if it's a comma/space-separated string
-            parts = re.split(r'[,;\s]+', log_levels)
-            selected_levels = [part.strip().upper() for part in parts if part.strip()]
-        else:
-            # It's already a list
-            selected_levels = [str(level).strip().upper() for level in log_levels]
-        
-        # Validate provided levels
-        valid_levels = []
-        for level in selected_levels:
-            if level in available_levels:
-                valid_levels.append(level)
-            else:
-                print(f"Warning: '{level}' is not a valid log level. Skipping...")
-        selected_levels = valid_levels
+    print("\n" + "="*60)
+    print("LOG LEVEL FILTER - Interactive Mode")
+    print("="*60)
+    print(f"\nProcessing file: {log_file}")
+    print(f"\nAvailable log levels:")
+    print("-" * 60)
+    for i, level in enumerate(available_levels, 1):
+        print(f"  {i}. {level}")
+    print("-" * 60)
     
-    # If no levels provided or all were invalid, prompt user
-    if not selected_levels:
-        print("\n" + "="*60)
-        print("LOG LEVEL FILTER - Interactive Mode")
-        print("="*60)
-        print(f"\nProcessing file: {log_file}")
-        print(f"\nAvailable log levels:")
-        for i, level in enumerate(available_levels, 1):
-            print(f"  {i}. {level}")
-        
-        print("\nEnter log levels to filter (comma-separated or space-separated):")
-        print("Example: ERROR, FATAL, WARN  or  ERROR FATAL WARN")
-        print("Or enter numbers: 1,2,3  or  1 2 3")
-        print("Type 'all' to filter all levels")
-        print("Type 'quit' to exit")
-        
-        user_input = input("\nYour selection: ").strip()
-        
-        if user_input.lower() in ['quit', 'exit', 'q']:
-            print("Exiting...")
-            return []
-        
-        # Parse user input
-        if user_input.lower() == 'all':
-            selected_levels = available_levels
-        else:
-            # Split by comma or space
-            parts = re.split(r'[,;\s]+', user_input)
-            
-            for part in parts:
-                part = part.strip().upper()
-                if not part:
-                    continue
-                
-                # Check if it's a number
-                if part.isdigit():
-                    idx = int(part) - 1
-                    if 0 <= idx < len(available_levels):
-                        selected_levels.append(available_levels[idx])
-                # Check if it's a valid log level
-                elif part in available_levels:
-                    selected_levels.append(part)
-                else:
-                    # Try to match partial names
-                    matched = [level for level in available_levels if level.startswith(part)]
-                    if matched:
-                        selected_levels.extend(matched)
-                    else:
-                        print(f"Warning: '{part}' is not a valid log level. Skipping...")
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        selected_levels = [x for x in selected_levels if not (x in seen or seen.add(x))]
-    else:
-        # Log levels were provided, just show what we're using
-        print("\n" + "="*60)
-        print("LOG LEVEL FILTER")
-        print("="*60)
-        print(f"\nProcessing file: {log_file}")
-        print(f"Selected log levels: {', '.join(selected_levels)}")
+    print("\nEnter the NUMBER(s) of log level(s) to filter:")
+    print("Example: 1,2,3  or  1 2 3  or  just  1")
+    print("Type 'all' to filter all levels")
+    print("Type 'quit' to exit")
     
-    if not selected_levels:
-        print("No valid log levels selected. Exiting...")
+    user_input = input("\nEnter number(s): ").strip()
+    
+    if user_input.lower() in ['quit', 'exit', 'q']:
+        print("Exiting...")
         return []
+    
+    # Parse user input
+    if user_input.lower() == 'all':
+        selected_levels = available_levels
+    else:
+        # Split by comma or space
+        parts = re.split(r'[,;\s]+', user_input)
+        
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            
+            # Check if it's a number
+            if part.isdigit():
+                idx = int(part) - 1
+                if 0 <= idx < len(available_levels):
+                    selected_levels.append(available_levels[idx])
+                else:
+                    print(f"Warning: '{part}' is not a valid number. Please enter a number between 1 and {len(available_levels)}.")
+            else:
+                print(f"Warning: '{part}' is not a valid number. Please enter a number between 1 and {len(available_levels)}.")
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    selected_levels = [x for x in selected_levels if not (x in seen or seen.add(x))]
     
     if not selected_levels:
         print("No valid log levels selected. Exiting...")
@@ -316,80 +279,84 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
 def main():
     """
     Main entry point for running the interactive log level filter from command line.
-    Usage: python filter_log_level.py [log_file_path] [log_levels]
+    Usage: python filter_log_level.py
     
-    Examples:
-        python filter_log_level.py utilities/data.log
-        python filter_log_level.py utilities/data.log ERROR FATAL
-        python filter_log_level.py utilities/data.log "ERROR, FATAL, WARN"
-    
-    If no file path is provided, user will be prompted to enter it.
-    If no log levels are provided, user will be prompted to select them.
+    User will always be prompted to:
+    1. Enter the log file path
+    2. Select log levels from a numbered menu
     """
     import sys
     
     log_file = None
-    log_levels = None
     
-    # Parse command line arguments
-    if len(sys.argv) > 1:
-        log_file = sys.argv[1]
-        # Check if there are additional arguments for log levels
-        if len(sys.argv) > 2:
-            # Join all remaining arguments as log levels
-            log_levels = ' '.join(sys.argv[2:])
+    # Always prompt user for file path
+    print("\n" + "="*60)
+    print("LOG LEVEL FILTER - File Input")
+    print("="*60)
+    print("\nEnter the path to the log file you want to filter:")
+    print("Example: utilities/data.log")
+    print("         or: /full/path/to/your/logfile.log")
+    print("Type 'quit' to exit")
     
-    if log_file is None:
-        # Prompt user for file path
-        print("\n" + "="*60)
-        print("LOG LEVEL FILTER - File Input")
-        print("="*60)
-        print("\nEnter the path to the log file you want to filter:")
-        print("Example: utilities/data.log")
-        print("         or: /full/path/to/your/logfile.log")
-        print("Type 'quit' to exit")
+    while True:
+        user_file_input = input("\nLog file path: ").strip()
         
-        while True:
-            user_file_input = input("\nLog file path: ").strip()
-            
-            if user_file_input.lower() in ['quit', 'exit', 'q']:
-                print("Exiting...")
-                sys.exit(0)
-            
-            if not user_file_input:
-                print("Please enter a file path.")
-                continue
-            
-            # Check if file exists
-            if os.path.isfile(user_file_input):
-                log_file = user_file_input
+        if user_file_input.lower() in ['quit', 'exit', 'q']:
+            print("Exiting...")
+            sys.exit(0)
+        
+        if not user_file_input:
+            print("Please enter a file path.")
+            continue
+        
+        # Try multiple possible paths
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(script_dir)
+        current_dir = os.getcwd()
+        basename = os.path.basename(user_file_input)
+        
+        # Build list of possible paths to try
+        possible_paths = [
+            user_file_input,  # Exact path as provided
+            os.path.join(current_dir, user_file_input),  # Relative to current working directory
+            os.path.join(script_dir, user_file_input),  # Relative to script directory (utilities/)
+            os.path.join(parent_dir, user_file_input),  # Relative to project root
+            os.path.join(script_dir, basename),  # Just filename in utilities/
+            os.path.join(parent_dir, basename),  # Just filename in project root
+        ]
+        
+        # If user typed something like "utilities/data.log", also try resolving it
+        if "utilities" in user_file_input and not user_file_input.startswith("/"):
+            # Remove "utilities/" prefix and try
+            if user_file_input.startswith("utilities/"):
+                possible_paths.append(os.path.join(parent_dir, user_file_input))
+                possible_paths.append(os.path.join(script_dir, user_file_input.replace("utilities/", "")))
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        possible_paths = [p for p in possible_paths if p not in seen and not seen.add(p)]
+        
+        found = False
+        for path in possible_paths:
+            if os.path.isfile(path):
+                log_file = path
+                found = True
+                print(f"✓ Found file: {path}")
                 break
-            else:
-                # Try relative to current directory
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                parent_dir = os.path.dirname(script_dir)
-                possible_paths = [
-                    user_file_input,
-                    os.path.join(parent_dir, user_file_input),
-                    os.path.join(script_dir, user_file_input),
-                    os.path.join(os.getcwd(), user_file_input)
-                ]
-                
-                found = False
-                for path in possible_paths:
-                    if os.path.isfile(path):
-                        log_file = path
-                        found = True
-                        break
-                
-                if found:
-                    break
-                else:
-                    print(f"Error: File not found: {user_file_input}")
-                    print("Please check the path and try again, or type 'quit' to exit.")
+        
+        if found:
+            break
+        else:
+            print(f"\nError: File not found: {user_file_input}")
+            print("\nTip: Try one of these:")
+            print(f"  - {basename}  (if file is in current directory)")
+            print(f"  - ../{user_file_input}  (if running from utilities/ directory)")
+            print(f"  - Full absolute path")
+            print("\nPlease check the path and try again, or type 'quit' to exit.")
     
     try:
-        output_files = interactive_filter_by_log_level(log_file, log_levels)
+        # Always prompt user interactively for log levels (no command line arguments)
+        output_files = interactive_filter_by_log_level(log_file, None)
         if output_files:
             print("\n✓ Processing complete!")
         else:
