@@ -6,40 +6,32 @@ from typing import Union, List
 
 def filter_by_log_level(log_content: Union[str, List[str]], log_levels: Union[str, List[str]]) -> List[str]:
     
-    # Normalize log_levels to list
     if isinstance(log_levels, str):
         log_levels = [log_levels]
     else:
         log_levels = [str(level) for level in log_levels]
     
-    # Normalize to uppercase for matching
     log_levels_normalized = [level.upper() for level in log_levels]
     
-    # Handle file path input
     if isinstance(log_content, str) and os.path.isfile(log_content):
         with open(log_content, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
-    # Handle string content
     elif isinstance(log_content, str):
         lines = log_content.splitlines()
-    # Handle list of lines
     else:
         lines = log_content
     
     filtered_lines = []
     
     for line in lines:
-        # Skip empty lines
         if not line.strip():
             continue
         
-        # Extract log level from the line
         log_level = _extract_log_level(line)
         
         if log_level is None:
             continue
         
-        # Check if log level matches any of the requested levels
         if log_level.upper() in log_levels_normalized:
             filtered_lines.append(line.rstrip('\n'))
     
@@ -47,66 +39,39 @@ def filter_by_log_level(log_content: Union[str, List[str]], log_levels: Union[st
 
 
 def _extract_log_level(line: str) -> Union[str, None]:
-    """
-    Extract log level from a log line. Supports various log level formats.
-    
-    Common formats supported:
-    - ERROR, ERR, FATAL, CRITICAL
-    - WARN, WARNING
-    - INFO
-    - DEBUG
-    - TRACE
-    - Custom levels
-    
-    Args:
-        line (str): A log line.
-    
-    Returns:
-        str or None: Extracted log level if found, None otherwise.
-    """
-    # Common log level patterns (case-insensitive)
-    # Pattern 1: [ERROR], [INFO], etc. (brackets)
     bracket_pattern = r'\[(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\]'
     match = re.search(bracket_pattern, line, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     
-    # Pattern 2: ERROR:, INFO:, etc. (with colon)
     colon_pattern = r'\b(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE):\s*'
     match = re.search(colon_pattern, line, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     
-    # Pattern 3: ERROR , INFO , etc. (with space)
     space_pattern = r'\b(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\s+'
     match = re.search(space_pattern, line, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     
-    # Pattern 4: ERROR - INFO - etc. (with dash)
     dash_pattern = r'\b(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\s*-\s*'
     match = re.search(dash_pattern, line, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     
-    # Pattern 5: Standard log4j/slf4j format: ERROR  or INFO  (multiple spaces)
     log4j_pattern = r'\b(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\s{2,}'
     match = re.search(log4j_pattern, line, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     
-    # Pattern 6: Uppercase at start of line or after timestamp
-    # After timestamp formats like: 2024-01-01 10:00:00 ERROR message
     timestamp_log_pattern = r'(?:\d{4}[-/]\d{2}[-/]\d{2}[\sT]\d{2}:\d{2}:\d{2}.*?)\s+(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\b'
     match = re.search(timestamp_log_pattern, line, re.IGNORECASE)
     if match:
         return match.group(1).upper()
     
-    # Pattern 7: Simple word boundary match (last resort)
     simple_pattern = r'\b(ERROR|ERR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\b'
     matches = re.findall(simple_pattern, line, re.IGNORECASE)
     if matches:
-        # Return the first match, preferring more specific levels
         for level in ['ERROR', 'FATAL', 'CRITICAL', 'WARN', 'WARNING', 'INFO', 'DEBUG', 'TRACE']:
             if level in [m.upper() for m in matches]:
                 return level
@@ -115,28 +80,13 @@ def _extract_log_level(line: str) -> Union[str, None]:
 
 
 def filter_by_log_level_to_file(log_content: Union[str, List[str]], log_levels: Union[str, List[str]], output_file: Union[str, None] = None) -> str:
-    """
-    Filter log lines by log level(s) and write them to a file.
-    
-    Args:
-        log_content (str or list of str): The log file path, log content as string, or list of log lines.
-        log_levels (str or list of str): Log level(s) to filter by (case-insensitive).
-        output_file (str, optional): Path to output file. If None, creates a temporary file.
-    
-    Returns:
-        str: Path to the output file containing the filtered log lines.
-    """
-    # Get filtered lines
     filtered_lines = filter_by_log_level(log_content, log_levels)
     
-    # Write to file
     if output_file:
-        # Write to specified file
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(filtered_lines))
         return output_file
     else:
-        # Create temporary file
         temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8', suffix='.log')
         temp_file.write('\n'.join(filtered_lines))
         temp_file.close()
@@ -144,55 +94,31 @@ def filter_by_log_level_to_file(log_content: Union[str, List[str]], log_levels: 
 
 
 def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[str], None] = None) -> List[str]:
-    """
-    Interactive function to filter log file by user-selected log levels.
-    Creates separate output files for each log level in the output folder.
-    
-    Args:
-        log_file (str): Path to the log file to process.
-        log_levels (str, list, or None): Optional log levels. If provided, uses these.
-                                        If None, prompts user interactively.
-    
-    Returns:
-        list of str: List of output file paths created.
-    
-    Example:
-        If processing 'data.log' and user selects 'FATAL', creates 'output/data_FATAL.log'
-    """
-    # Validate input file
     if not os.path.isfile(log_file):
         raise FileNotFoundError(f"Log file not found: {log_file}")
     
-    # Get base directory (log-analysis-AI-agent directory)
-    # Try to find the project root by looking for common markers
     abs_log_file = os.path.abspath(log_file)
     current_dir = os.path.dirname(abs_log_file)
     
-    # Look for project root (directory containing utilities/, tests/, etc.)
     base_dir = current_dir
-    while base_dir != os.path.dirname(base_dir):  # Stop at filesystem root
+    while base_dir != os.path.dirname(base_dir):
         if os.path.isdir(os.path.join(base_dir, 'utilities')) and \
            (os.path.isdir(os.path.join(base_dir, 'tests')) or 
             os.path.isdir(os.path.join(base_dir, 'agent'))):
             break
         base_dir = os.path.dirname(base_dir)
     
-    # Fallback to current working directory if not found
     if not base_dir or base_dir == os.path.dirname(base_dir):
         base_dir = os.getcwd()
     
-    # Create output directory
     output_dir = os.path.join(base_dir, 'output')
     os.makedirs(output_dir, exist_ok=True)
     
-    # Extract filename without extension
     file_basename = os.path.basename(log_file)
     file_name_without_ext = os.path.splitext(file_basename)[0]
     
-    # Available log levels
     available_levels = ['ERROR', 'FATAL', 'CRITICAL', 'WARN', 'WARNING', 'INFO', 'DEBUG', 'TRACE']
     
-    # Always show menu and prompt user for log level numbers
     selected_levels = []
     
     print("\n" + "="*60)
@@ -216,11 +142,9 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
         print("Exiting...")
         return []
     
-    # Parse user input
     if user_input.lower() == 'all':
         selected_levels = available_levels
     else:
-        # Split by comma or space
         parts = re.split(r'[,;\s]+', user_input)
         
         for part in parts:
@@ -228,7 +152,6 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
             if not part:
                 continue
             
-            # Check if it's a number
             if part.isdigit():
                 idx = int(part) - 1
                 if 0 <= idx < len(available_levels):
@@ -238,7 +161,6 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
             else:
                 print(f"Warning: '{part}' is not a valid number. Please enter a number between 1 and {len(available_levels)}.")
     
-    # Remove duplicates while preserving order
     seen = set()
     selected_levels = [x for x in selected_levels if not (x in seen or seen.add(x))]
     
@@ -250,18 +172,14 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
     print(f"Output directory: {output_dir}")
     print("\nProcessing...")
     
-    # Process each log level and create separate files
     output_files = []
     
     for level in selected_levels:
-        # Create output filename: {filename}_{level}.log
         output_filename = f"{file_name_without_ext}_{level}.log"
         output_path = os.path.join(output_dir, output_filename)
         
-        # Filter logs for this level
         filtered_lines = filter_by_log_level(log_file, level)
         
-        # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(filtered_lines))
         
@@ -277,19 +195,10 @@ def interactive_filter_by_log_level(log_file: str, log_levels: Union[str, List[s
 
 
 def main():
-    """
-    Main entry point for running the interactive log level filter from command line.
-    Usage: python filter_log_level.py
-    
-    User will always be prompted to:
-    1. Enter the log file path
-    2. Select log levels from a numbered menu
-    """
     import sys
     
     log_file = None
     
-    # Always prompt user for file path
     print("\n" + "="*60)
     print("LOG LEVEL FILTER - File Input")
     print("="*60)
@@ -309,30 +218,25 @@ def main():
             print("Please enter a file path.")
             continue
         
-        # Try multiple possible paths
         script_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(script_dir)
         current_dir = os.getcwd()
         basename = os.path.basename(user_file_input)
         
-        # Build list of possible paths to try
         possible_paths = [
-            user_file_input,  # Exact path as provided
-            os.path.join(current_dir, user_file_input),  # Relative to current working directory
-            os.path.join(script_dir, user_file_input),  # Relative to script directory (utilities/)
-            os.path.join(parent_dir, user_file_input),  # Relative to project root
-            os.path.join(script_dir, basename),  # Just filename in utilities/
-            os.path.join(parent_dir, basename),  # Just filename in project root
+            user_file_input,
+            os.path.join(current_dir, user_file_input),
+            os.path.join(script_dir, user_file_input),
+            os.path.join(parent_dir, user_file_input),
+            os.path.join(script_dir, basename),
+            os.path.join(parent_dir, basename),
         ]
         
-        # If user typed something like "utilities/data.log", also try resolving it
         if "utilities" in user_file_input and not user_file_input.startswith("/"):
-            # Remove "utilities/" prefix and try
             if user_file_input.startswith("utilities/"):
                 possible_paths.append(os.path.join(parent_dir, user_file_input))
                 possible_paths.append(os.path.join(script_dir, user_file_input.replace("utilities/", "")))
         
-        # Remove duplicates while preserving order
         seen = set()
         possible_paths = [p for p in possible_paths if p not in seen and not seen.add(p)]
         
@@ -355,7 +259,6 @@ def main():
             print("\nPlease check the path and try again, or type 'quit' to exit.")
     
     try:
-        # Always prompt user interactively for log levels (no command line arguments)
         output_files = interactive_filter_by_log_level(log_file, None)
         if output_files:
             print("\n✓ Processing complete!")
