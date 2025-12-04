@@ -189,11 +189,16 @@ def _extract_exception_type(line: str) -> Optional[str]:
 
 
 def summarize_log(log_content: Union[str, List[str]]) -> LogSummary:
-    if isinstance(log_content, str) and os.path.isfile(log_content):
-        with open(log_content, 'r', encoding='utf-8', errors='ignore') as f:
-            lines = f.readlines()
-    elif isinstance(log_content, str):
-        lines = log_content.splitlines(keepends=True)
+    if isinstance(log_content, str):
+        if os.path.isfile(log_content):
+            with open(log_content, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+        elif os.path.exists(log_content):
+            return LogSummary()
+        elif (log_content.endswith('.log') or log_content.endswith('.txt')) and len(log_content.split()) == 1:
+            return LogSummary()
+        else:
+            lines = log_content.splitlines(keepends=True)
     else:
         lines = [line + '\n' if not line.endswith('\n') else line for line in log_content]
     
