@@ -40,7 +40,8 @@ Applies AI/ML logic to identify probable causes behind errors.
 We use publicly available datasets for training and benchmarking:
 
 - 🔗 https://github.com/logpai/loghub  
-- 🔗 https://www.kaggle.com/datasets/ayenuryrr/loghub-hdfs-hadoop-distributed-file-system-data  
+- 🔗 https://www.kaggle.com/datasets/ayenuryrr/loghub-hdfs-hadoop-distributed-file-system-data
+- 🔗 https://github.com/logpai/loghub
 
 ---
 
