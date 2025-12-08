@@ -2,16 +2,6 @@ import tempfile
 
 def search_keyword(log_content, keyword):
     
-    """
-    Search the log_content for lines containing the given keyword(s) and create a temp file with the matching lines.
-
-    Args:
-    log_content (str or list of str): The complete logs to search in.
-    keyword (str or list of str): Keyword(s) to search for - case-insensitive.
-
-    Returns:
-    str: The path to the temp file containing the matching log lines.
-    """
     if isinstance(keyword, str):
         keywords = [keyword]
     else:
