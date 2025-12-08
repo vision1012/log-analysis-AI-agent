@@ -1,7 +1,6 @@
 import tempfile
 
 def search_keyword(log_content, keyword):
-    pass
     
     """
     Search the log_content for lines containing the given keyword(s) and create a temp file with the matching lines.
