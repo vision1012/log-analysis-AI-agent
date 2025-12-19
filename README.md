@@ -44,6 +44,42 @@ Centralized entry point providing menu-driven access to all log analysis utiliti
 
 ---
 
+## 🏗️ System Architecture
+
+The following diagram illustrates the end-to-end flow of the log analysis system:
+
+```mermaid
+flowchart TD
+  U[User or Support Engineer] --> UI[AG UI]
+  UI -->|Upload logs and query| API[Backend API]
+
+  API --> PRE[Preprocessing Layer]
+  PRE --> CHUNK[Chunking and Normalization]
+
+  CHUNK --> EMB[Embedding Service]
+  EMB --> VDB[(Vector Database)]
+
+  API --> ROUTER[Agent Router]
+  ROUTER -->|Tool call| TOOLS[Log Tools Layer]
+
+  ROUTER --> RETR[Retriever]
+  RETR -->|Top K chunks| VDB
+  VDB --> CTX[Retrieved Context]
+
+  CTX --> LLM[LLM Generator]
+  TOOLS --> CTX
+
+  LLM --> OUT[Final Answer]
+  OUT --> UI
+
+  API --> STORE[(Storage)]
+  PRE --> STORE
+  TOOLS --> STORE
+  OUT --> STORE
+```
+
+---
+
 ## 📂 Dataset Sources  
 
 We use publicly available datasets for training and benchmarking:
