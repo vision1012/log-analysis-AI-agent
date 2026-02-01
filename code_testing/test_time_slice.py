@@ -10,7 +10,8 @@ from utilities.time_slice import (
     slice_by_time_to_file, 
     _extract_timestamp,
     _find_project_root,
-    interactive_slice_by_time
+    interactive_slice_by_time,
+    run_time_slice
 )
 
 
@@ -20,6 +21,7 @@ class TestTimeSlice(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.temp_files = []
+        self.temp_dir = tempfile.mkdtemp()
         self.test_start_time = datetime(2024, 1, 1, 10, 0, 0)
         self.test_end_time = datetime(2024, 1, 1, 11, 0, 0)
 
@@ -35,6 +37,13 @@ class TestTimeSlice(unittest.TestCase):
                 except (PermissionError, OSError):
                     # Ignore permission errors on cleanup
                     pass
+        
+        # Clean up temp directory
+        if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+            try:
+                shutil.rmtree(self.temp_dir)
+            except (PermissionError, OSError):
+                pass
 
     def _create_temp_log_file(self, content):
         """Helper to create a temporary log file."""
@@ -1249,6 +1258,123 @@ Jan  1 10:25:00 Syslog format log"""
                 # Should have many entries in the range
                 self.assertGreater(len(lines), 0)
                 self.assertLessEqual(len(lines), 50)  # Approximately 48 hours worth
+
+    # ========== run_time_slice() Function Tests ==========
+    
+    def test_run_time_slice_success(self):
+        """Test run_time_slice() returns correct dictionary structure on success."""
+        log_content = "2024-01-01 10:00:00 [INFO] First log\n2024-01-01 10:30:00 [INFO] Second log\n2024-01-01 11:00:00 [INFO] Third log"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        start_time = datetime(2024, 1, 1, 10, 15, 0)
+        end_time = datetime(2024, 1, 1, 10, 45, 0)
+        
+        result = run_time_slice(temp_file, start_time, end_time, output_dir=self.temp_dir)
+        
+        self.assertTrue(result["success"])
+        self.assertEqual(result["lines_found"], 1)
+        self.assertIsNotNone(result["output_file"])
+        self.assertTrue(os.path.exists(result["output_file"]))
+        self.assertEqual(len(result["sample_lines"]), 1)
+        self.assertIn("start", result["time_range"])
+        self.assertIn("end", result["time_range"])
+        self.assertIsNone(result["error"])
+    
+    def test_run_time_slice_file_not_found(self):
+        """Test run_time_slice() handles file not found error."""
+        result = run_time_slice("nonexistent_file.log", self.test_start_time, self.test_end_time)
+        
+        self.assertFalse(result["success"])
+        self.assertEqual(result["lines_found"], 0)
+        self.assertIsNone(result["output_file"])
+        self.assertEqual(len(result["sample_lines"]), 0)
+        self.assertIsNotNone(result["error"])
+        self.assertIn("File not found", result["error"])
+    
+    def test_run_time_slice_invalid_time_range(self):
+        """Test run_time_slice() handles invalid time range."""
+        log_content = "2024-01-01 10:00:00 [INFO] Test log"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        start_time = datetime(2024, 1, 1, 11, 0, 0)
+        end_time = datetime(2024, 1, 1, 10, 0, 0)  # End before start
+        
+        result = run_time_slice(temp_file, start_time, end_time)
+        
+        self.assertFalse(result["success"])
+        self.assertEqual(result["lines_found"], 0)
+        self.assertIsNotNone(result["error"])
+        self.assertIn("Start time must be before end time", result["error"])
+    
+    def test_run_time_slice_no_write_file(self):
+        """Test run_time_slice() with write_file=False."""
+        log_content = "2024-01-01 10:00:00 [INFO] Test log"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_time_slice(temp_file, self.test_start_time, self.test_end_time, write_file=False)
+        
+        self.assertTrue(result["success"])
+        self.assertEqual(result["lines_found"], 1)
+        self.assertIsNone(result["output_file"])
+        self.assertEqual(len(result["sample_lines"]), 1)
+    
+    def test_run_time_slice_custom_output_dir(self):
+        """Test run_time_slice() with custom output directory."""
+        log_content = "2024-01-01 10:00:00 [INFO] Test log"
+        temp_file = self._create_temp_log_file(log_content)
+        custom_output_dir = os.path.join(self.temp_dir, "custom_output")
+        
+        result = run_time_slice(temp_file, self.test_start_time, self.test_end_time, output_dir=custom_output_dir)
+        
+        self.assertTrue(result["success"])
+        self.assertIsNotNone(result["output_file"])
+        self.assertTrue(result["output_file"].startswith(custom_output_dir))
+        self.assertTrue(os.path.exists(custom_output_dir))
+    
+    def test_run_time_slice_no_matching_logs(self):
+        """Test run_time_slice() when no logs match the time range."""
+        log_content = "2024-01-01 10:00:00 [INFO] Test log"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        start_time = datetime(2024, 1, 1, 12, 0, 0)
+        end_time = datetime(2024, 1, 1, 13, 0, 0)
+        
+        result = run_time_slice(temp_file, start_time, end_time)
+        
+        self.assertTrue(result["success"])
+        self.assertEqual(result["lines_found"], 0)
+        self.assertIsNone(result["output_file"])  # No file created when no matches
+        self.assertEqual(len(result["sample_lines"]), 0)
+    
+    def test_run_time_slice_sample_lines_limit(self):
+        """Test run_time_slice() limits sample_lines to first 10."""
+        # Create log with more than 10 matching lines
+        lines = [f"2024-01-01 10:{i:02d}:00 [INFO] Log line {i}" for i in range(15)]
+        log_content = "\n".join(lines)
+        temp_file = self._create_temp_log_file(log_content)
+        
+        start_time = datetime(2024, 1, 1, 10, 0, 0)
+        end_time = datetime(2024, 1, 1, 10, 14, 0)
+        
+        result = run_time_slice(temp_file, start_time, end_time)
+        
+        self.assertTrue(result["success"])
+        self.assertEqual(result["lines_found"], 15)
+        self.assertEqual(len(result["sample_lines"]), 10)  # Limited to 10
+    
+    def test_run_time_slice_time_range_format(self):
+        """Test run_time_slice() time_range contains ISO format timestamps."""
+        log_content = "2024-01-01 10:00:00 [INFO] Test log"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_time_slice(temp_file, self.test_start_time, self.test_end_time)
+        
+        self.assertTrue(result["success"])
+        self.assertIn("start", result["time_range"])
+        self.assertIn("end", result["time_range"])
+        # Check ISO format
+        self.assertIn("2024-01-01T10:00:00", result["time_range"]["start"])
+        self.assertIn("2024-01-01T11:00:00", result["time_range"]["end"])
 
 
 if __name__ == '__main__':

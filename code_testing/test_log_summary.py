@@ -8,7 +8,8 @@ from utilities.log_summary import (
     summarize_log_to_file,
     LogSummary,
     ErrorCodeInfo,
-    StacktraceInfo
+    StacktraceInfo,
+    run_log_summary
 )
 
 
@@ -785,6 +786,71 @@ class TestLogSummary(unittest.TestCase):
         self.assertIn('CRJAZ1282E', result.error_codes)
         self.assertGreater(len(result.stacktraces), 0)
         self.assertIn('DBService', result.services_involved)
+
+
+    # ========== run_log_summary() Function Tests ==========
+    
+    def test_run_log_summary_success(self):
+        """Test run_log_summary() returns correct dictionary structure on success."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message\n2024-01-01 10:01:00 [INFO] Info message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_log_summary(temp_file, output_dir=self.temp_dir)
+        
+        self.assertTrue(result["success"])
+        self.assertIsNotNone(result["summary"])
+        self.assertIsInstance(result["summary"], LogSummary)
+        self.assertIsNotNone(result["output_file"])
+        self.assertTrue(os.path.exists(result["output_file"]))
+        self.assertGreater(len(result["formatted_summary"]), 0)
+        self.assertIsNone(result["error"])
+    
+    def test_run_log_summary_file_not_found(self):
+        """Test run_log_summary() handles file not found error."""
+        result = run_log_summary("nonexistent_file.log")
+        
+        self.assertFalse(result["success"])
+        self.assertIsNone(result["summary"])
+        self.assertIsNone(result["output_file"])
+        self.assertEqual(len(result["formatted_summary"]), 0)
+        self.assertIsNotNone(result["error"])
+        self.assertIn("File not found", result["error"])
+    
+    def test_run_log_summary_no_write_file(self):
+        """Test run_log_summary() with write_file=False."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_log_summary(temp_file, write_file=False)
+        
+        self.assertTrue(result["success"])
+        self.assertIsNotNone(result["summary"])
+        self.assertIsNone(result["output_file"])
+        self.assertGreater(len(result["formatted_summary"]), 0)
+    
+    def test_run_log_summary_custom_output_dir(self):
+        """Test run_log_summary() with custom output directory."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        custom_output_dir = os.path.join(self.temp_dir, "custom_output")
+        
+        result = run_log_summary(temp_file, output_dir=custom_output_dir)
+        
+        self.assertTrue(result["success"])
+        self.assertIsNotNone(result["output_file"])
+        self.assertTrue(result["output_file"].startswith(custom_output_dir))
+        self.assertTrue(os.path.exists(custom_output_dir))
+    
+    def test_run_log_summary_formatted_summary(self):
+        """Test run_log_summary() includes formatted summary text."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_log_summary(temp_file, output_dir=self.temp_dir)
+        
+        self.assertTrue(result["success"])
+        self.assertIn("LOG SUMMARY", result["formatted_summary"])
+        self.assertIn("Total Lines", result["formatted_summary"])
 
 
 if __name__ == '__main__':
