@@ -383,3 +383,87 @@ output_file = slice_by_time_to_file(
 ✅ **Empty Line Handling**: Skips empty lines automatically  
 ✅ **No External Dependencies**: Uses only Python standard library
 
+---
+
+## AI Agent Integration: run_time_slice()
+
+For AI agent integration, use the `run_time_slice()` function which returns structured dictionaries instead of printing results.
+
+### Function Signature
+
+```python
+def run_time_slice(
+    file_path: str,
+    start_time: datetime,
+    end_time: datetime,
+    output_dir: str = "output",
+    write_file: bool = True
+) -> Dict
+```
+
+### Return Structure
+
+```python
+{
+    "success": bool,
+    "lines_found": int,
+    "output_file": str | None,
+    "sample_lines": List[str],  # First 10 lines
+    "time_range": {
+        "start": str,  # ISO format timestamp
+        "end": str     # ISO format timestamp
+    },
+    "error": str | None
+}
+```
+
+### Usage Example
+
+```python
+from datetime import datetime
+from utilities.time_slice import run_time_slice
+
+# Slice by time range
+result = run_time_slice(
+    "logs/app.log",
+    datetime(2024, 1, 1, 10, 0, 0),
+    datetime(2024, 1, 1, 11, 0, 0)
+)
+
+if result["success"]:
+    print(f"Found {result['lines_found']} lines")
+    print(f"Output file: {result['output_file']}")
+    print(f"Time range: {result['time_range']['start']} to {result['time_range']['end']}")
+    print(f"Sample lines: {len(result['sample_lines'])}")
+else:
+    print(f"Error: {result['error']}")
+
+# Custom output directory
+result = run_time_slice(
+    "logs/app.log",
+    start_time,
+    end_time,
+    output_dir="custom_output"
+)
+
+# Process without writing file
+result = run_time_slice(
+    "logs/app.log",
+    start_time,
+    end_time,
+    write_file=False  # Returns data without creating file
+)
+```
+
+### Key Differences from slice_by_time()
+
+| Feature | slice_by_time() | run_time_slice() |
+|---------|----------------|------------------|
+| Input | File path, string, or list | File path only |
+| Output | List of lines | Dictionary with structured data |
+| File Writing | Separate function needed | Built-in with `write_file` option |
+| Error Handling | Raises exceptions | Returns error in dictionary |
+| Sample Lines | Not provided | First 10 lines included |
+| Time Range Info | Not provided | ISO format timestamps included |
+| AI Agent Ready | ❌ | ✅ |
+| CLI Usage | ✅ | ✅ |
