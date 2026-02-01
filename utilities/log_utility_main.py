@@ -279,6 +279,9 @@ def main():
             print(f"Error: File not found: {log_file}")
             return
         
+        start_str = input("Enter start time (YYYY-MM-DD HH:MM:SS): ").strip()
+        end_str = input("Enter end time (YYYY-MM-DD HH:MM:SS): ").strip()
+        
         try:
             start_time = datetime.strptime(start_str, '%Y-%m-%d %H:%M:%S')
             end_time = datetime.strptime(end_str, '%Y-%m-%d %H:%M:%S')

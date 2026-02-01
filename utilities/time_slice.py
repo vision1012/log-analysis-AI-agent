@@ -262,7 +262,6 @@ def slice_by_time_range(log_file: str, start_time: datetime, end_time: datetime)
     return slice_by_time(log_file, start_time, end_time)
 
 
-<<<<<<< HEAD
 def run_time_slice(
     file_path: str,
     start_time: datetime,
@@ -608,4 +607,3 @@ def main():
 
 if __name__ == "__main__":
     main()
->>>>>>> main
