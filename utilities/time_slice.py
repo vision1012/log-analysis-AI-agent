@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Union, List
+from typing import Union, List, Dict, Optional
 import os
 
 
@@ -29,6 +29,11 @@ def slice_by_time(log_content: Union[str, List[str]], start_time: datetime, end_
         
         if timestamp is None:
             continue
+        
+        # Normalize timestamp to timezone-naive for comparison
+        # If timestamp is timezone-aware, convert to naive by replacing tzinfo
+        if timestamp.tzinfo is not None:
+            timestamp = timestamp.replace(tzinfo=None)
         
         # Check if timestamp is within range
         if start_time <= timestamp <= end_time:
@@ -61,9 +66,12 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
                 try:
                     # dateutil can parse many formats automatically
                     parsed = parser.parse(context, fuzzy=True, default=datetime(1970, 1, 1))
+                    # Normalize to timezone-naive
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.replace(tzinfo=None)
                     if parsed.year > 1970 and parsed.year < 2100:  # Reasonable year range
                         return parsed
-                except (ValueError, parser.ParserError):
+                except (ValueError, parser.ParserError, OverflowError):
                     continue
     except ImportError:
         pass  # Continue with manual parsing
@@ -110,7 +118,11 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
         timestamp_str = match.group(1)
         try:
             from email.utils import parsedate_to_datetime
-            return parsedate_to_datetime(timestamp_str)
+            parsed = parsedate_to_datetime(timestamp_str)
+            # Normalize to timezone-naive
+            if parsed.tzinfo is not None:
+                parsed = parsed.replace(tzinfo=None)
+            return parsed
         except (ImportError, ValueError, TypeError):
             # Manual parsing
             clean_str = re.sub(r'\s+[+-]\d{4}', '', timestamp_str)
@@ -169,9 +181,12 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
     match = re.search(r'\b(1[0-9]{12}|[2-9][0-9]{12})\b', line)
     if match:
         try:
-            ts = int(match.group(1)) / 1000
-            return datetime.fromtimestamp(ts)
-        except (ValueError, OSError):
+            ts_ms = int(match.group(1))
+            # Check if it's a reasonable timestamp (not too large)
+            if ts_ms > 0 and ts_ms < 9999999999999:  # Reasonable upper bound
+                ts = ts_ms / 1000
+                return datetime.fromtimestamp(ts)
+        except (ValueError, OSError, OverflowError):
             pass
     
     # Format: MM/DD/YYYY HH:MM:SS
@@ -224,3 +239,99 @@ def _extract_timestamp(line: str) -> Union[datetime, None]:
 def slice_by_time_range(log_file: str, start_time: datetime, end_time: datetime) -> List[str]:
     
     return slice_by_time(log_file, start_time, end_time)
+
+
+def run_time_slice(
+    file_path: str,
+    start_time: datetime,
+    end_time: datetime,
+    output_dir: str = "output",
+    write_file: bool = True
+) -> Dict:
+    """
+    Core function to slice log file by time range.
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        start_time: Start datetime for the time range
+        end_time: End datetime for the time range
+        output_dir: Directory to write output file (default: "output")
+        write_file: Whether to write output file (default: True)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - lines_found: int
+        - output_file: str | None
+        - sample_lines: List[str] (first 10 lines)
+        - time_range: dict with start/end timestamps
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "lines_found": 0,
+                "output_file": None,
+                "sample_lines": [],
+                "time_range": {},
+                "error": f"File not found: {file_path}"
+            }
+        
+        if start_time >= end_time:
+            return {
+                "success": False,
+                "lines_found": 0,
+                "output_file": None,
+                "sample_lines": [],
+                "time_range": {},
+                "error": "Start time must be before end time"
+            }
+        
+        # Filter lines by time range
+        filtered_lines = slice_by_time(file_path, start_time, end_time)
+        
+        output_file = None
+        if write_file and filtered_lines:
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate output filename
+            file_basename = os.path.basename(file_path)
+            file_name_without_ext = os.path.splitext(file_basename)[0]
+            start_str = start_time.strftime('%Y%m%d_%H%M%S')
+            end_str = end_time.strftime('%Y%m%d_%H%M%S')
+            output_filename = f"{file_name_without_ext}_time_{start_str}_to_{end_str}.log"
+            output_file = os.path.join(output_dir, output_filename)
+            
+            # Write to file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(filtered_lines))
+                f.write('\n')
+        
+        # Get sample lines (first 10)
+        sample_lines = filtered_lines[:10]
+        
+        return {
+            "success": True,
+            "lines_found": len(filtered_lines),
+            "output_file": output_file,
+            "sample_lines": sample_lines,
+            "time_range": {
+                "start": start_time.isoformat(),
+                "end": end_time.isoformat()
+            },
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "lines_found": 0,
+            "output_file": None,
+            "sample_lines": [],
+            "time_range": {},
+            "error": str(e)
+        }

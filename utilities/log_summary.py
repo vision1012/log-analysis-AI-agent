@@ -653,5 +653,77 @@ def main():
         sys.exit(1)
 
 
+def run_log_summary(
+    file_path: str,
+    output_dir: str = "output",
+    write_file: bool = True
+) -> Dict:
+    """
+    Core function to analyze and summarize log file.
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        output_dir: Directory to write summary file (default: "output")
+        write_file: Whether to write summary file (default: True)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - summary: LogSummary (dataclass)
+        - output_file: str | None
+        - formatted_summary: str
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "summary": None,
+                "output_file": None,
+                "formatted_summary": "",
+                "error": f"File not found: {file_path}"
+            }
+        
+        # Analyze log file
+        summary = summarize_log(file_path)
+        
+        # Format summary
+        formatted_summary = format_summary(summary, use_colors=True)
+        
+        output_file = None
+        if write_file:
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate output filename
+            file_basename = os.path.basename(file_path)
+            file_name_without_ext = os.path.splitext(file_basename)[0]
+            output_filename = f"{file_name_without_ext}_log_summary.txt"
+            output_file = os.path.join(output_dir, output_filename)
+            
+            # Write summary to file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(formatted_summary)
+        
+        return {
+            "success": True,
+            "summary": summary,
+            "output_file": output_file,
+            "formatted_summary": formatted_summary,
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "summary": None,
+            "output_file": None,
+            "formatted_summary": "",
+            "error": str(e)
+        }
+
+
 if __name__ == "__main__":
     main()

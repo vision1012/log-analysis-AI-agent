@@ -1,7 +1,7 @@
 import re
 import os
 import tempfile
-from typing import Union, List
+from typing import Union, List, Dict, Optional
 
 
 def filter_by_log_level(log_content: Union[str, List[str]], log_levels: Union[str, List[str]]) -> List[str]:
@@ -77,6 +77,94 @@ def _extract_log_level(line: str) -> Union[str, None]:
                 return level
     
     return None
+
+
+def run_filter_log_level(
+    file_path: str,
+    log_levels: Union[str, List[str]],
+    output_dir: str = "output",
+    write_file: bool = True
+) -> Dict:
+    """
+    Core function to filter log file by log level(s).
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        log_levels: Single log level string or list of log levels
+        output_dir: Directory to write output files (default: "output")
+        write_file: Whether to write output files (default: True)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - filtered_lines: List[str] (all filtered lines combined)
+        - output_files: List[str] (one file per level)
+        - counts_by_level: Dict[str, int]
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "filtered_lines": [],
+                "output_files": [],
+                "counts_by_level": {},
+                "error": f"File not found: {file_path}"
+            }
+        
+        # Normalize log levels to list
+        if isinstance(log_levels, str):
+            log_levels_list = [log_levels]
+        else:
+            log_levels_list = [str(level) for level in log_levels]
+        
+        log_levels_normalized = [level.upper() for level in log_levels_list]
+        
+        # Filter lines by log level
+        all_filtered_lines = []
+        counts_by_level = {}
+        output_files = []
+        
+        file_basename = os.path.basename(file_path)
+        file_name_without_ext = os.path.splitext(file_basename)[0]
+        
+        for level in log_levels_normalized:
+            filtered_lines = filter_by_log_level(file_path, level)
+            counts_by_level[level] = len(filtered_lines)
+            all_filtered_lines.extend(filtered_lines)
+            
+            if write_file and filtered_lines:
+                # Create output directory if it doesn't exist
+                os.makedirs(output_dir, exist_ok=True)
+                
+                output_filename = f"{file_name_without_ext}_{level}.log"
+                output_path = os.path.join(output_dir, output_filename)
+                
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(filtered_lines))
+                    if filtered_lines:
+                        f.write('\n')
+                
+                output_files.append(output_path)
+        
+        return {
+            "success": True,
+            "filtered_lines": all_filtered_lines,
+            "output_files": output_files,
+            "counts_by_level": counts_by_level,
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "filtered_lines": [],
+            "output_files": [],
+            "counts_by_level": {},
+            "error": str(e)
+        }
 
 
 def filter_by_log_level_to_file(log_content: Union[str, List[str]], log_levels: Union[str, List[str]], output_file: Union[str, None] = None) -> str:

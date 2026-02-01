@@ -684,5 +684,198 @@ def main():
         sys.exit(1)
 
 
+def run_error_code_search(
+    file_path: str,
+    error_codes: Union[str, List[str]],
+    output_dir: str = "output",
+    write_file: bool = True,
+    case_sensitive: bool = False
+) -> Dict:
+    """
+    Core function to search log file by error code(s).
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        error_codes: Single error code string or list of error codes
+        output_dir: Directory to write output file (default: "output")
+        write_file: Whether to write output file (default: True)
+        case_sensitive: Whether search should be case-sensitive (default: False)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - matched_lines: List[str]
+        - output_file: str | None
+        - codes_found: List[str]
+        - counts_by_code: Dict[str, int]
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "matched_lines": [],
+                "output_file": None,
+                "codes_found": [],
+                "counts_by_code": {},
+                "error": f"File not found: {file_path}"
+            }
+        
+        # Normalize error codes to list
+        if isinstance(error_codes, str):
+            error_codes_list = [error_codes]
+        else:
+            error_codes_list = [str(code) for code in error_codes]
+        
+        if not error_codes_list:
+            return {
+                "success": False,
+                "matched_lines": [],
+                "output_file": None,
+                "codes_found": [],
+                "counts_by_code": {},
+                "error": "No error codes provided"
+            }
+        
+        # Search for error codes
+        matched_lines = search_by_error_code(file_path, error_codes_list, case_sensitive)
+        
+        # Count occurrences by code - extract codes from matched lines
+        counts_by_code = {}
+        codes_found = set()
+        
+        # Extract all codes from the file to get accurate counts
+        all_matches, all_summary = extract_all_error_codes(file_path)
+        
+        # Count occurrences of requested codes
+        for match in all_matches:
+            code = match.code if case_sensitive else match.code.upper()
+            code_to_check = code if case_sensitive else code.upper()
+            normalized_requested = [c.upper() if not case_sensitive else c for c in error_codes_list]
+            
+            if code_to_check in normalized_requested or code in error_codes_list:
+                codes_found.add(code)
+                counts_by_code[code] = counts_by_code.get(code, 0) + 1
+        
+        codes_found = list(codes_found)
+        
+        output_file = None
+        if write_file and matched_lines:
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate output filename
+            file_basename = os.path.basename(file_path)
+            file_name_without_ext = os.path.splitext(file_basename)[0]
+            codes_str = "_".join(error_codes_list[:3])
+            if len(error_codes_list) > 3:
+                codes_str += f"_and_{len(error_codes_list) - 3}_more"
+            output_filename = f"{file_name_without_ext}_error_code_{codes_str}.log"
+            output_file = os.path.join(output_dir, output_filename)
+            
+            # Write to file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(matched_lines))
+                if matched_lines:
+                    f.write('\n')
+        
+        return {
+            "success": True,
+            "matched_lines": matched_lines,
+            "output_file": output_file,
+            "codes_found": codes_found,
+            "counts_by_code": counts_by_code,
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "matched_lines": [],
+            "output_file": None,
+            "codes_found": [],
+            "counts_by_code": {},
+            "error": str(e)
+        }
+
+
+def run_error_code_extract_all(
+    file_path: str,
+    output_dir: str = "output",
+    write_summary: bool = True
+) -> Dict:
+    """
+    Core function to extract all error codes from log file.
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        output_dir: Directory to write summary file (default: "output")
+        write_summary: Whether to write summary file (default: True)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - matches: List[ErrorCodeMatch]
+        - summary: ErrorCodeSummary
+        - summary_file: str | None
+        - formatted_summary: str
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "matches": [],
+                "summary": None,
+                "summary_file": None,
+                "formatted_summary": "",
+                "error": f"File not found: {file_path}"
+            }
+        
+        # Extract all error codes
+        matches, summary = extract_all_error_codes(file_path)
+        
+        # Format summary
+        formatted_summary = format_error_code_summary(summary)
+        
+        summary_file = None
+        if write_summary:
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate output filename
+            file_basename = os.path.basename(file_path)
+            file_name_without_ext = os.path.splitext(file_basename)[0]
+            summary_filename = f"{file_name_without_ext}_error_code_summary.txt"
+            summary_file = os.path.join(output_dir, summary_filename)
+            
+            # Write summary to file
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write(formatted_summary)
+        
+        return {
+            "success": True,
+            "matches": matches,
+            "summary": summary,
+            "summary_file": summary_file,
+            "formatted_summary": formatted_summary,
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "matches": [],
+            "summary": None,
+            "summary_file": None,
+            "formatted_summary": "",
+            "error": str(e)
+        }
+
+
 if __name__ == "__main__":
     main()

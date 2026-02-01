@@ -1,7 +1,7 @@
 import re
 import os
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from collections import Counter, defaultdict
 
@@ -452,6 +452,143 @@ def main():
     except Exception as e:
         print(f"\n✗ Error: {e}")
         sys.exit(1)
+
+
+def run_stacktrace(
+    file_path: str,
+    output_dir: str = "output",
+    write_file: bool = True,
+    include_context_lines: int = 4,
+    min_stack_depth: int = 1,
+    deduplicate: bool = False
+) -> Dict:
+    """
+    Core function to extract stacktraces from log file.
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        output_dir: Directory to write output files (default: "output")
+        write_file: Whether to write output files (default: True)
+        include_context_lines: Number of context lines before stacktrace (default: 4)
+        min_stack_depth: Minimum stack depth to include (default: 1)
+        deduplicate: Whether to deduplicate stacktraces (default: False)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - stacktraces: List[Stacktrace]
+        - summary: StacktraceSummary
+        - output_files: Dict[str, str | None] (clean_log, stacktraces, summary)
+        - formatted_summary: str
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "stacktraces": [],
+                "summary": None,
+                "output_files": {
+                    "clean_log": None,
+                    "stacktraces": None,
+                    "summary": None
+                },
+                "formatted_summary": "",
+                "error": f"File not found: {file_path}"
+            }
+        
+        # Extract stacktraces
+        stacktraces, summary = extract_stacktraces(
+            file_path, include_context_lines, min_stack_depth, deduplicate
+        )
+        
+        # Format summary
+        formatted_summary = format_stacktrace_summary(summary)
+        
+        output_files = {
+            "clean_log": None,
+            "stacktraces": None,
+            "summary": None
+        }
+        
+        if write_file:
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            file_basename = os.path.basename(file_path)
+            file_name_without_ext = os.path.splitext(file_basename)[0]
+            
+            clean_log_file = os.path.join(output_dir, f"{file_name_without_ext}_clean.log")
+            stacktrace_file = os.path.join(output_dir, f"{file_name_without_ext}_stack_trace.log")
+            summary_file = os.path.join(output_dir, f"{file_name_without_ext}_stacktrace_summary.txt")
+            
+            # Read all lines from original file
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                all_lines = f.readlines()
+            
+            # Create clean log (without stacktraces)
+            used_line_indices = set()
+            for st in stacktraces:
+                for line_idx in range(st.start_line - 1, st.end_line):
+                    used_line_indices.add(line_idx)
+            
+            clean_lines = []
+            for idx, line in enumerate(all_lines):
+                if idx not in used_line_indices:
+                    clean_lines.append(line.rstrip('\n'))
+            
+            with open(clean_log_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(clean_lines))
+                if clean_lines:
+                    f.write('\n')
+            
+            output_files["clean_log"] = clean_log_file
+            
+            # Create stacktrace file
+            stacktrace_lines = []
+            for st in stacktraces:
+                if st.context_before:
+                    stacktrace_lines.extend(st.context_before)
+                stacktrace_lines.extend(st.lines)
+                stacktrace_lines.append('')
+            
+            with open(stacktrace_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(stacktrace_lines))
+                if stacktrace_lines:
+                    f.write('\n')
+            
+            output_files["stacktraces"] = stacktrace_file
+            
+            # Create summary file
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write(formatted_summary)
+            
+            output_files["summary"] = summary_file
+        
+        return {
+            "success": True,
+            "stacktraces": stacktraces,
+            "summary": summary,
+            "output_files": output_files,
+            "formatted_summary": formatted_summary,
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "stacktraces": [],
+            "summary": None,
+            "output_files": {
+                "clean_log": None,
+                "stacktraces": None,
+                "summary": None
+            },
+            "formatted_summary": "",
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":

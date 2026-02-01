@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Union, List, Dict, Optional
 
 
 def _find_project_root(start_path: str = None) -> str:
@@ -66,3 +67,114 @@ def search_keyword(log_content, keyword):
             f.write('\n')
 
     return output_path
+
+
+def run_search_keyword(
+    file_path: str,
+    keywords: Union[str, List[str]],
+    output_dir: str = "output",
+    write_file: bool = True,
+    case_sensitive: bool = False
+) -> Dict:
+    """
+    Core function to search log file by keyword(s).
+    Returns structured dictionary with results.
+    
+    Args:
+        file_path: Path to the log file
+        keywords: Single keyword string or list of keywords
+        output_dir: Directory to write output file (default: "output")
+        write_file: Whether to write output file (default: True)
+        case_sensitive: Whether search should be case-sensitive (default: False)
+    
+    Returns:
+        Dictionary with:
+        - success: bool
+        - matched_lines: List[str]
+        - output_file: str | None
+        - keywords: List[str]
+        - match_count: int
+        - error: str | None
+    """
+    try:
+        # Validate inputs
+        if not os.path.isfile(file_path):
+            return {
+                "success": False,
+                "matched_lines": [],
+                "output_file": None,
+                "keywords": [],
+                "match_count": 0,
+                "error": f"File not found: {file_path}"
+            }
+        
+        # Normalize keywords to list
+        if isinstance(keywords, str):
+            keywords_list = [keywords]
+        else:
+            keywords_list = [str(k) for k in keywords]
+        
+        if not keywords_list:
+            return {
+                "success": False,
+                "matched_lines": [],
+                "output_file": None,
+                "keywords": [],
+                "match_count": 0,
+                "error": "No keywords provided"
+            }
+        
+        # Read log file
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+        
+        # Search for keywords
+        matched_lines = []
+        for line in lines:
+            line_stripped = line.rstrip('\n')
+            if case_sensitive:
+                if any(kw in line_stripped for kw in keywords_list):
+                    matched_lines.append(line_stripped)
+            else:
+                if any(kw.lower() in line_stripped.lower() for kw in keywords_list):
+                    matched_lines.append(line_stripped)
+        
+        output_file = None
+        if write_file:
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename from keyword(s)
+            keyword_str = '_'.join(keywords_list)
+            # Sanitize filename
+            keyword_str = re.sub(r'[<>:"/\\|?*]', '_', keyword_str)
+            keyword_str = re.sub(r'\s+', '_', keyword_str)
+            keyword_str = keyword_str[:50]  # Limit length
+            
+            output_filename = f"keyword_{keyword_str}.log"
+            output_file = os.path.join(output_dir, output_filename)
+            
+            # Write results to output file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(matched_lines))
+                if matched_lines:
+                    f.write('\n')
+        
+        return {
+            "success": True,
+            "matched_lines": matched_lines,
+            "output_file": output_file,
+            "keywords": keywords_list,
+            "match_count": len(matched_lines),
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "matched_lines": [],
+            "output_file": None,
+            "keywords": keywords_list if 'keywords_list' in locals() else [],
+            "match_count": 0,
+            "error": str(e)
+        }
