@@ -25,7 +25,9 @@ try:
     )
     from .time_slice import (
         slice_by_time,
-        slice_by_time_range
+        slice_by_time_range,
+        slice_by_time_to_file,
+        interactive_slice_by_time
     )
     from .error_code import (
         search_by_error_code,
@@ -60,7 +62,9 @@ except ImportError:
     )
     from time_slice import (
         slice_by_time,
-        slice_by_time_range
+        slice_by_time_range,
+        slice_by_time_to_file,
+        interactive_slice_by_time
     )
     from error_code import (
         search_by_error_code,
@@ -108,6 +112,8 @@ __all__ = [
     # Time slice utilities
     'slice_by_time',
     'slice_by_time_range',
+    'slice_by_time_to_file',
+    'interactive_slice_by_time',
     
     # Error code utilities
     'search_by_error_code',
@@ -219,24 +225,10 @@ def main():
             print(f"Error: File not found: {log_file}")
             return
         
-        start_str = input("Enter start time (YYYY-MM-DD HH:MM:SS): ").strip()
-        end_str = input("Enter end time (YYYY-MM-DD HH:MM:SS): ").strip()
-        
         try:
-            start_time = datetime.strptime(start_str, '%Y-%m-%d %H:%M:%S')
-            end_time = datetime.strptime(end_str, '%Y-%m-%d %H:%M:%S')
-            
-            filtered_lines = slice_by_time(log_file, start_time, end_time)
-            print(f"\n✓ Found {len(filtered_lines)} lines in the specified time range")
-            
-            save = input("Save to file? (y/n): ").strip().lower()
-            if save == 'y':
-                temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log', encoding='utf-8')
-                temp_file.write('\n'.join(filtered_lines))
-                temp_file.close()
-                print(f"  Saved to: {temp_file.name}")
-        except ValueError as e:
-            print(f"Error: Invalid time format. Use YYYY-MM-DD HH:MM:SS. {e}")
+            output_file = interactive_slice_by_time(log_file)
+            if output_file:
+                print("\n✓ Time slice complete!")
         except Exception as e:
             print(f"Error: {e}")
     
