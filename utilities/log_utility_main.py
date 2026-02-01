@@ -29,6 +29,8 @@ try:
     from .time_slice import (
         slice_by_time,
         slice_by_time_range,
+        slice_by_time_to_file,
+        interactive_slice_by_time,
         run_time_slice
     )
     from .error_code import (
@@ -70,6 +72,8 @@ except ImportError:
     from time_slice import (
         slice_by_time,
         slice_by_time_range,
+        slice_by_time_to_file,
+        interactive_slice_by_time,
         run_time_slice
     )
     from error_code import (
@@ -124,6 +128,8 @@ __all__ = [
     # Time slice utilities
     'slice_by_time',
     'slice_by_time_range',
+    'slice_by_time_to_file',
+    'interactive_slice_by_time',
     'run_time_slice',
     
     # Error code utilities
@@ -272,9 +278,6 @@ def main():
         if not os.path.isfile(log_file):
             print(f"Error: File not found: {log_file}")
             return
-        
-        start_str = input("Enter start time (YYYY-MM-DD HH:MM:SS): ").strip()
-        end_str = input("Enter end time (YYYY-MM-DD HH:MM:SS): ").strip()
         
         try:
             start_time = datetime.strptime(start_str, '%Y-%m-%d %H:%M:%S')
