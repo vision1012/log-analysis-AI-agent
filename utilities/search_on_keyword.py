@@ -2,6 +2,11 @@ import os
 import re
 from typing import Union, List, Dict, Optional
 
+try:
+    from .tool_result import create_tool_result
+except ImportError:
+    from tool_result import create_tool_result
+
 
 def _find_project_root(start_path: str = None) -> str:
     """Find the project root directory."""
@@ -96,33 +101,39 @@ def run_search_keyword(
         - match_count: int
         - error: str | None
     """
+    # Normalize keywords to list
+    if isinstance(keywords, str):
+        keywords_list = [keywords]
+    else:
+        keywords_list = [str(k) for k in keywords] if keywords else []
+    
+    input_params = {
+        "file_path": file_path,
+        "keywords": keywords_list,
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file,
+            "case_sensitive": case_sensitive
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "matched_lines": [],
-                "output_file": None,
-                "keywords": [],
-                "match_count": 0,
-                "error": f"File not found: {file_path}"
-            }
-        
-        # Normalize keywords to list
-        if isinstance(keywords, str):
-            keywords_list = [keywords]
-        else:
-            keywords_list = [str(k) for k in keywords]
+            return create_tool_result(
+                tool="run_search_keyword",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         if not keywords_list:
-            return {
-                "success": False,
-                "matched_lines": [],
-                "output_file": None,
-                "keywords": [],
-                "match_count": 0,
-                "error": "No keywords provided"
-            }
+            return create_tool_result(
+                tool="run_search_keyword",
+                status="error",
+                input_params=input_params,
+                errors=["No keywords provided"]
+            )
         
         # Read log file
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -139,6 +150,7 @@ def run_search_keyword(
                 if any(kw.lower() in line_stripped.lower() for kw in keywords_list):
                     matched_lines.append(line_stripped)
         
+        artifacts = []
         output_file = None
         if write_file:
             # Create output directory if it doesn't exist
@@ -159,22 +171,52 @@ def run_search_keyword(
                 f.write('\n'.join(matched_lines))
                 if matched_lines:
                     f.write('\n')
+            
+            artifacts.append({
+                "type": "file",
+                "name": output_filename,
+                "path": output_file
+            })
         
-        return {
-            "success": True,
-            "matched_lines": matched_lines,
-            "output_file": output_file,
-            "keywords": keywords_list,
-            "match_count": len(matched_lines),
-            "error": None
+        # Create summary
+        keywords_display = ', '.join(keywords_list[:3])
+        if len(keywords_list) > 3:
+            keywords_display += f" (+{len(keywords_list) - 3} more)"
+        
+        summary = {
+            "headline": f"Keyword search: {len(matched_lines)} matches found",
+            "key_metrics": {
+                "match_count": len(matched_lines),
+                "keywords_searched": len(keywords_list),
+                "keywords": keywords_display,
+                "case_sensitive": case_sensitive
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": matched_lines,
+            "text": f"Found {len(matched_lines)} lines matching keywords: {keywords_display}",
+            "json": {
+                "matched_lines": matched_lines,
+                "keywords": keywords_list,
+                "match_count": len(matched_lines)
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_search_keyword",
+            status="success",
+            input_params=input_params,
+            summary=summary,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "matched_lines": [],
-            "output_file": None,
-            "keywords": keywords_list if 'keywords_list' in locals() else [],
-            "match_count": 0,
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_search_keyword",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )

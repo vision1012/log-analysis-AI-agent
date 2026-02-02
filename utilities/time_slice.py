@@ -4,6 +4,11 @@ from typing import Union, List, Dict, Optional
 import os
 import tempfile
 
+try:
+    from .tool_result import create_tool_result, format_datetime_for_summary
+except ImportError:
+    from tool_result import create_tool_result, format_datetime_for_summary
+
 
 def _find_project_root(start_path: str = None) -> str:
     """Find the project root directory."""
@@ -289,31 +294,38 @@ def run_time_slice(
         - time_range: dict with start/end timestamps
         - error: str | None
     """
+    input_params = {
+        "file_path": file_path,
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "lines_found": 0,
-                "output_file": None,
-                "sample_lines": [],
-                "time_range": {},
-                "error": f"File not found: {file_path}"
-            }
+            return create_tool_result(
+                tool="run_time_slice",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         if start_time >= end_time:
-            return {
-                "success": False,
-                "lines_found": 0,
-                "output_file": None,
-                "sample_lines": [],
-                "time_range": {},
-                "error": "Start time must be before end time"
-            }
+            return create_tool_result(
+                tool="run_time_slice",
+                status="error",
+                input_params=input_params,
+                errors=["Start time must be before end time"]
+            )
         
         # Filter lines by time range
         filtered_lines = slice_by_time(file_path, start_time, end_time)
         
+        artifacts = []
         output_file = None
         if write_file and filtered_lines:
             # Create output directory if it doesn't exist
@@ -331,31 +343,57 @@ def run_time_slice(
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(filtered_lines))
                 f.write('\n')
+            
+            artifacts.append({
+                "type": "file",
+                "name": output_filename,
+                "path": output_file
+            })
         
         # Get sample lines (first 10)
         sample_lines = filtered_lines[:10]
         
-        return {
-            "success": True,
-            "lines_found": len(filtered_lines),
-            "output_file": output_file,
-            "sample_lines": sample_lines,
-            "time_range": {
-                "start": start_time.isoformat(),
-                "end": end_time.isoformat()
-            },
-            "error": None
+        # Create summary
+        time_range_str = f"{format_datetime_for_summary(start_time)} → {format_datetime_for_summary(end_time)}"
+        summary = {
+            "headline": f"Time slice: {len(filtered_lines)} lines found",
+            "key_metrics": {
+                "lines_found": len(filtered_lines),
+                "time_range": time_range_str,
+                "sample_lines_count": len(sample_lines)
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": sample_lines,
+            "text": f"Found {len(filtered_lines)} log lines in time range {time_range_str}",
+            "json": {
+                "all_lines_count": len(filtered_lines),
+                "time_range": {
+                    "start": start_time.isoformat(),
+                    "end": end_time.isoformat()
+                },
+                "sample_lines": sample_lines
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_time_slice",
+            status="success",
+            input_params=input_params,
+            summary=summary,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "lines_found": 0,
-            "output_file": None,
-            "sample_lines": [],
-            "time_range": {},
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_time_slice",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )
 
 
 def slice_by_time_to_file(

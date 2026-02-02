@@ -3,6 +3,11 @@ import os
 import tempfile
 from typing import Union, List, Dict, Optional
 
+try:
+    from .tool_result import create_tool_result
+except ImportError:
+    from tool_result import create_tool_result
+
 
 def filter_by_log_level(log_content: Union[str, List[str]], log_levels: Union[str, List[str]]) -> List[str]:
     
@@ -103,29 +108,37 @@ def run_filter_log_level(
         - counts_by_level: Dict[str, int]
         - error: str | None
     """
+    # Normalize log levels to list
+    if isinstance(log_levels, str):
+        log_levels_list = [log_levels]
+    else:
+        log_levels_list = [str(level) for level in log_levels] if log_levels else []
+    
+    log_levels_normalized = [level.upper() for level in log_levels_list]
+    
+    input_params = {
+        "file_path": file_path,
+        "log_levels": log_levels_normalized,
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "filtered_lines": [],
-                "output_files": [],
-                "counts_by_level": {},
-                "error": f"File not found: {file_path}"
-            }
-        
-        # Normalize log levels to list
-        if isinstance(log_levels, str):
-            log_levels_list = [log_levels]
-        else:
-            log_levels_list = [str(level) for level in log_levels]
-        
-        log_levels_normalized = [level.upper() for level in log_levels_list]
+            return create_tool_result(
+                tool="run_filter_log_level",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         # Filter lines by log level
         all_filtered_lines = []
         counts_by_level = {}
-        output_files = []
+        artifacts = []
         
         file_basename = os.path.basename(file_path)
         file_name_without_ext = os.path.splitext(file_basename)[0]
@@ -147,24 +160,50 @@ def run_filter_log_level(
                     if filtered_lines:
                         f.write('\n')
                 
-                output_files.append(output_path)
+                artifacts.append({
+                    "type": "file",
+                    "name": output_filename,
+                    "path": output_path
+                })
         
-        return {
-            "success": True,
-            "filtered_lines": all_filtered_lines,
-            "output_files": output_files,
-            "counts_by_level": counts_by_level,
-            "error": None
+        # Create summary
+        total_lines = sum(counts_by_level.values())
+        levels_display = ', '.join(log_levels_normalized)
+        summary = {
+            "headline": f"Log level filter: {total_lines} lines found across {len(log_levels_normalized)} level(s)",
+            "key_metrics": {
+                "total_lines": total_lines,
+                "levels_filtered": log_levels_normalized,
+                "counts_by_level": counts_by_level
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": all_filtered_lines,
+            "text": f"Filtered {total_lines} lines by log levels: {levels_display}",
+            "json": {
+                "filtered_lines": all_filtered_lines,
+                "counts_by_level": counts_by_level
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_filter_log_level",
+            status="success",
+            input_params=input_params,
+            summary=summary,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "filtered_lines": [],
-            "output_files": [],
-            "counts_by_level": {},
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_filter_log_level",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )
 
 
 def filter_by_log_level_to_file(log_content: Union[str, List[str]], log_levels: Union[str, List[str]], output_file: Union[str, None] = None) -> str:

@@ -491,23 +491,22 @@ class TestFilterLogLevel(unittest.TestCase):
         
         result = run_filter_log_level(temp_file, "ERROR", output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(len(result["filtered_lines"]), 2)
-        self.assertEqual(len(result["output_files"]), 1)
-        self.assertIn("ERROR", result["counts_by_level"])
-        self.assertEqual(result["counts_by_level"]["ERROR"], 2)
-        self.assertIsNone(result["error"])
-        self.assertTrue(os.path.exists(result["output_files"][0]))
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 2)
+        self.assertEqual(len(result["artifacts"]), 1)
+        self.assertIn("ERROR", result["summary"]["key_metrics"]["counts_by_level"])
+        self.assertEqual(result["summary"]["key_metrics"]["counts_by_level"]["ERROR"], 2)
+        self.assertEqual(len(result["errors"]), 0)
+        self.assertTrue(os.path.exists(result["artifacts"][0]["path"]))
     
     def test_run_filter_log_level_file_not_found(self):
         """Test run_filter_log_level() handles file not found error."""
         result = run_filter_log_level("nonexistent_file.log", "ERROR")
         
-        self.assertFalse(result["success"])
-        self.assertEqual(len(result["filtered_lines"]), 0)
-        self.assertEqual(len(result["output_files"]), 0)
-        self.assertIsNotNone(result["error"])
-        self.assertIn("File not found", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
     
     def test_run_filter_log_level_multiple_levels(self):
         """Test run_filter_log_level() with multiple log levels."""
@@ -516,11 +515,11 @@ class TestFilterLogLevel(unittest.TestCase):
         
         result = run_filter_log_level(temp_file, ["ERROR", "WARN"], output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(len(result["filtered_lines"]), 2)
-        self.assertEqual(len(result["output_files"]), 2)  # One file per level
-        self.assertIn("ERROR", result["counts_by_level"])
-        self.assertIn("WARN", result["counts_by_level"])
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 2)
+        self.assertEqual(len(result["artifacts"]), 2)  # One file per level
+        self.assertIn("ERROR", result["summary"]["key_metrics"]["counts_by_level"])
+        self.assertIn("WARN", result["summary"]["key_metrics"]["counts_by_level"])
     
     def test_run_filter_log_level_no_write_file(self):
         """Test run_filter_log_level() with write_file=False."""
@@ -529,9 +528,9 @@ class TestFilterLogLevel(unittest.TestCase):
         
         result = run_filter_log_level(temp_file, "ERROR", write_file=False)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(len(result["filtered_lines"]), 1)
-        self.assertEqual(len(result["output_files"]), 0)  # No files created
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 1)
+        self.assertEqual(len(result["artifacts"]), 0)  # No files created
     
     def test_run_filter_log_level_custom_output_dir(self):
         """Test run_filter_log_level() with custom output directory."""
@@ -541,9 +540,9 @@ class TestFilterLogLevel(unittest.TestCase):
         
         result = run_filter_log_level(temp_file, "ERROR", output_dir=custom_output_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(len(result["output_files"]), 1)
-        self.assertTrue(result["output_files"][0].startswith(custom_output_dir))
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["artifacts"]), 1)
+        self.assertTrue(result["artifacts"][0]["path"].startswith(custom_output_dir))
         self.assertTrue(os.path.exists(custom_output_dir))
     
     def test_run_filter_log_level_no_matches(self):
@@ -553,10 +552,10 @@ class TestFilterLogLevel(unittest.TestCase):
         
         result = run_filter_log_level(temp_file, "ERROR", output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(len(result["filtered_lines"]), 0)
-        self.assertEqual(len(result["output_files"]), 0)  # No file created when no matches
-        self.assertEqual(result["counts_by_level"]["ERROR"], 0)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 0)
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created when no matches
+        self.assertEqual(result["summary"]["key_metrics"]["counts_by_level"]["ERROR"], 0)
     
     def test_run_filter_log_level_string_input(self):
         """Test run_filter_log_level() accepts string log level."""
@@ -565,8 +564,8 @@ class TestFilterLogLevel(unittest.TestCase):
         
         result = run_filter_log_level(temp_file, "ERROR", output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["counts_by_level"]["ERROR"], 1)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["counts_by_level"]["ERROR"], 1)
 
 
 if __name__ == '__main__':

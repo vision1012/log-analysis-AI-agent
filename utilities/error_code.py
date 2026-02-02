@@ -6,6 +6,11 @@ from typing import Union, List, Dict, Optional, Tuple
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+try:
+    from .tool_result import create_tool_result
+except ImportError:
+    from tool_result import create_tool_result
+
 
 @dataclass
 class ErrorCodeMatch:
@@ -711,33 +716,39 @@ def run_error_code_search(
         - counts_by_code: Dict[str, int]
         - error: str | None
     """
+    # Normalize error codes to list
+    if isinstance(error_codes, str):
+        error_codes_list = [error_codes]
+    else:
+        error_codes_list = [str(code) for code in error_codes] if error_codes else []
+    
+    input_params = {
+        "file_path": file_path,
+        "error_codes": error_codes_list,
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file,
+            "case_sensitive": case_sensitive
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "matched_lines": [],
-                "output_file": None,
-                "codes_found": [],
-                "counts_by_code": {},
-                "error": f"File not found: {file_path}"
-            }
-        
-        # Normalize error codes to list
-        if isinstance(error_codes, str):
-            error_codes_list = [error_codes]
-        else:
-            error_codes_list = [str(code) for code in error_codes]
+            return create_tool_result(
+                tool="run_error_code_search",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         if not error_codes_list:
-            return {
-                "success": False,
-                "matched_lines": [],
-                "output_file": None,
-                "codes_found": [],
-                "counts_by_code": {},
-                "error": "No error codes provided"
-            }
+            return create_tool_result(
+                tool="run_error_code_search",
+                status="error",
+                input_params=input_params,
+                errors=["No error codes provided"]
+            )
         
         # Search for error codes
         matched_lines = search_by_error_code(file_path, error_codes_list, case_sensitive)
@@ -761,6 +772,7 @@ def run_error_code_search(
         
         codes_found = list(codes_found)
         
+        artifacts = []
         output_file = None
         if write_file and matched_lines:
             # Create output directory if it doesn't exist
@@ -780,25 +792,55 @@ def run_error_code_search(
                 f.write('\n'.join(matched_lines))
                 if matched_lines:
                     f.write('\n')
+            
+            artifacts.append({
+                "type": "file",
+                "name": output_filename,
+                "path": output_file
+            })
         
-        return {
-            "success": True,
-            "matched_lines": matched_lines,
-            "output_file": output_file,
-            "codes_found": codes_found,
-            "counts_by_code": counts_by_code,
-            "error": None
+        # Create summary
+        codes_display = ', '.join(codes_found[:3])
+        if len(codes_found) > 3:
+            codes_display += f" (+{len(codes_found) - 3} more)"
+        
+        summary = {
+            "headline": f"Error code search: {len(matched_lines)} matches found",
+            "key_metrics": {
+                "match_count": len(matched_lines),
+                "codes_found": len(codes_found),
+                "codes_searched": codes_display,
+                "counts_by_code": counts_by_code
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": matched_lines,
+            "text": f"Found {len(matched_lines)} lines matching error codes: {codes_display}",
+            "json": {
+                "matched_lines": matched_lines,
+                "codes_found": codes_found,
+                "counts_by_code": counts_by_code
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_error_code_search",
+            status="success",
+            input_params=input_params,
+            summary=summary,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "matched_lines": [],
-            "output_file": None,
-            "codes_found": [],
-            "counts_by_code": {},
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_error_code_search",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )
 
 
 def run_error_code_extract_all(
@@ -824,17 +866,23 @@ def run_error_code_extract_all(
         - formatted_summary: str
         - error: str | None
     """
+    input_params = {
+        "file_path": file_path,
+        "options": {
+            "output_dir": output_dir,
+            "write_summary": write_summary
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "matches": [],
-                "summary": None,
-                "summary_file": None,
-                "formatted_summary": "",
-                "error": f"File not found: {file_path}"
-            }
+            return create_tool_result(
+                tool="run_error_code_extract_all",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         # Extract all error codes
         matches, summary = extract_all_error_codes(file_path)
@@ -842,6 +890,7 @@ def run_error_code_extract_all(
         # Format summary
         formatted_summary = format_error_code_summary(summary)
         
+        artifacts = []
         summary_file = None
         if write_summary:
             # Create output directory if it doesn't exist
@@ -856,25 +905,62 @@ def run_error_code_extract_all(
             # Write summary to file
             with open(summary_file, 'w', encoding='utf-8') as f:
                 f.write(formatted_summary)
+            
+            artifacts.append({
+                "type": "file",
+                "name": summary_filename,
+                "path": summary_file
+            })
         
-        return {
-            "success": True,
-            "matches": matches,
-            "summary": summary,
-            "summary_file": summary_file,
-            "formatted_summary": formatted_summary,
-            "error": None
+        # Create summary
+        summary_dict = {
+            "headline": f"Error code extraction: {len(matches)} error codes found",
+            "key_metrics": {
+                "total_codes": len(matches),
+                "unique_codes": summary.unique_codes,
+                "total_occurrences": summary.total_occurrences,
+                "most_common": summary.most_common[:5] if summary.most_common else []
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": [{"code": m.code, "line": m.line_number, "content": m.line_content[:100]} for m in matches[:20]],
+            "text": formatted_summary,
+            "json": {
+                "matches": [
+                    {
+                        "code": m.code,
+                        "line_number": m.line_number,
+                        "line_content": m.line_content,
+                        "timestamp": m.timestamp.isoformat() if m.timestamp else None
+                    }
+                    for m in matches
+                ],
+                "summary": {
+                    "unique_codes": summary.unique_codes,
+                    "total_occurrences": summary.total_occurrences,
+                    "most_common": summary.most_common
+                }
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_error_code_extract_all",
+            status="success",
+            input_params=input_params,
+            summary=summary_dict,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "matches": [],
-            "summary": None,
-            "summary_file": None,
-            "formatted_summary": "",
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_error_code_extract_all",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )
 
 
 if __name__ == "__main__":

@@ -797,24 +797,22 @@ class TestLogSummary(unittest.TestCase):
         
         result = run_log_summary(temp_file, output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["summary"])
-        self.assertIsInstance(result["summary"], LogSummary)
-        self.assertIsNotNone(result["output_file"])
-        self.assertTrue(os.path.exists(result["output_file"]))
-        self.assertGreater(len(result["formatted_summary"]), 0)
-        self.assertIsNone(result["error"])
+        self.assertEqual(result["status"], "success")
+        self.assertIsNotNone(result["data"]["json"]["summary"])
+        self.assertIsNotNone(result["artifacts"])
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(os.path.exists(result["artifacts"][0]["path"]))
+        self.assertGreater(len(result["data"]["text"]), 0)
+        self.assertEqual(len(result["errors"]), 0)
     
     def test_run_log_summary_file_not_found(self):
         """Test run_log_summary() handles file not found error."""
         result = run_log_summary("nonexistent_file.log")
         
-        self.assertFalse(result["success"])
-        self.assertIsNone(result["summary"])
-        self.assertIsNone(result["output_file"])
-        self.assertEqual(len(result["formatted_summary"]), 0)
-        self.assertIsNotNone(result["error"])
-        self.assertIn("File not found", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
     
     def test_run_log_summary_no_write_file(self):
         """Test run_log_summary() with write_file=False."""
@@ -823,10 +821,10 @@ class TestLogSummary(unittest.TestCase):
         
         result = run_log_summary(temp_file, write_file=False)
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["summary"])
-        self.assertIsNone(result["output_file"])
-        self.assertGreater(len(result["formatted_summary"]), 0)
+        self.assertEqual(result["status"], "success")
+        self.assertIsNotNone(result["data"]["json"]["summary"])
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created
+        self.assertGreater(len(result["data"]["text"]), 0)
     
     def test_run_log_summary_custom_output_dir(self):
         """Test run_log_summary() with custom output directory."""
@@ -836,9 +834,9 @@ class TestLogSummary(unittest.TestCase):
         
         result = run_log_summary(temp_file, output_dir=custom_output_dir)
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["output_file"])
-        self.assertTrue(result["output_file"].startswith(custom_output_dir))
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(result["artifacts"][0]["path"].startswith(custom_output_dir))
         self.assertTrue(os.path.exists(custom_output_dir))
     
     def test_run_log_summary_formatted_summary(self):
@@ -848,9 +846,9 @@ class TestLogSummary(unittest.TestCase):
         
         result = run_log_summary(temp_file, output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertIn("LOG SUMMARY", result["formatted_summary"])
-        self.assertIn("Total Lines", result["formatted_summary"])
+        self.assertEqual(result["status"], "success")
+        self.assertIn("LOG SUMMARY", result["data"]["text"])
+        self.assertIn("Total Lines", result["data"]["text"])
 
 
 if __name__ == '__main__':

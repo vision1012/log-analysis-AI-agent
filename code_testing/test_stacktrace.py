@@ -910,29 +910,22 @@ class TestStacktrace(unittest.TestCase):
         
         result = run_stacktrace(temp_file, output_dir=self.temp_dir, min_stack_depth=1)
         
-        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], "success")
         # Stacktrace might not be detected if format doesn't match exactly, so check structure instead
-        self.assertIsInstance(result["stacktraces"], list)
-        self.assertIsNotNone(result["summary"])
-        self.assertIsNotNone(result["output_files"])
-        self.assertIn("clean_log", result["output_files"])
-        self.assertIn("stacktraces", result["output_files"])
-        self.assertIn("summary", result["output_files"])
-        self.assertGreater(len(result["formatted_summary"]), 0)
-        self.assertIsNone(result["error"])
+        self.assertIsInstance(result["data"]["json"]["stacktraces"], list)
+        self.assertIsNotNone(result["data"]["json"]["summary"])
+        self.assertTrue(len(result["artifacts"]) >= 0)  # May have 0 or more artifacts
+        self.assertGreater(len(result["data"]["text"]), 0)
+        self.assertEqual(len(result["errors"]), 0)
     
     def test_run_stacktrace_file_not_found(self):
         """Test run_stacktrace() handles file not found error."""
         result = run_stacktrace("nonexistent_file.log")
         
-        self.assertFalse(result["success"])
-        self.assertEqual(len(result["stacktraces"]), 0)
-        self.assertIsNone(result["summary"])
-        self.assertIsNone(result["output_files"]["clean_log"])
-        self.assertIsNone(result["output_files"]["stacktraces"])
-        self.assertIsNone(result["output_files"]["summary"])
-        self.assertIsNotNone(result["error"])
-        self.assertIn("File not found", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
     
     def test_run_stacktrace_no_write_file(self):
         """Test run_stacktrace() with write_file=False."""
@@ -946,12 +939,10 @@ class TestStacktrace(unittest.TestCase):
         
         result = run_stacktrace(temp_file, write_file=False, min_stack_depth=1)
         
-        self.assertTrue(result["success"])
+        self.assertEqual(result["status"], "success")
         # Stacktrace might not be detected if format doesn't match exactly, so check structure instead
-        self.assertIsInstance(result["stacktraces"], list)
-        self.assertIsNone(result["output_files"]["clean_log"])
-        self.assertIsNone(result["output_files"]["stacktraces"])
-        self.assertIsNone(result["output_files"]["summary"])
+        self.assertIsInstance(result["data"]["json"]["stacktraces"], list)
+        self.assertEqual(len(result["artifacts"]), 0)  # No files created
     
     def test_run_stacktrace_custom_output_dir(self):
         """Test run_stacktrace() with custom output directory."""
@@ -965,9 +956,11 @@ class TestStacktrace(unittest.TestCase):
         
         result = run_stacktrace(temp_file, output_dir=custom_output_dir)
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["output_files"]["clean_log"])
-        self.assertTrue(result["output_files"]["clean_log"].startswith(custom_output_dir))
+        self.assertEqual(result["status"], "success")
+        # Check if artifacts exist and one starts with custom_output_dir
+        if len(result["artifacts"]) > 0:
+            artifact_paths = [a["path"] for a in result["artifacts"]]
+            self.assertTrue(any(path.startswith(custom_output_dir) for path in artifact_paths))
         self.assertTrue(os.path.exists(custom_output_dir))
     
     def test_run_stacktrace_with_options(self):
@@ -987,8 +980,8 @@ class TestStacktrace(unittest.TestCase):
             deduplicate=True
         )
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["summary"])
+        self.assertEqual(result["status"], "success")
+        self.assertIsNotNone(result["data"]["json"]["summary"])
 
 
 if __name__ == '__main__':

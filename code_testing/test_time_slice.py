@@ -1271,25 +1271,23 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, start_time, end_time, output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["lines_found"], 1)
-        self.assertIsNotNone(result["output_file"])
-        self.assertTrue(os.path.exists(result["output_file"]))
-        self.assertEqual(len(result["sample_lines"]), 1)
-        self.assertIn("start", result["time_range"])
-        self.assertIn("end", result["time_range"])
-        self.assertIsNone(result["error"])
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["lines_found"], 1)
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(os.path.exists(result["artifacts"][0]["path"]))
+        self.assertEqual(len(result["data"]["items"]), 1)
+        self.assertIn("start", result["data"]["json"]["time_range"])
+        self.assertIn("end", result["data"]["json"]["time_range"])
+        self.assertEqual(len(result["errors"]), 0)
     
     def test_run_time_slice_file_not_found(self):
         """Test run_time_slice() handles file not found error."""
         result = run_time_slice("nonexistent_file.log", self.test_start_time, self.test_end_time)
         
-        self.assertFalse(result["success"])
-        self.assertEqual(result["lines_found"], 0)
-        self.assertIsNone(result["output_file"])
-        self.assertEqual(len(result["sample_lines"]), 0)
-        self.assertIsNotNone(result["error"])
-        self.assertIn("File not found", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
     
     def test_run_time_slice_invalid_time_range(self):
         """Test run_time_slice() handles invalid time range."""
@@ -1301,10 +1299,9 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, start_time, end_time)
         
-        self.assertFalse(result["success"])
-        self.assertEqual(result["lines_found"], 0)
-        self.assertIsNotNone(result["error"])
-        self.assertIn("Start time must be before end time", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("Start time must be before end time", result["errors"][0])
     
     def test_run_time_slice_no_write_file(self):
         """Test run_time_slice() with write_file=False."""
@@ -1313,10 +1310,10 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, self.test_start_time, self.test_end_time, write_file=False)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["lines_found"], 1)
-        self.assertIsNone(result["output_file"])
-        self.assertEqual(len(result["sample_lines"]), 1)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["lines_found"], 1)
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created
+        self.assertEqual(len(result["data"]["items"]), 1)
     
     def test_run_time_slice_custom_output_dir(self):
         """Test run_time_slice() with custom output directory."""
@@ -1326,9 +1323,9 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, self.test_start_time, self.test_end_time, output_dir=custom_output_dir)
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["output_file"])
-        self.assertTrue(result["output_file"].startswith(custom_output_dir))
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(result["artifacts"][0]["path"].startswith(custom_output_dir))
         self.assertTrue(os.path.exists(custom_output_dir))
     
     def test_run_time_slice_no_matching_logs(self):
@@ -1341,10 +1338,10 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, start_time, end_time)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["lines_found"], 0)
-        self.assertIsNone(result["output_file"])  # No file created when no matches
-        self.assertEqual(len(result["sample_lines"]), 0)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["lines_found"], 0)
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created when no matches
+        self.assertEqual(len(result["data"]["items"]), 0)
     
     def test_run_time_slice_sample_lines_limit(self):
         """Test run_time_slice() limits sample_lines to first 10."""
@@ -1358,9 +1355,9 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, start_time, end_time)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["lines_found"], 15)
-        self.assertEqual(len(result["sample_lines"]), 10)  # Limited to 10
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["lines_found"], 15)
+        self.assertEqual(len(result["data"]["items"]), 10)  # Limited to 10
     
     def test_run_time_slice_time_range_format(self):
         """Test run_time_slice() time_range contains ISO format timestamps."""
@@ -1369,12 +1366,12 @@ Jan  1 10:25:00 Syslog format log"""
         
         result = run_time_slice(temp_file, self.test_start_time, self.test_end_time)
         
-        self.assertTrue(result["success"])
-        self.assertIn("start", result["time_range"])
-        self.assertIn("end", result["time_range"])
+        self.assertEqual(result["status"], "success")
+        self.assertIn("start", result["data"]["json"]["time_range"])
+        self.assertIn("end", result["data"]["json"]["time_range"])
         # Check ISO format
-        self.assertIn("2024-01-01T10:00:00", result["time_range"]["start"])
-        self.assertIn("2024-01-01T11:00:00", result["time_range"]["end"])
+        self.assertIn("2024-01-01T10:00:00", result["data"]["json"]["time_range"]["start"])
+        self.assertIn("2024-01-01T11:00:00", result["data"]["json"]["time_range"]["end"])
 
 
 if __name__ == '__main__':

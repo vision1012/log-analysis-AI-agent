@@ -187,12 +187,15 @@ def main():
         
         result = run_search_keyword(log_file, keywords)
         
-        if result["success"]:
-            print(f"\n✓ Found {result['match_count']} matching lines")
-            if result["output_file"]:
-                print(f"✓ Results saved to: {result['output_file']}")
+        if result["status"] == "success":
+            print(f"\n{result['summary']['headline']}")
+            print(f"✓ Found {result['summary']['key_metrics']['match_count']} matching lines")
+            if result["artifacts"]:
+                for artifact in result["artifacts"]:
+                    print(f"✓ Results saved to: {artifact['path']}")
         else:
-            print(f"✗ Error: {result['error']}")
+            errors = result.get("errors", [])
+            print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
     
     elif choice == "2":
         # Filter by Log Level
@@ -214,16 +217,17 @@ def main():
         try:
             result = run_filter_log_level(log_file, log_levels)
             
-            if result["success"]:
-                print(f"\n✓ Filtered {len(result['filtered_lines'])} lines")
-                for level, count in result["counts_by_level"].items():
+            if result["status"] == "success":
+                print(f"\n{result['summary']['headline']}")
+                for level, count in result["summary"]["key_metrics"]["counts_by_level"].items():
                     print(f"  {level}: {count} lines")
-                if result["output_files"]:
-                    print(f"\n✓ Created {len(result['output_files'])} output file(s)")
-                    for output_file in result["output_files"]:
-                        print(f"  - {output_file}")
+                if result["artifacts"]:
+                    print(f"\n✓ Created {len(result['artifacts'])} output file(s)")
+                    for artifact in result["artifacts"]:
+                        print(f"  - {artifact['path']}")
             else:
-                print(f"✗ Error: {result['error']}")
+                errors = result.get("errors", [])
+                print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
         except Exception as e:
             print(f"Error: {e}")
     
@@ -238,12 +242,14 @@ def main():
         try:
             result = run_log_summary(log_file)
             
-            if result["success"]:
-                print("\n" + result["formatted_summary"])
-                if result["output_file"]:
-                    print(f"\n✓ Summary saved to: {result['output_file']}")
+            if result["status"] == "success":
+                print("\n" + result["data"]["text"])
+                if result["artifacts"]:
+                    for artifact in result["artifacts"]:
+                        print(f"\n✓ Summary saved to: {artifact['path']}")
             else:
-                print(f"✗ Error: {result['error']}")
+                errors = result.get("errors", [])
+                print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
         except Exception as e:
             print(f"Error: {e}")
     
@@ -258,16 +264,15 @@ def main():
         try:
             result = run_stacktrace(log_file)
             
-            if result["success"]:
-                print("\n" + result["formatted_summary"])
-                if result["output_files"]["clean_log"]:
-                    print(f"\n✓ Clean log: {result['output_files']['clean_log']}")
-                if result["output_files"]["stacktraces"]:
-                    print(f"✓ Stacktraces: {result['output_files']['stacktraces']}")
-                if result["output_files"]["summary"]:
-                    print(f"✓ Summary: {result['output_files']['summary']}")
+            if result["status"] == "success":
+                print("\n" + result["data"]["text"])
+                if result["artifacts"]:
+                    print("\n✓ Created files:")
+                    for artifact in result["artifacts"]:
+                        print(f"  - {artifact['name']}: {artifact['path']}")
             else:
-                print(f"✗ Error: {result['error']}")
+                errors = result.get("errors", [])
+                print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
         except Exception as e:
             print(f"Error: {e}")
     
@@ -288,12 +293,14 @@ def main():
             
             result = run_time_slice(log_file, start_time, end_time)
             
-            if result["success"]:
-                print(f"\n✓ Found {result['lines_found']} lines in the specified time range")
-                if result["output_file"]:
-                    print(f"✓ Results saved to: {result['output_file']}")
+            if result["status"] == "success":
+                print(f"\n{result['summary']['headline']}")
+                if result["artifacts"]:
+                    for artifact in result["artifacts"]:
+                        print(f"✓ Results saved to: {artifact['path']}")
             else:
-                print(f"✗ Error: {result['error']}")
+                errors = result.get("errors", [])
+                print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
         except ValueError as e:
             print(f"Error: Invalid time format. Use YYYY-MM-DD HH:MM:SS. {e}")
         except Exception as e:
@@ -322,24 +329,28 @@ def main():
                 error_codes = [c.strip() for c in codes_input.split(',')]
                 result = run_error_code_search(log_file, error_codes)
                 
-                if result["success"]:
-                    print(f"\n✓ Found {len(result['matched_lines'])} matching lines")
-                    for code, count in result["counts_by_code"].items():
+                if result["status"] == "success":
+                    print(f"\n{result['summary']['headline']}")
+                    for code, count in result["summary"]["key_metrics"]["counts_by_code"].items():
                         print(f"  {code}: {count} occurrences")
-                    if result["output_file"]:
-                        print(f"✓ Results saved to: {result['output_file']}")
+                    if result["artifacts"]:
+                        for artifact in result["artifacts"]:
+                            print(f"✓ Results saved to: {artifact['path']}")
                 else:
-                    print(f"✗ Error: {result['error']}")
+                    errors = result.get("errors", [])
+                    print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
             
             elif sub_choice == "2":
                 result = run_error_code_extract_all(log_file)
                 
-                if result["success"]:
-                    print("\n" + result["formatted_summary"])
-                    if result["summary_file"]:
-                        print(f"\n✓ Summary saved to: {result['summary_file']}")
+                if result["status"] == "success":
+                    print("\n" + result["data"]["text"])
+                    if result["artifacts"]:
+                        for artifact in result["artifacts"]:
+                            print(f"\n✓ Summary saved to: {artifact['path']}")
                 else:
-                    print(f"✗ Error: {result['error']}")
+                    errors = result.get("errors", [])
+                    print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
             else:
                 print("Invalid choice.")
         except Exception as e:
@@ -356,19 +367,21 @@ def main():
         try:
             result = run_error_lines(log_file)
             
-            if result["success"]:
-                print(f"\n✓ Found {result['error_count']} error lines")
+            if result["status"] == "success":
+                print(f"\n{result['summary']['headline']}")
                 
-                if result["error_lines"]:
-                    for line in result["error_lines"][:10]:  # Show first 10
+                if result["data"]["items"]:
+                    for line in result["data"]["items"][:10]:  # Show first 10
                         print(f"  {line}")
-                    if len(result["error_lines"]) > 10:
-                        print(f"  ... and {len(result['error_lines']) - 10} more")
+                    if len(result["data"]["items"]) > 10:
+                        print(f"  ... and {len(result['data']['items']) - 10} more")
                 
-                if result["output_file"]:
-                    print(f"\n✓ Results saved to: {result['output_file']}")
+                if result["artifacts"]:
+                    for artifact in result["artifacts"]:
+                        print(f"\n✓ Results saved to: {artifact['path']}")
             else:
-                print(f"✗ Error: {result['error']}")
+                errors = result.get("errors", [])
+                print(f"✗ Error: {errors[0] if errors else 'Unknown error'}")
         except Exception as e:
             print(f"Error: {e}")
     

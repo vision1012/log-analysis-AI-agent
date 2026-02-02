@@ -285,24 +285,22 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, "Error", output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["match_count"], 2)
-        self.assertEqual(len(result["matched_lines"]), 2)
-        self.assertIsNotNone(result["output_file"])
-        self.assertTrue(os.path.exists(result["output_file"]))
-        self.assertIn("Error", result["keywords"])
-        self.assertIsNone(result["error"])
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["match_count"], 2)
+        self.assertEqual(len(result["data"]["items"]), 2)
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(os.path.exists(result["artifacts"][0]["path"]))
+        self.assertIn("Error", result["input"]["keywords"])
+        self.assertEqual(len(result["errors"]), 0)
     
     def test_run_search_keyword_file_not_found(self):
         """Test run_search_keyword() handles file not found error."""
         result = run_search_keyword("nonexistent_file.log", "Error")
         
-        self.assertFalse(result["success"])
-        self.assertEqual(result["match_count"], 0)
-        self.assertEqual(len(result["matched_lines"]), 0)
-        self.assertIsNone(result["output_file"])
-        self.assertIsNotNone(result["error"])
-        self.assertIn("File not found", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
     
     def test_run_search_keyword_no_keywords(self):
         """Test run_search_keyword() handles empty keywords."""
@@ -311,10 +309,9 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, [])
         
-        self.assertFalse(result["success"])
-        self.assertEqual(result["match_count"], 0)
-        self.assertIsNotNone(result["error"])
-        self.assertIn("No keywords provided", result["error"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("No keywords provided", result["errors"][0])
     
     def test_run_search_keyword_multiple_keywords(self):
         """Test run_search_keyword() with multiple keywords."""
@@ -323,11 +320,11 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, ["Error", "Warning"], output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["match_count"], 2)
-        self.assertEqual(len(result["keywords"]), 2)
-        self.assertIn("Error", result["keywords"])
-        self.assertIn("Warning", result["keywords"])
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["match_count"], 2)
+        self.assertEqual(len(result["input"]["keywords"]), 2)
+        self.assertIn("Error", result["input"]["keywords"])
+        self.assertIn("Warning", result["input"]["keywords"])
     
     def test_run_search_keyword_case_sensitive(self):
         """Test run_search_keyword() with case-sensitive search."""
@@ -336,8 +333,8 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, "Error", case_sensitive=True, output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["match_count"], 1)  # Only "Error" matches, not "error"
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["match_count"], 1)  # Only "Error" matches, not "error"
     
     def test_run_search_keyword_case_insensitive(self):
         """Test run_search_keyword() with case-insensitive search."""
@@ -346,8 +343,8 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, "Error", case_sensitive=False, output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["match_count"], 2)  # Both match
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["match_count"], 2)  # Both match
     
     def test_run_search_keyword_no_write_file(self):
         """Test run_search_keyword() with write_file=False."""
@@ -356,10 +353,10 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, "Error", write_file=False)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["match_count"], 1)
-        self.assertIsNone(result["output_file"])
-        self.assertEqual(len(result["matched_lines"]), 1)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["match_count"], 1)
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created
+        self.assertEqual(len(result["data"]["items"]), 1)
     
     def test_run_search_keyword_custom_output_dir(self):
         """Test run_search_keyword() with custom output directory."""
@@ -369,9 +366,9 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, "Error", output_dir=custom_output_dir)
         
-        self.assertTrue(result["success"])
-        self.assertIsNotNone(result["output_file"])
-        self.assertTrue(result["output_file"].startswith(custom_output_dir))
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(result["artifacts"][0]["path"].startswith(custom_output_dir))
         self.assertTrue(os.path.exists(custom_output_dir))
     
     def test_run_search_keyword_no_matches(self):
@@ -381,11 +378,11 @@ Error: Third error"""
         
         result = run_search_keyword(temp_file, "Error", output_dir=self.temp_dir)
         
-        self.assertTrue(result["success"])
-        self.assertEqual(result["match_count"], 0)
-        self.assertEqual(len(result["matched_lines"]), 0)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["match_count"], 0)
+        self.assertEqual(len(result["data"]["items"]), 0)
         # File should still be created even with no matches
-        self.assertIsNotNone(result["output_file"])
+        self.assertTrue(len(result["artifacts"]) > 0)
 
 
 if __name__ == '__main__':
