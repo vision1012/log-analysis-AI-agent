@@ -35,13 +35,27 @@ def create_tool_result(
     Returns:
         Standardized ToolResult dictionary
     """
-    # Normalize errors to list
+    # Normalize errors to list of ToolError dicts (code, message, details)
     if errors is None:
         errors_list = []
     elif isinstance(errors, str):
-        errors_list = [errors] if errors else []
+        errors_list = [{"code": "error", "message": errors}] if errors else []
     else:
-        errors_list = list(errors) if errors else []
+        errors_list = []
+        for err in errors:
+            if isinstance(err, str):
+                errors_list.append({"code": "error", "message": err})
+            elif isinstance(err, dict):
+                # Ensure it has code and message
+                error_dict = {
+                    "code": err.get("code", "error"),
+                    "message": err.get("message", str(err.get("details", "Unknown error")))
+                }
+                if "details" in err:
+                    error_dict["details"] = err["details"]
+                errors_list.append(error_dict)
+            else:
+                errors_list.append({"code": "error", "message": str(err)})
     
     # Normalize warnings to list of dicts
     if warnings is None:
