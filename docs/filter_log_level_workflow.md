@@ -425,3 +425,74 @@ When multiple log levels are found in a line, the function prioritizes:
 
 This ensures that critical levels are detected even if multiple levels appear in the same line.
 
+---
+
+## AI Agent Integration: run_filter_log_level()
+
+For AI agent integration, use the `run_filter_log_level()` function which returns structured dictionaries instead of printing results.
+
+### Function Signature
+
+```python
+def run_filter_log_level(
+    file_path: str,
+    log_levels: Union[str, List[str]],
+    output_dir: str = "output",
+    write_file: bool = True
+) -> Dict
+```
+
+### Return Structure
+
+```python
+{
+    "success": bool,
+    "filtered_lines": List[str],      # All filtered lines combined
+    "output_files": List[str],        # One file per level
+    "counts_by_level": Dict[str, int], # Count of lines per level
+    "error": str | None
+}
+```
+
+### Usage Example
+
+```python
+from utilities.filter_log_level import run_filter_log_level
+
+# Filter by single level
+result = run_filter_log_level("logs/app.log", "ERROR")
+
+if result["success"]:
+    print(f"Found {len(result['filtered_lines'])} error lines")
+    print(f"Created {len(result['output_files'])} output files")
+    for level, count in result["counts_by_level"].items():
+        print(f"  {level}: {count} lines")
+else:
+    print(f"Error: {result['error']}")
+
+# Filter by multiple levels
+result = run_filter_log_level(
+    "logs/app.log",
+    ["ERROR", "FATAL", "WARN"],
+    output_dir="custom_output",
+    write_file=True
+)
+
+# Process without writing files
+result = run_filter_log_level(
+    "logs/app.log",
+    "ERROR",
+    write_file=False  # Returns data without creating files
+)
+```
+
+### Key Differences from filter_by_log_level()
+
+| Feature | filter_by_log_level() | run_filter_log_level() |
+|---------|----------------------|------------------------|
+| Input | File path, string, or list | File path only |
+| Output | List of lines | Dictionary with structured data |
+| File Writing | Separate function needed | Built-in with `write_file` option |
+| Error Handling | Raises exceptions | Returns error in dictionary |
+| AI Agent Ready | ❌ | ✅ |
+| CLI Usage | ✅ | ✅ |

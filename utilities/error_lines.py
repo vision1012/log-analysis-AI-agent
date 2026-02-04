@@ -2,6 +2,11 @@ import re
 import os
 from typing import Union, List, Dict, Optional
 
+try:
+    from .tool_result import create_tool_result
+except ImportError:
+    from tool_result import create_tool_result
+
 
 def get_error_lines(log_content: Union[str, List[str]]) -> List[str]:
     """
@@ -63,20 +68,28 @@ def run_error_lines(
         - error_count: int
         - error: str | None
     """
+    input_params = {
+        "file_path": file_path,
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "error_lines": [],
-                "output_file": None,
-                "error_count": 0,
-                "error": f"File not found: {file_path}"
-            }
+            return create_tool_result(
+                tool="run_error_lines",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         # Extract error lines
         error_lines = get_error_lines(file_path)
         
+        artifacts = []
         output_file = None
         if write_file and error_lines:
             # Create output directory if it doesn't exist
@@ -93,20 +106,45 @@ def run_error_lines(
                 f.write('\n'.join(error_lines))
                 if error_lines:
                     f.write('\n')
+            
+            artifacts.append({
+                "type": "file",
+                "name": output_filename,
+                "path": output_file
+            })
         
-        return {
-            "success": True,
-            "error_lines": error_lines,
-            "output_file": output_file,
-            "error_count": len(error_lines),
-            "error": None
+        # Create summary
+        summary = {
+            "headline": f"Error lines extraction: {len(error_lines)} error lines found",
+            "key_metrics": {
+                "error_count": len(error_lines),
+                "file": os.path.basename(file_path)
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": error_lines,
+            "text": f"Extracted {len(error_lines)} error lines from log file",
+            "json": {
+                "error_lines": error_lines,
+                "error_count": len(error_lines)
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_error_lines",
+            status="success",
+            input_params=input_params,
+            summary=summary,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "error_lines": [],
-            "output_file": None,
-            "error_count": 0,
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_error_lines",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )

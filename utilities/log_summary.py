@@ -5,6 +5,11 @@ from typing import Union, List, Dict, Tuple, Optional
 from collections import defaultdict, Counter
 from dataclasses import dataclass, field
 
+try:
+    from .tool_result import create_tool_result, format_datetime_for_summary
+except ImportError:
+    from tool_result import create_tool_result, format_datetime_for_summary
+
 
 @dataclass
 class ErrorCodeInfo:
@@ -675,16 +680,23 @@ def run_log_summary(
         - formatted_summary: str
         - error: str | None
     """
+    input_params = {
+        "file_path": file_path,
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "summary": None,
-                "output_file": None,
-                "formatted_summary": "",
-                "error": f"File not found: {file_path}"
-            }
+            return create_tool_result(
+                tool="run_log_summary",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         # Analyze log file
         summary = summarize_log(file_path)
@@ -692,6 +704,7 @@ def run_log_summary(
         # Format summary
         formatted_summary = format_summary(summary, use_colors=True)
         
+        artifacts = []
         output_file = None
         if write_file:
             # Create output directory if it doesn't exist
@@ -706,23 +719,79 @@ def run_log_summary(
             # Write summary to file
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(formatted_summary)
+            
+            artifacts.append({
+                "type": "file",
+                "name": output_filename,
+                "path": output_file
+            })
         
-        return {
-            "success": True,
-            "summary": summary,
-            "output_file": output_file,
-            "formatted_summary": formatted_summary,
-            "error": None
+        # Calculate counts from log_level_counts
+        error_count = summary.log_level_counts.get('ERROR', 0) + summary.log_level_counts.get('FATAL', 0) + summary.log_level_counts.get('CRITICAL', 0)
+        warning_count = summary.log_level_counts.get('WARN', 0) + summary.log_level_counts.get('WARNING', 0)
+        info_count = summary.log_level_counts.get('INFO', 0)
+        
+        # Determine health status
+        error_ratio = (error_count / summary.total_lines * 100) if summary.total_lines > 0 else 0
+        if error_ratio > 5:
+            health_status = "CRITICAL"
+        elif error_ratio > 2:
+            health_status = "WARNING"
+        else:
+            health_status = "HEALTHY"
+        
+        # Create time range string
+        time_range_str = "N/A"
+        if summary.first_timestamp and summary.last_timestamp:
+            time_range_str = f"{format_datetime_for_summary(summary.first_timestamp)} → {format_datetime_for_summary(summary.last_timestamp)}"
+        
+        # Create summary
+        summary_dict = {
+            "headline": f"Log health: {health_status}",
+            "key_metrics": {
+                "total_lines": summary.total_lines,
+                "error_ratio_pct": round(error_ratio, 2),
+                "time_range": time_range_str,
+                "error_count": error_count,
+                "warning_count": warning_count,
+                "info_count": info_count
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": [],
+            "text": formatted_summary,
+            "json": {
+                "summary": {
+                    "total_lines": summary.total_lines,
+                    "error_count": error_count,
+                    "warning_count": warning_count,
+                    "info_count": info_count,
+                    "first_timestamp": summary.first_timestamp.isoformat() if summary.first_timestamp else None,
+                    "last_timestamp": summary.last_timestamp.isoformat() if summary.last_timestamp else None,
+                    "error_codes": [{"code": ec.code, "count": ec.count} for ec in summary.error_codes.values()],
+                    "stacktraces": [{"exception_type": st.exception_type, "line_count": st.line_count} for st in summary.stacktraces]
+                }
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_log_summary",
+            status="success",
+            input_params=input_params,
+            summary=summary_dict,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "summary": None,
-            "output_file": None,
-            "formatted_summary": "",
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_log_summary",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )
 
 
 if __name__ == "__main__":

@@ -5,7 +5,8 @@ from datetime import datetime
 from utilities.filter_log_level import (
     filter_by_log_level,
     filter_by_log_level_to_file,
-    interactive_filter_by_log_level
+    interactive_filter_by_log_level,
+    run_filter_log_level
 )
 
 
@@ -396,11 +397,15 @@ class TestFilterLogLevel(unittest.TestCase):
         )
         temp_file = self._create_temp_log_file(log_content)
         
-        # Mock the output directory creation by using a temp dir
-        # Note: This test might need adjustment based on actual implementation
-        result = interactive_filter_by_log_level(temp_file, 'ERROR')
-        self.assertIsInstance(result, list)
-        self.assertGreater(len(result), 0)
+        # Note: interactive_filter_by_log_level always prompts for input
+        # This test should use run_filter_log_level instead for non-interactive testing
+        # or mock the input() call. For now, we'll skip this test or use run_filter_log_level
+        from unittest.mock import patch
+        
+        with patch('builtins.input', return_value='1'):  # Mock input to return '1' for ERROR
+            result = interactive_filter_by_log_level(temp_file, None)
+            self.assertIsInstance(result, list)
+            self.assertGreater(len(result), 0)
 
     def test_interactive_file_not_found(self):
         """Test interactive_filter_by_log_level raises error for non-existent file."""
@@ -475,6 +480,92 @@ class TestFilterLogLevel(unittest.TestCase):
         )
         result = filter_by_log_level(log_content, 'ERROR')
         self.assertEqual(len(result), 2)
+
+
+    # ========== run_filter_log_level() Function Tests ==========
+    
+    def test_run_filter_log_level_success(self):
+        """Test run_filter_log_level() returns correct dictionary structure on success."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message\n2024-01-01 10:01:00 [INFO] Info message\n2024-01-01 10:02:00 [ERROR] Another error"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_filter_log_level(temp_file, "ERROR", output_dir=self.temp_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 2)
+        self.assertEqual(len(result["artifacts"]), 1)
+        self.assertIn("ERROR", result["summary"]["key_metrics"]["counts_by_level"])
+        self.assertEqual(result["summary"]["key_metrics"]["counts_by_level"]["ERROR"], 2)
+        self.assertEqual(len(result["errors"]), 0)
+        self.assertTrue(os.path.exists(result["artifacts"][0]["path"]))
+    
+    def test_run_filter_log_level_file_not_found(self):
+        """Test run_filter_log_level() handles file not found error."""
+        result = run_filter_log_level("nonexistent_file.log", "ERROR")
+        
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
+    
+    def test_run_filter_log_level_multiple_levels(self):
+        """Test run_filter_log_level() with multiple log levels."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error\n2024-01-01 10:01:00 [WARN] Warning\n2024-01-01 10:02:00 [INFO] Info"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_filter_log_level(temp_file, ["ERROR", "WARN"], output_dir=self.temp_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 2)
+        self.assertEqual(len(result["artifacts"]), 2)  # One file per level
+        self.assertIn("ERROR", result["summary"]["key_metrics"]["counts_by_level"])
+        self.assertIn("WARN", result["summary"]["key_metrics"]["counts_by_level"])
+    
+    def test_run_filter_log_level_no_write_file(self):
+        """Test run_filter_log_level() with write_file=False."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_filter_log_level(temp_file, "ERROR", write_file=False)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 1)
+        self.assertEqual(len(result["artifacts"]), 0)  # No files created
+    
+    def test_run_filter_log_level_custom_output_dir(self):
+        """Test run_filter_log_level() with custom output directory."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        custom_output_dir = os.path.join(self.temp_dir, "custom_output")
+        
+        result = run_filter_log_level(temp_file, "ERROR", output_dir=custom_output_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["artifacts"]), 1)
+        self.assertTrue(result["artifacts"][0]["path"].startswith(custom_output_dir))
+        self.assertTrue(os.path.exists(custom_output_dir))
+    
+    def test_run_filter_log_level_no_matches(self):
+        """Test run_filter_log_level() when no matches found."""
+        log_content = "2024-01-01 10:00:00 [INFO] Info message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_filter_log_level(temp_file, "ERROR", output_dir=self.temp_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(len(result["data"]["items"]), 0)
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created when no matches
+        self.assertEqual(result["summary"]["key_metrics"]["counts_by_level"]["ERROR"], 0)
+    
+    def test_run_filter_log_level_string_input(self):
+        """Test run_filter_log_level() accepts string log level."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_filter_log_level(temp_file, "ERROR", output_dir=self.temp_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"]["key_metrics"]["counts_by_level"]["ERROR"], 1)
 
 
 if __name__ == '__main__':

@@ -8,7 +8,8 @@ from utilities.log_summary import (
     summarize_log_to_file,
     LogSummary,
     ErrorCodeInfo,
-    StacktraceInfo
+    StacktraceInfo,
+    run_log_summary
 )
 
 
@@ -785,6 +786,69 @@ class TestLogSummary(unittest.TestCase):
         self.assertIn('CRJAZ1282E', result.error_codes)
         self.assertGreater(len(result.stacktraces), 0)
         self.assertIn('DBService', result.services_involved)
+
+
+    # ========== run_log_summary() Function Tests ==========
+    
+    def test_run_log_summary_success(self):
+        """Test run_log_summary() returns correct dictionary structure on success."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message\n2024-01-01 10:01:00 [INFO] Info message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_log_summary(temp_file, output_dir=self.temp_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertIsNotNone(result["data"]["json"]["summary"])
+        self.assertIsNotNone(result["artifacts"])
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(os.path.exists(result["artifacts"][0]["path"]))
+        self.assertGreater(len(result["data"]["text"]), 0)
+        self.assertEqual(len(result["errors"]), 0)
+    
+    def test_run_log_summary_file_not_found(self):
+        """Test run_log_summary() handles file not found error."""
+        result = run_log_summary("nonexistent_file.log")
+        
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertIn("File not found", result["errors"][0])
+        self.assertEqual(len(result["artifacts"]), 0)
+    
+    def test_run_log_summary_no_write_file(self):
+        """Test run_log_summary() with write_file=False."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_log_summary(temp_file, write_file=False)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertIsNotNone(result["data"]["json"]["summary"])
+        self.assertEqual(len(result["artifacts"]), 0)  # No file created
+        self.assertGreater(len(result["data"]["text"]), 0)
+    
+    def test_run_log_summary_custom_output_dir(self):
+        """Test run_log_summary() with custom output directory."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        custom_output_dir = os.path.join(self.temp_dir, "custom_output")
+        
+        result = run_log_summary(temp_file, output_dir=custom_output_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(len(result["artifacts"]) > 0)
+        self.assertTrue(result["artifacts"][0]["path"].startswith(custom_output_dir))
+        self.assertTrue(os.path.exists(custom_output_dir))
+    
+    def test_run_log_summary_formatted_summary(self):
+        """Test run_log_summary() includes formatted summary text."""
+        log_content = "2024-01-01 10:00:00 [ERROR] Error message"
+        temp_file = self._create_temp_log_file(log_content)
+        
+        result = run_log_summary(temp_file, output_dir=self.temp_dir)
+        
+        self.assertEqual(result["status"], "success")
+        self.assertIn("LOG SUMMARY", result["data"]["text"])
+        self.assertIn("Total Lines", result["data"]["text"])
 
 
 if __name__ == '__main__':

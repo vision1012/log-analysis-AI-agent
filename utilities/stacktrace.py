@@ -5,6 +5,11 @@ from typing import List, Dict, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from collections import Counter, defaultdict
 
+try:
+    from .tool_result import create_tool_result
+except ImportError:
+    from tool_result import create_tool_result
+
 
 @dataclass
 class Stacktrace:
@@ -483,21 +488,26 @@ def run_stacktrace(
         - formatted_summary: str
         - error: str | None
     """
+    input_params = {
+        "file_path": file_path,
+        "options": {
+            "output_dir": output_dir,
+            "write_file": write_file,
+            "include_context_lines": include_context_lines,
+            "min_stack_depth": min_stack_depth,
+            "deduplicate": deduplicate
+        }
+    }
+    
     try:
         # Validate inputs
         if not os.path.isfile(file_path):
-            return {
-                "success": False,
-                "stacktraces": [],
-                "summary": None,
-                "output_files": {
-                    "clean_log": None,
-                    "stacktraces": None,
-                    "summary": None
-                },
-                "formatted_summary": "",
-                "error": f"File not found: {file_path}"
-            }
+            return create_tool_result(
+                tool="run_stacktrace",
+                status="error",
+                input_params=input_params,
+                errors=[f"File not found: {file_path}"]
+            )
         
         # Extract stacktraces
         stacktraces, summary = extract_stacktraces(
@@ -507,11 +517,7 @@ def run_stacktrace(
         # Format summary
         formatted_summary = format_stacktrace_summary(summary)
         
-        output_files = {
-            "clean_log": None,
-            "stacktraces": None,
-            "summary": None
-        }
+        artifacts = []
         
         if write_file:
             # Create output directory if it doesn't exist
@@ -544,7 +550,11 @@ def run_stacktrace(
                 if clean_lines:
                     f.write('\n')
             
-            output_files["clean_log"] = clean_log_file
+            artifacts.append({
+                "type": "file",
+                "name": f"{file_name_without_ext}_clean.log",
+                "path": clean_log_file
+            })
             
             # Create stacktrace file
             stacktrace_lines = []
@@ -559,36 +569,71 @@ def run_stacktrace(
                 if stacktrace_lines:
                     f.write('\n')
             
-            output_files["stacktraces"] = stacktrace_file
+            artifacts.append({
+                "type": "file",
+                "name": f"{file_name_without_ext}_stack_trace.log",
+                "path": stacktrace_file
+            })
             
             # Create summary file
             with open(summary_file, 'w', encoding='utf-8') as f:
                 f.write(formatted_summary)
             
-            output_files["summary"] = summary_file
+            artifacts.append({
+                "type": "file",
+                "name": f"{file_name_without_ext}_stacktrace_summary.txt",
+                "path": summary_file
+            })
         
-        return {
-            "success": True,
-            "stacktraces": stacktraces,
-            "summary": summary,
-            "output_files": output_files,
-            "formatted_summary": formatted_summary,
-            "error": None
+        # Create summary
+        summary_dict = {
+            "headline": f"Stacktrace extraction: {len(stacktraces)} stacktraces found",
+            "key_metrics": {
+                "stacktrace_count": len(stacktraces),
+                "total_stacktraces": summary.total_stacktraces,
+                "unique_exceptions": len(summary.counts_by_exception),
+                "top_exceptions": list(summary.counts_by_exception.keys())[:5]
+            }
         }
+        
+        # Create data payload
+        data = {
+            "items": [{"exception": st.exception_type, "lines": st.lines} for st in stacktraces[:10]],
+            "text": formatted_summary,
+            "json": {
+                "stacktraces": [
+                    {
+                        "exception_type": st.exception_type,
+                        "start_line": st.start_line,
+                        "end_line": st.end_line,
+                        "line_count": st.line_count
+                    }
+                    for st in stacktraces
+                ],
+                "summary": {
+                    "total_stacktraces": summary.total_stacktraces,
+                    "counts_by_exception": summary.counts_by_exception,
+                    "counts_by_service": summary.counts_by_service
+                }
+            }
+        }
+        
+        return create_tool_result(
+            tool="run_stacktrace",
+            status="success",
+            input_params=input_params,
+            summary=summary_dict,
+            data=data,
+            artifacts=artifacts
+        )
     
     except Exception as e:
-        return {
-            "success": False,
-            "stacktraces": [],
-            "summary": None,
-            "output_files": {
-                "clean_log": None,
-                "stacktraces": None,
-                "summary": None
-            },
-            "formatted_summary": "",
-            "error": str(e)
-        }
+        return create_tool_result(
+            tool="run_stacktrace",
+            status="error",
+            input_params=input_params,
+            errors=[str(e)]
+        )
 
 
 if __name__ == "__main__":
