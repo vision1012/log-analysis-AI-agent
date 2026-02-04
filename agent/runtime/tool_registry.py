@@ -19,6 +19,7 @@ try:
     from utilities.stacktrace import run_stacktrace
     from utilities.error_code import run_error_code_search, run_error_code_extract_all
     from utilities.error_lines import run_error_lines
+    from utilities.retrieve_context import run_retrieve_context
 except ImportError:  # pragma: no cover - fallback for different import contexts
     # When running in a different working directory / environment
     try:
@@ -32,6 +33,7 @@ except ImportError:  # pragma: no cover - fallback for different import contexts
             run_error_code_extract_all,
         )
         from ..utilities.error_lines import run_error_lines  # type: ignore
+        from ..utilities.retrieve_context import run_retrieve_context  # type: ignore
     except ImportError:
         # Absolute import fallback
         import sys
@@ -44,6 +46,7 @@ except ImportError:  # pragma: no cover - fallback for different import contexts
         from utilities.stacktrace import run_stacktrace
         from utilities.error_code import run_error_code_search, run_error_code_extract_all
         from utilities.error_lines import run_error_lines
+        from utilities.retrieve_context import run_retrieve_context
 
 
 # Type alias for a tool callable:
@@ -63,6 +66,7 @@ TOOL_REGISTRY: Dict[str, ToolCallable] = {
     "run_error_code_search": run_error_code_search,
     "run_error_code_extract_all": run_error_code_extract_all,
     "run_error_lines": run_error_lines,
+    "run_retrieve_context": run_retrieve_context,
 }
 
 

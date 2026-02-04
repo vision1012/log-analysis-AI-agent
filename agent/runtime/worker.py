@@ -19,17 +19,26 @@ from agent.runtime.job_models import (
     ArtifactRef,
     RunTiming,
 )
-from agent.runtime.planner import plan_steps
+from agent.planner import create_plan
 from agent.runtime.tool_executor import ToolExecutor
 from agent.runtime.storage import (
     create_job_dir,
     write_job_state,
+    read_job_state,
+    update_job_state,
+    get_job_status,
+    check_artifact_exists,
+    get_existing_artifacts,
     artifact_ref_from_path,
     create_job_context,
     copy_input_files,
     write_tool_result,
+    write_plan,
 )
 from agent.runtime.job_models import JobContext
+from agent.roles.retrieval_agent import RetrievalAgent
+from agent.roles.investigation_agent import InvestigationAgent
+from agent.roles.reporter_agent import ReporterAgent
 
 try:
     from agent.llm.llama_client import LLaMAClient
@@ -43,7 +52,7 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
 
     Steps:
         1. Create job_id + job_dir
-        2. Call plan_steps to determine tool calls
+        2. Create execution plan (heuristic or LLM) and persist to plan.json
         3. Execute each tool call via ToolExecutor
         4. Build final answer (combine summaries or use LLM)
         5. Return JobResult
@@ -58,6 +67,12 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
     timing = RunTiming(started_at=datetime.now())
 
     job_id, job_dir = create_job_dir()
+
+    # Check if job already exists (resume scenario)
+    existing_state = read_job_state(job_dir)
+    if existing_state:
+        # Resume existing job
+        return _resume_job(job_dir, existing_state, request, mode)
 
     # Initialize collections before any operations that might fail
     tool_calls: List[ToolCall] = []
@@ -77,9 +92,10 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
             # If file copying fails, still create context but log error
             errors.append(f"Failed to copy input files: {exc}")
 
+    # Set initial status to "queued"
     initial_state = {
         "job_id": job_id,
-        "status": "running",
+        "status": "queued",
         "query": request.query,
         "file_paths": request.file_paths,
         "mode": mode,
@@ -89,8 +105,15 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
             "inputs_dir": context.inputs_dir,
             "input_files": context.input_files,
         },
+        "queued_at": timing.started_at.isoformat() if timing.started_at else None,
     }
     write_job_state(job_dir, initial_state)
+
+    # Update status to "running"
+    update_job_state(job_dir, {
+        "status": "running",
+        "started_at": timing.started_at.isoformat() if timing.started_at else None,
+    })
 
     tool_executor = ToolExecutor()
 
@@ -110,7 +133,32 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
                 options=request.options,
             )
 
-        planned_calls = plan_steps(planning_request, mode=mode)
+        # Create execution plan using new planner module
+        try:
+            plan = create_plan(planning_request, mode=mode)
+            # Persist plan to plan.json
+            plan_path = write_plan(job_dir, plan)
+            if plan_path is None:
+                warnings.append("Failed to persist execution plan to plan.json")
+            planned_calls = plan.tool_calls
+        except Exception as exc:
+            errors.append(f"Planning failed: {exc}")
+            # Fallback: create a default plan with error tool call
+            from agent.planner.plan_models import Plan
+            plan = Plan(
+                mode=mode,
+                tool_calls=[
+                    ToolCall(
+                        name="unknown",
+                        status="pending",
+                        arguments={},
+                        summary=f"Planning failed: {exc}",
+                    )
+                ],
+                reasoning=f"Planning failed with error: {exc}",
+            )
+            write_plan(job_dir, plan)
+            planned_calls = plan.tool_calls
 
         for tool_index, tool_call in enumerate(planned_calls):
             tool_call.started_at = datetime.now()
@@ -163,7 +211,89 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
 
             tool_calls.append(tool_call)
 
-        final_answer = _build_final_answer(request, tool_results, artifacts, mode)
+        # Run multi-agent workflow: Retrieval -> Investigation -> Reporter
+        # Check for existing artifacts to avoid rerunning
+        retrieval_results = None
+        investigation_findings = None
+        final_report = None
+
+        try:
+            # Step 1: Retrieval Agent (skip if retrieval.json exists)
+            retrieval_path = os.path.join(job_dir, "retrieval.json")
+            if check_artifact_exists(job_dir, "retrieval.json"):
+                # Load existing retrieval results
+                import json
+                with open(retrieval_path, "r", encoding="utf-8") as f:
+                    retrieval_results = json.load(f)
+                warnings.append("Using existing retrieval.json - skipped retrieval agent")
+            else:
+                # Run retrieval agent
+                retrieval_agent = RetrievalAgent(output_dir=job_dir)
+                retrieval_results = retrieval_agent.retrieve_evidence(
+                    file_path=request.file_paths[0] if request.file_paths else "",
+                    query=request.query,
+                    top_k=10,
+                )
+                retrieval_path = retrieval_agent.save_retrieval_results(
+                    retrieval_results, retrieval_path
+                )
+            artifacts.append(artifact_ref_from_path(retrieval_path, from_tool="retrieval_agent"))
+
+            # Step 2: Investigation Agent (skip if findings.json exists)
+            findings_path = os.path.join(job_dir, "findings.json")
+            if check_artifact_exists(job_dir, "findings.json"):
+                # Load existing findings
+                import json
+                with open(findings_path, "r", encoding="utf-8") as f:
+                    investigation_findings = json.load(f)
+                warnings.append("Using existing findings.json - skipped investigation agent")
+            else:
+                # Run investigation agent
+                investigation_agent = InvestigationAgent()
+                investigation_findings = investigation_agent.investigate(
+                    query=request.query,
+                    retrieval_results=retrieval_results or {},
+                    file_path=request.file_paths[0] if request.file_paths else None,
+                )
+                findings_path = investigation_agent.save_findings(
+                    investigation_findings, findings_path
+                )
+            artifacts.append(artifact_ref_from_path(findings_path, from_tool="investigation_agent"))
+
+            # Step 3: Reporter Agent (skip if final_answer.md exists)
+            report_path = os.path.join(job_dir, "final_answer.md")
+            if check_artifact_exists(job_dir, "final_answer.md"):
+                # Load existing report
+                with open(report_path, "r", encoding="utf-8") as f:
+                    final_report = f.read()
+                warnings.append("Using existing final_answer.md - skipped reporter agent")
+            else:
+                # Run reporter agent
+                reporter_agent = ReporterAgent()
+                final_report = reporter_agent.generate_report(
+                    query=request.query,
+                    retrieval_results=retrieval_results or {},
+                    investigation_findings=investigation_findings or {},
+                    job_id=job_id,
+                )
+                report_path = reporter_agent.save_report(
+                    final_report, report_path
+                )
+            artifacts.append(artifact_ref_from_path(report_path, from_tool="reporter_agent"))
+
+            # Use report as final answer if available
+            if final_report:
+                final_answer = final_report
+            else:
+                final_answer = _build_final_answer(
+                    request, tool_results, artifacts, mode
+                )
+        except Exception as exc:
+            # If agent workflow fails, fall back to standard answer building
+            warnings.append(f"Multi-agent workflow failed: {exc}")
+            final_answer = _build_final_answer(
+                request, tool_results, artifacts, mode
+            )
 
         timing.finished_at = datetime.now()
         if timing.started_at and timing.finished_at:
@@ -216,6 +346,7 @@ def _build_final_answer(
     tool_results: List[Dict[str, Any]],
     artifacts: List[ArtifactRef],
     mode: str,
+    llm_client: Any = None,
 ) -> str:
     """
     Build the final answer from tool results.
@@ -223,9 +354,10 @@ def _build_final_answer(
     If LLM is available and mode is "llm", use LLM to compose answer.
     Otherwise, combine tool summaries and artifact paths.
     """
-    if mode == "llm" and LLaMAClient is not None:
+    if mode == "llm" and (llm_client is not None or LLaMAClient is not None):
         try:
-            return _build_final_answer_llm(request, tool_results, artifacts)
+            client = llm_client or LLaMAClient
+            return _build_final_answer_llm(request, tool_results, artifacts, client)
         except Exception:
             pass
 
@@ -260,6 +392,7 @@ def _build_final_answer_llm(
     request: JobRequest,
     tool_results: List[Dict[str, Any]],
     artifacts: List[ArtifactRef],
+    llm_client: Any = None,
 ) -> str:
     """
     Build final answer using LLM to compose a natural language response.
@@ -303,7 +436,7 @@ Rules:
 Provide your answer:"""
 
     try:
-        client = LLaMAClient()
+        client = llm_client or LLaMAClient()
         response = client.chat(
             messages=[{"role": "user", "content": prompt}],
             model=os.getenv("LLAMA_MODEL", "llama-3.1-8b"),
@@ -312,3 +445,36 @@ Provide your answer:"""
         return response.strip()
     except Exception:
         return _build_final_answer_heuristic(tool_results, artifacts)
+
+
+def _resume_job(
+    job_dir: str,
+    existing_state: Dict[str, Any],
+    request: JobRequest,
+    mode: str,
+) -> JobResult:
+    """
+    Resume an existing job by checking for existing artifacts and state.
+
+    Args:
+        job_dir: Path to job directory.
+        existing_state: Existing job state dictionary.
+        request: Job request.
+        mode: Planning mode.
+
+    Returns:
+        JobResult with existing or completed state.
+    """
+    existing_status = existing_state.get("status", "unknown")
+
+    # If job is already completed, return existing result
+    if existing_status in ["succeeded", "failed", "succeeded_with_errors"]:
+        # Try to reconstruct JobResult from existing state
+        try:
+            return JobResult.model_validate(existing_state)
+        except Exception:
+            pass
+
+    # If job is queued or running, continue execution
+    # This will check for existing artifacts and skip rerunning
+    return run_job(request, mode)
