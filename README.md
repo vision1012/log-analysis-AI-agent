@@ -115,6 +115,25 @@ log-analysis-AI-agent/
 └── 📄 README.md             # Project documentation
 ```
 
+## Safety Check
+
+Before deploying or integrating, verify the pipeline is working correctly:
+
+```bash
+# Run full pipeline verification (3 scenarios)
+python scripts/verify_pipeline.py
+
+# Run smoke test
+python -m unittest code_testing.test_pipeline_smoke
+```
+
+The verification script checks:
+- **Scenario A**: Heuristic end-to-end execution
+- **Scenario B**: LLM mode graceful failure handling
+- **Scenario C**: Resume/idempotency (artifacts not rerun)
+
+All scenarios must pass for a **GO** status.
+
 ## 🚀 Quick Start
 
 ### Using the Unified Utility Interface

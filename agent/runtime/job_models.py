@@ -14,7 +14,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field, ConfigDict
 
 
-JobStatus = Literal["queued", "running", "succeeded", "failed"]
+JobStatus = Literal["queued", "running", "succeeded", "failed", "succeeded_with_errors"]
 ToolCallStatus = Literal["pending", "running", "success", "error"]
 
 

@@ -10,7 +10,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 from agent.runtime.job_models import ArtifactRef, JobContext
 
@@ -142,6 +142,102 @@ def write_job_state(job_dir: str, payload: Dict[str, Any]) -> str:
     return job_file
 
 
+def read_job_state(job_dir: str) -> Dict[str, Any] | None:
+    """
+    Read job state from job.json in the job directory.
+
+    Args:
+        job_dir: Path to the job directory.
+
+    Returns:
+        Dictionary with job state, or None if file doesn't exist.
+    """
+    job_file = os.path.join(job_dir, "job.json")
+
+    if not os.path.isfile(job_file):
+        return None
+
+    try:
+        with open(job_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def update_job_state(job_dir: str, updates: Dict[str, Any]) -> str:
+    """
+    Update job state by merging updates into existing state.
+
+    Args:
+        job_dir: Path to the job directory.
+        updates: Dictionary of fields to update.
+
+    Returns:
+        Full path to the updated job.json file.
+    """
+    existing_state = read_job_state(job_dir) or {}
+    updated_state = {**existing_state, **updates}
+    return write_job_state(job_dir, updated_state)
+
+
+def get_job_status(job_dir: str) -> str | None:
+    """
+    Get current job status from job.json.
+
+    Args:
+        job_dir: Path to the job directory.
+
+    Returns:
+        Job status string ("queued", "running", "succeeded", "failed"), or None if not found.
+    """
+    state = read_job_state(job_dir)
+    if state:
+        return state.get("status")
+    return None
+
+
+def check_artifact_exists(job_dir: str, artifact_name: str) -> bool:
+    """
+    Check if an artifact file exists in the job directory.
+
+    Args:
+        job_dir: Path to the job directory.
+        artifact_name: Name of artifact file (e.g., "retrieval.json", "findings.json").
+
+    Returns:
+        True if artifact exists, False otherwise.
+    """
+    artifact_path = os.path.join(job_dir, artifact_name)
+    return os.path.isfile(artifact_path)
+
+
+def get_existing_artifacts(job_dir: str) -> List[str]:
+    """
+    Get list of existing artifact files in the job directory.
+
+    Args:
+        job_dir: Path to the job directory.
+
+    Returns:
+        List of artifact file names that exist.
+    """
+    artifacts = []
+    artifact_names = ["retrieval.json", "findings.json", "final_answer.md"]
+
+    for artifact_name in artifact_names:
+        if check_artifact_exists(job_dir, artifact_name):
+            artifacts.append(artifact_name)
+
+    # Also check tool_results directory
+    tool_results_dir = os.path.join(job_dir, "tool_results")
+    if os.path.isdir(tool_results_dir):
+        for filename in os.listdir(tool_results_dir):
+            if filename.endswith(".json"):
+                artifacts.append(f"tool_results/{filename}")
+
+    return artifacts
+
+
 def write_tool_result(
     job_dir: str, tool_index: int, tool_name: str, tool_result: Dict[str, Any]
 ) -> str | None:
@@ -177,6 +273,40 @@ def write_tool_result(
             json.dump(tool_result, f, indent=2, default=str)
 
         return file_path
+    except Exception:
+        # Never crash on file IO errors - return None for caller to handle
+        return None
+
+
+def write_plan(job_dir: str, plan: Any) -> str | None:
+    """
+    Write execution plan to plan.json in the job directory.
+
+    Creates: output/jobs/<job_id>/plan.json
+
+    Args:
+        job_dir: Path to the job directory.
+        plan: Plan object (Pydantic model) to write.
+
+    Returns:
+        Full path to the written file, or None if writing failed.
+
+    Note:
+        Never raises exceptions - returns None on failure for graceful error handling.
+    """
+    try:
+        plan_file = os.path.join(job_dir, "plan.json")
+        
+        # Convert Pydantic model to dict (handles datetime serialization)
+        if hasattr(plan, "model_dump"):
+            plan_dict = plan.model_dump()
+        else:
+            plan_dict = plan
+
+        with open(plan_file, "w", encoding="utf-8") as f:
+            json.dump(plan_dict, f, indent=2, default=str)
+
+        return plan_file
     except Exception:
         # Never crash on file IO errors - return None for caller to handle
         return None

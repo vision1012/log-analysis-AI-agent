@@ -5,6 +5,11 @@
 pydantic>=2.6.0              # Schema validation for ToolResult contract
 python-dateutil>=2.8.0        # Flexible date/time parsing for log timestamps
 
+# RAG Dependencies (optional - install as needed)
+# sentence-transformers>=2.2.0  # For local embeddings (no API required)
+# chromadb>=0.4.0              # For local vector store
+# openai>=1.0.0                # For OpenAI embeddings (alternative to sentence-transformers)
+
 # Optional: For future AI agent integration (uncomment when needed)
 # openai>=1.0.0                # OpenAI API client
 # langchain>=0.1.0             # LangChain framework
