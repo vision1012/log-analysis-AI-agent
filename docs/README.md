@@ -32,6 +32,20 @@ This directory contains comprehensive documentation for the Log Analysis AI Agen
    - Error handling patterns
    - Best practices
 
+4. **worker_runtime_guide.md**
+   - Complete guide to the worker runtime system
+   - Core components (worker, planner, executor, storage)
+   - Job models and context management
+   - Step 6 rules enforcement
+   - Usage examples and best practices
+
+5. **job_execution_workflow.md**
+   - End-to-end job execution workflow
+   - Step-by-step execution flow
+   - Data flow diagrams
+   - File system state changes
+   - Error scenarios and troubleshooting
+
 ### Workflow Documentation
 
 4. **time_slice_workflow.md**
@@ -70,9 +84,12 @@ This directory contains comprehensive documentation for the Log Analysis AI Agen
 
 ### For AI Agent Integration
 
-1. Read **run_functions_api.md** for complete API reference
-2. Review **architecture_overview.md** for integration patterns
-3. Check individual workflow docs for specific use cases
+1. Read **worker_runtime_guide.md** for runtime system overview
+2. Read **job_execution_workflow.md** for execution flow
+3. Read **run_functions_api.md** for complete API reference
+4. Review **architecture_overview.md** for integration patterns
+5. Check individual workflow docs for specific use cases
+6. See **quick_start_agent.md** for Step 6 verification
 
 ### For CLI Users
 
@@ -124,6 +141,10 @@ docs/
 ├── architecture_overview.md      # System architecture
 ├── architecture_diagram.md       # Visual diagrams
 ├── run_functions_api.md          # API reference
+├── worker_runtime_guide.md       # Worker runtime system guide
+├── job_execution_workflow.md     # End-to-end job execution workflow
+├── quick_start_agent.md          # Quick start and Step 6 verification
+├── ai_agent_implementation_roadmap.md  # Implementation roadmap
 ├── time_slice_workflow.md        # Time slicing workflow
 ├── filter_log_level_workflow.md  # Log level filtering workflow
 ├── error_code_workflow.md        # Error code workflow

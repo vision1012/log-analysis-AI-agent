@@ -2,13 +2,36 @@
 
 This directory contains the AI agent implementation components.
 
-## Files
+## Structure
+
+```
+agent/
+├── schemas.py              # Pydantic ToolResult schema definitions
+├── tool_wrapper.py         # Tool result validator and normalizer
+├── llm/                    # LLM client for OpenAI-compatible APIs
+│   ├── __init__.py
+│   └── llama_client.py     # LLaMA client with retry handling
+└── runtime/                # Worker runtime system
+    ├── __init__.py
+    ├── job_models.py       # JobRequest, JobResult, JobContext models
+    ├── worker.py           # Main worker: run_job()
+    ├── planner.py          # Tool planning (heuristic + LLM)
+    ├── tool_registry.py    # Tool name → function mapping
+    ├── tool_executor.py    # Tool execution with validation
+    └── storage.py          # Job directory and file management
+```
+
+## Core Components
 
 - **`schemas.py`** - Pydantic schema definitions for ToolResult contract
 - **`tool_wrapper.py`** - Tool result validator and normalizer
-- **`agent_core.py`** - (Placeholder) Main agent orchestration
-- **`tools.py`** - (Placeholder) Tool registry and executor
-- **`reasoning.py`** - (Placeholder) Agent reasoning logic
+- **`llm/llama_client.py`** - LLaMA client for LLM integration
+- **`runtime/worker.py`** - Main worker orchestrates job execution
+- **`runtime/planner.py`** - Determines which tools to call
+- **`runtime/tool_executor.py`** - Executes tools with validation
+- **`runtime/tool_registry.py`** - Maps tool names to functions
+- **`runtime/storage.py`** - Job directory and file management
+- **`runtime/job_models.py`** - Pydantic models for job lifecycle
 
 ## Setup
 
