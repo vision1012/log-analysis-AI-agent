@@ -18,9 +18,10 @@ ENV/
 *.swo
 *~
 
-# Output files (generated logs)
+# Output files (generated logs and job directories)
 output/*.log
 output/*.txt
+output/jobs/
 
 # Test outputs
 *.log
