@@ -8,8 +8,14 @@ Produces a markdown report saved to final_answer.md.
 from __future__ import annotations
 
 import os
+import json
 from typing import Dict, Any, Optional
 from datetime import datetime
+
+try:
+    from agent.llm.ollama_client import OllamaClient
+except ImportError:
+    OllamaClient = None
 
 
 class ReporterAgent:
@@ -24,6 +30,89 @@ class ReporterAgent:
     ) -> str:
         """
         Generate final answer report from retrieval and investigation results.
+
+        Uses Ollama LLM to generate a markdown report based on the findings.
+
+        Args:
+            query: Original user query.
+            retrieval_results: Results from retrieval agent.
+            investigation_findings: Findings from investigation agent.
+            job_id: Optional job ID for reference.
+
+        Returns:
+            Markdown-formatted report string.
+        """
+        if OllamaClient is None:
+            # Fallback to template-based report if Ollama is not available
+            return self._generate_template_report(query, retrieval_results, investigation_findings, job_id)
+
+        try:
+            model = os.getenv("LLAMA_MODEL", "llama3")
+            client = OllamaClient(model=model)
+
+            # Prepare findings data for LLM
+            findings_json = json.dumps(investigation_findings, indent=2)
+            retrieval_summary = json.dumps({
+                "chunks_retrieved": retrieval_results.get("chunks_retrieved", 0),
+                "chunks_indexed": retrieval_results.get("chunks_indexed", 0),
+            }, indent=2)
+
+            prompt = f"""You are a technical report writer for log analysis. Generate a comprehensive markdown report based on the investigation findings.
+
+User Query: {query}
+Job ID: {job_id or "N/A"}
+
+Investigation Findings:
+{findings_json}
+
+Retrieval Summary:
+{retrieval_summary}
+
+Generate a markdown report with the following structure:
+1. **Header**: Title "Log Analysis Report", Job ID (if provided), Query, and Generation timestamp
+2. **Executive Summary**: Brief overview of the analysis
+3. **Root Causes**: List of identified root causes (if any)
+4. **Key Findings**: Detailed findings including error sequences and patterns
+5. **Timeline**: Chronological events (if available)
+6. **Recommendations**: Actionable recommendations based on findings
+
+Requirements:
+- Use pure Markdown formatting
+- Be clear, concise, and technical
+- Include all relevant details from the findings
+- Structure the report professionally
+- Do NOT include any tool calls or code execution logic
+- Focus on analysis and insights
+
+Output ONLY the markdown report, no explanations or additional text."""
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a technical report writer. Generate clear, structured markdown reports based on log analysis findings."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+
+            report = client.chat(messages=messages, temperature=0.3)
+            return report.strip()
+
+        except Exception as exc:
+            # Fallback to template-based report on error
+            return self._generate_template_report(query, retrieval_results, investigation_findings, job_id)
+
+    def _generate_template_report(
+        self,
+        query: str,
+        retrieval_results: Dict[str, Any],
+        investigation_findings: Dict[str, Any],
+        job_id: Optional[str] = None,
+    ) -> str:
+        """
+        Fallback template-based report generation.
 
         Args:
             query: Original user query.

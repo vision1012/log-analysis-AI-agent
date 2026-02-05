@@ -1,7 +1,7 @@
 """
 LLM Planner
 
-LLM-based planner that uses LLaMA to generate tool calls.
+LLM-based planner that uses Ollama to generate tool calls.
 LLM only selects tools and arguments - no computation, parsing, or filtering in prompts.
 """
 
@@ -13,14 +13,14 @@ from typing import List
 from agent.runtime.job_models import JobRequest, ToolCall
 
 try:
-    from agent.llm.llama_client import LLaMAClient
+    from agent.llm.ollama_client import OllamaClient
 except ImportError:
-    LLaMAClient = None
+    OllamaClient = None
 
 
 def plan_llm(request: JobRequest, available_tools: List[str]) -> List[ToolCall]:
     """
-    LLM-based planner that uses LLaMA to generate tool calls.
+    LLM-based planner that uses Ollama to generate tool calls.
 
     Prompts the LLM to output a JSON list of tool calls based on the query.
 
@@ -35,12 +35,12 @@ def plan_llm(request: JobRequest, available_tools: List[str]) -> List[ToolCall]:
         List of ToolCall objects.
 
     Raises:
-        ImportError: If LLaMAClient is not available.
+        ImportError: If OllamaClient is not available.
     """
-    if LLaMAClient is None:
+    if OllamaClient is None:
         raise ImportError(
-            "LLaMAClient is required for LLM planning mode. "
-            "Install openai package and set LLAMA_API_KEY and LLAMA_BASE_URL."
+            "OllamaClient is required for LLM planning mode. "
+            "Install requests package and ensure Ollama is running."
         )
 
     file_path = request.file_paths[0] if request.file_paths else "unknown"
@@ -111,10 +111,10 @@ Rules:
 Output only valid JSON, no markdown, no explanation."""
 
     try:
-        client = LLaMAClient()
+        model = os.getenv("LLAMA_MODEL", "llama3")
+        client = OllamaClient(model=model)
         response = client.chat(
             messages=[{"role": "user", "content": prompt}],
-            model=os.getenv("LLAMA_MODEL", "llama-3.1-8b"),
             temperature=0.3,
         )
 
