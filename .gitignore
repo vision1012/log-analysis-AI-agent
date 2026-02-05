@@ -23,6 +23,9 @@ output/*.log
 output/*.txt
 output/jobs/
 
+# Artifacts directory (job outputs)
+artifacts/
+
 # Test outputs
 *.log
 !requirements.txt

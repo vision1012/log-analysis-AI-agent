@@ -201,6 +201,57 @@ python utilities/error_code.py data/sample.log 503 404
 
 ---
 
+## 🌐 API Server
+
+The FastAPI server provides REST endpoints for submitting and querying log analysis jobs.
+
+### Running the API Server
+
+```bash
+# Install dependencies (if not already installed)
+pip install -r requirements.txt
+
+# Run the API server
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Or for production (no auto-reload)
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+The API will be available at:
+- **API Base**: http://localhost:8000
+- **Interactive Docs**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
+
+### API Endpoints
+
+- `POST /api/v1/jobs` - Start a new log analysis job
+- `GET /api/v1/jobs/{job_id}` - Get job status and summary
+- `GET /api/v1/jobs/{job_id}/report` - Get final markdown report
+- `GET /api/v1/jobs/{job_id}/artifacts` - List job artifacts
+- `GET /api/v1/jobs/{job_id}/artifacts/{artifact_name}` - Download specific artifact
+
+### Example API Usage
+
+```bash
+# Start a job
+curl -X POST http://localhost:8000/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Why are timeouts happening?",
+    "log_path": "data/sample.log",
+    "mode": "llm"
+  }'
+
+# Check job status
+curl http://localhost:8000/api/v1/jobs/{job_id}
+
+# Get final report
+curl http://localhost:8000/api/v1/jobs/{job_id}/report
+```
+
+---
+
 ## 🔮 Coming Soon  
 
 - ReactJS-based Web UI  

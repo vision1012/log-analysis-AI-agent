@@ -3,6 +3,7 @@
 
 # Core Dependencies
 pydantic>=2.6.0              # Schema validation for ToolResult contract
+pydantic-settings>=2.0.0     # Settings management for Pydantic v2 (optional, fallback available)
 python-dateutil>=2.8.0        # Flexible date/time parsing for log timestamps
 
 # RAG Dependencies (optional - install as needed)
@@ -16,8 +17,8 @@ python-dateutil>=2.8.0        # Flexible date/time parsing for log timestamps
 # langchain-openai>=0.0.5      # LangChain OpenAI integration
 
 # Optional: For future web UI (uncomment when needed)
-# fastapi>=0.104.0             # FastAPI web framework
-# uvicorn>=0.24.0              # ASGI server for FastAPI
+fastapi>=0.104.0             # FastAPI web framework
+uvicorn>=0.24.0              # ASGI server for FastAPI
 # streamlit>=1.28.0            # Streamlit for quick UI prototyping
 
 # Optional: For data analysis (uncomment when needed)
