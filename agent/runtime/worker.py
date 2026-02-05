@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from agent.runtime.job_models import (
     JobRequest,
@@ -134,8 +134,10 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
             )
 
         # Create execution plan using new planner module
+        # Map "rag" mode to "llm" for planner (planner uses "llm" for LLM-based planning)
+        planner_mode = "llm" if mode == "rag" else mode
         try:
-            plan = create_plan(planning_request, mode=mode)
+            plan = create_plan(planning_request, mode=planner_mode)
             # Persist plan to plan.json
             plan_path = write_plan(job_dir, plan)
             if plan_path is None:
@@ -146,7 +148,7 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
             # Fallback: create a default plan with error tool call
             from agent.planner.plan_models import Plan
             plan = Plan(
-                mode=mode,
+                mode=planner_mode,
                 tool_calls=[
                     ToolCall(
                         name="unknown",
@@ -212,88 +214,107 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
             tool_calls.append(tool_call)
 
         # Run multi-agent workflow: Retrieval -> Investigation -> Reporter
-        # Check for existing artifacts to avoid rerunning
+        # Only run RAG agents if mode is "rag"
         retrieval_results = None
         investigation_findings = None
         final_report = None
 
-        try:
-            # Step 1: Retrieval Agent (skip if retrieval.json exists)
-            retrieval_path = os.path.join(job_dir, "retrieval.json")
-            if check_artifact_exists(job_dir, "retrieval.json"):
-                # Load existing retrieval results
-                import json
-                with open(retrieval_path, "r", encoding="utf-8") as f:
-                    retrieval_results = json.load(f)
-                warnings.append("Using existing retrieval.json - skipped retrieval agent")
-            else:
-                # Run retrieval agent
-                retrieval_agent = RetrievalAgent(output_dir=job_dir)
-                retrieval_results = retrieval_agent.retrieve_evidence(
-                    file_path=request.file_paths[0] if request.file_paths else "",
-                    query=request.query,
-                    top_k=10,
-                )
-                retrieval_path = retrieval_agent.save_retrieval_results(
-                    retrieval_results, retrieval_path
-                )
-            artifacts.append(artifact_ref_from_path(retrieval_path, from_tool="retrieval_agent"))
+        # Determine if we should run RAG pipeline based on mode
+        # Mode "rag" runs full RAG pipeline, "heuristic" uses tool-based approach only
+        run_rag_pipeline = (mode == "rag")
 
-            # Step 2: Investigation Agent (skip if findings.json exists)
-            findings_path = os.path.join(job_dir, "findings.json")
-            if check_artifact_exists(job_dir, "findings.json"):
-                # Load existing findings
-                import json
-                with open(findings_path, "r", encoding="utf-8") as f:
-                    investigation_findings = json.load(f)
-                warnings.append("Using existing findings.json - skipped investigation agent")
-            else:
-                # Run investigation agent
-                investigation_agent = InvestigationAgent()
-                investigation_findings = investigation_agent.investigate(
-                    query=request.query,
-                    retrieval_results=retrieval_results or {},
-                    file_path=request.file_paths[0] if request.file_paths else None,
-                )
-                findings_path = investigation_agent.save_findings(
-                    investigation_findings, findings_path
-                )
-            artifacts.append(artifact_ref_from_path(findings_path, from_tool="investigation_agent"))
+        if run_rag_pipeline:
+            try:
+                # Step 1: Retrieval Agent (skip if retrieval.json exists)
+                retrieval_path = os.path.join(job_dir, "retrieval.json")
+                if check_artifact_exists(job_dir, "retrieval.json"):
+                    # Load existing retrieval results
+                    import json
+                    with open(retrieval_path, "r", encoding="utf-8") as f:
+                        retrieval_results = json.load(f)
+                    warnings.append("Using existing retrieval.json - skipped retrieval agent")
+                else:
+                    # Run retrieval agent
+                    retrieval_agent = RetrievalAgent(output_dir=job_dir)
+                    retrieval_results = retrieval_agent.retrieve_evidence(
+                        file_path=request.file_paths[0] if request.file_paths else "",
+                        query=request.query,
+                        top_k=10,
+                    )
+                    retrieval_path = retrieval_agent.save_retrieval_results(
+                        retrieval_results, retrieval_path
+                    )
+                artifacts.append(artifact_ref_from_path(retrieval_path, from_tool="retrieval_agent"))
 
-            # Step 3: Reporter Agent (skip if final_answer.md exists)
-            report_path = os.path.join(job_dir, "final_answer.md")
-            if check_artifact_exists(job_dir, "final_answer.md"):
-                # Load existing report
-                with open(report_path, "r", encoding="utf-8") as f:
-                    final_report = f.read()
-                warnings.append("Using existing final_answer.md - skipped reporter agent")
-            else:
-                # Run reporter agent
-                reporter_agent = ReporterAgent()
-                final_report = reporter_agent.generate_report(
-                    query=request.query,
-                    retrieval_results=retrieval_results or {},
-                    investigation_findings=investigation_findings or {},
-                    job_id=job_id,
-                )
-                report_path = reporter_agent.save_report(
-                    final_report, report_path
-                )
-            artifacts.append(artifact_ref_from_path(report_path, from_tool="reporter_agent"))
+                # Step 2: Investigation Agent (skip if findings.json exists)
+                findings_path = os.path.join(job_dir, "findings.json")
+                if check_artifact_exists(job_dir, "findings.json"):
+                    # Load existing findings
+                    import json
+                    with open(findings_path, "r", encoding="utf-8") as f:
+                        investigation_findings = json.load(f)
+                    warnings.append("Using existing findings.json - skipped investigation agent")
+                else:
+                    # Run investigation agent
+                    investigation_agent = InvestigationAgent()
+                    investigation_findings = investigation_agent.investigate(
+                        query=request.query,
+                        retrieval_results=retrieval_results or {},
+                        file_path=request.file_paths[0] if request.file_paths else None,
+                    )
+                    findings_path = investigation_agent.save_findings(
+                        investigation_findings, findings_path
+                    )
+                artifacts.append(artifact_ref_from_path(findings_path, from_tool="investigation_agent"))
 
-            # Use report as final answer if available
-            if final_report:
-                final_answer = final_report
-            else:
+                # Step 3: Reporter Agent (skip if final_answer.md exists)
+                report_path = os.path.join(job_dir, "final_answer.md")
+                if check_artifact_exists(job_dir, "final_answer.md"):
+                    # Load existing report
+                    with open(report_path, "r", encoding="utf-8") as f:
+                        final_report = f.read()
+                    warnings.append("Using existing final_answer.md - skipped reporter agent")
+                else:
+                    # Run reporter agent
+                    reporter_agent = ReporterAgent()
+                    final_report = reporter_agent.generate_report(
+                        query=request.query,
+                        retrieval_results=retrieval_results or {},
+                        investigation_findings=investigation_findings or {},
+                        job_id=job_id,
+                    )
+                    report_path = reporter_agent.save_report(
+                        final_report, report_path
+                    )
+                artifacts.append(artifact_ref_from_path(report_path, from_tool="reporter_agent"))
+
+                # Use report as final answer if available
+                if final_report:
+                    final_answer = final_report
+                else:
+                    final_answer = _build_final_answer(
+                        request, tool_results, artifacts, mode
+                    )
+            except Exception as exc:
+                # If agent workflow fails, fall back to standard answer building
+                warnings.append(f"Multi-agent workflow failed: {exc}")
                 final_answer = _build_final_answer(
                     request, tool_results, artifacts, mode
                 )
-        except Exception as exc:
-            # If agent workflow fails, fall back to standard answer building
-            warnings.append(f"Multi-agent workflow failed: {exc}")
+        else:
+            # Heuristic mode: Build answer from tool results and generate final_answer.md
             final_answer = _build_final_answer(
                 request, tool_results, artifacts, mode
             )
+            
+            # Generate final_answer.md for heuristic mode too
+            report_path = os.path.join(job_dir, "final_answer.md")
+            try:
+                with open(report_path, "w", encoding="utf-8") as f:
+                    f.write(final_answer)
+                artifacts.append(artifact_ref_from_path(report_path, from_tool="heuristic_planner"))
+            except Exception as exc:
+                warnings.append(f"Failed to write final_answer.md in heuristic mode: {exc}")
 
         timing.finished_at = datetime.now()
         if timing.started_at and timing.finished_at:
@@ -339,6 +360,115 @@ def run_job(request: JobRequest, mode: str = "heuristic") -> JobResult:
         write_job_state(job_dir, job_result.model_dump())
 
         return job_result
+
+
+def run_retrieval_step(
+    request: JobRequest,
+    job_dir: str,
+    job_id: str,
+) -> Optional[str]:
+    """
+    Run retrieval step: retrieve evidence and save to retrieval.json.
+    
+    Args:
+        request: JobRequest with query and file paths.
+        job_dir: Job output directory.
+        job_id: Job identifier.
+    
+    Returns:
+        Path to retrieval.json if successful, None if skipped or failed.
+    """
+    retrieval_path = os.path.join(job_dir, "retrieval.json")
+    if check_artifact_exists(job_dir, "retrieval.json"):
+        # Return existing path
+        return retrieval_path
+    
+    # Run retrieval agent
+    retrieval_agent = RetrievalAgent(output_dir=job_dir)
+    retrieval_results = retrieval_agent.retrieve_evidence(
+        file_path=request.file_paths[0] if request.file_paths else "",
+        query=request.query,
+        top_k=10,
+    )
+    retrieval_path = retrieval_agent.save_retrieval_results(
+        retrieval_results, retrieval_path
+    )
+    return retrieval_path
+
+
+def run_investigation_step(
+    request: JobRequest,
+    retrieval_results: Optional[Dict[str, Any]],
+    job_dir: str,
+    job_id: str,
+) -> Optional[str]:
+    """
+    Run investigation step: analyze retrieved evidence and save to findings.json.
+    
+    Args:
+        request: JobRequest with query and file paths.
+        retrieval_results: Results from retrieval step (can be None).
+        job_dir: Job output directory.
+        job_id: Job identifier.
+    
+    Returns:
+        Path to findings.json if successful, None if skipped or failed.
+    """
+    findings_path = os.path.join(job_dir, "findings.json")
+    if check_artifact_exists(job_dir, "findings.json"):
+        # Return existing path
+        return findings_path
+    
+    # Run investigation agent
+    investigation_agent = InvestigationAgent()
+    investigation_findings = investigation_agent.investigate(
+        query=request.query,
+        retrieval_results=retrieval_results or {},
+        file_path=request.file_paths[0] if request.file_paths else None,
+    )
+    findings_path = investigation_agent.save_findings(
+        investigation_findings, findings_path
+    )
+    return findings_path
+
+
+def run_reporter_step(
+    request: JobRequest,
+    retrieval_results: Optional[Dict[str, Any]],
+    investigation_findings: Optional[Dict[str, Any]],
+    job_dir: str,
+    job_id: str,
+) -> Optional[str]:
+    """
+    Run reporter step: generate final report and save to final_answer.md.
+    
+    Args:
+        request: JobRequest with query and file paths.
+        retrieval_results: Results from retrieval step (can be None).
+        investigation_findings: Results from investigation step (can be None).
+        job_dir: Job output directory.
+        job_id: Job identifier.
+    
+    Returns:
+        Path to final_answer.md if successful, None if skipped or failed.
+    """
+    report_path = os.path.join(job_dir, "final_answer.md")
+    if check_artifact_exists(job_dir, "final_answer.md"):
+        # Return existing path
+        return report_path
+    
+    # Run reporter agent
+    reporter_agent = ReporterAgent()
+    final_report = reporter_agent.generate_report(
+        query=request.query,
+        retrieval_results=retrieval_results or {},
+        investigation_findings=investigation_findings or {},
+        job_id=job_id,
+    )
+    report_path = reporter_agent.save_report(
+        final_report, report_path
+    )
+    return report_path
 
 
 def _build_final_answer(

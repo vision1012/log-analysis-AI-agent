@@ -247,14 +247,27 @@ Output ONLY the markdown report, no explanations or additional text."""
 
         Args:
             report: Markdown report string.
-            output_path: Path to save final_answer.md.
+            output_path: Path to save final_answer.md (absolute or relative).
 
         Returns:
-            Path to saved file.
+            Absolute path to saved file.
         """
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        from pathlib import Path
+        import logging
 
-        with open(output_path, "w", encoding="utf-8") as f:
+        logger = logging.getLogger(__name__)
+        output_path_obj = Path(output_path).resolve()
+        output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path_obj, "w", encoding="utf-8") as f:
             f.write(report)
 
-        return output_path
+        # Verify file was written and log size
+        if output_path_obj.is_file():
+            size_bytes = output_path_obj.stat().st_size
+            logger.info(f"Wrote final_answer.md size={size_bytes} bytes to {output_path_obj}")
+        else:
+            logger.error(f"Failed to write final_answer.md to {output_path_obj}")
+            raise RuntimeError(f"Failed to write final_answer.md to {output_path_obj}")
+
+        return str(output_path_obj)

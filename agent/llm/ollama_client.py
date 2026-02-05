@@ -10,6 +10,13 @@ import time
 from typing import List, Dict, Optional
 import requests
 
+# Try to import config, but make it optional for backward compatibility
+try:
+    from api.config import settings
+    DEFAULT_TIMEOUT = settings.ollama_timeout_sec
+except (ImportError, AttributeError):
+    DEFAULT_TIMEOUT = 60
+
 
 class OllamaClient:
     """
@@ -23,7 +30,7 @@ class OllamaClient:
         self,
         base_url: str = "http://localhost:11434",
         model: str = "llama3",
-        timeout: int = 120,
+        timeout: Optional[int] = None,
         max_retries: int = 2,
     ):
         """
@@ -32,12 +39,12 @@ class OllamaClient:
         Args:
             base_url: Base URL for Ollama API. Default: http://localhost:11434
             model: Model name to use. Default: llama3
-            timeout: Request timeout in seconds. Default: 120
+            timeout: Request timeout in seconds. If None, uses config value or default 60.
             max_retries: Maximum number of retries for transient failures. Default: 2
         """
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else DEFAULT_TIMEOUT
         self.max_retries = max_retries
         self.chat_endpoint = f"{self.base_url}/api/chat"
 
@@ -141,8 +148,10 @@ class OllamaClient:
             },
         }
 
-        # Retry logic
+        # Retry logic with controlled backoff (2s, 5s)
+        backoff_times = [2, 5]  # Fixed backoff times in seconds
         last_exception = None
+        
         for attempt in range(self.max_retries + 1):
             try:
                 response = requests.post(
@@ -166,7 +175,7 @@ class OllamaClient:
             except requests.exceptions.Timeout as e:
                 last_exception = e
                 if attempt < self.max_retries:
-                    wait_time = 2 ** attempt  # Exponential backoff
+                    wait_time = backoff_times[attempt] if attempt < len(backoff_times) else backoff_times[-1]
                     time.sleep(wait_time)
                     continue
                 raise RuntimeError(
@@ -176,7 +185,7 @@ class OllamaClient:
             except requests.exceptions.ConnectionError as e:
                 last_exception = e
                 if attempt < self.max_retries:
-                    wait_time = 2 ** attempt
+                    wait_time = backoff_times[attempt] if attempt < len(backoff_times) else backoff_times[-1]
                     time.sleep(wait_time)
                     continue
                 raise RuntimeError(
@@ -192,7 +201,7 @@ class OllamaClient:
             except requests.exceptions.RequestException as e:
                 last_exception = e
                 if attempt < self.max_retries:
-                    wait_time = 2 ** attempt
+                    wait_time = backoff_times[attempt] if attempt < len(backoff_times) else backoff_times[-1]
                     time.sleep(wait_time)
                     continue
                 raise RuntimeError(
