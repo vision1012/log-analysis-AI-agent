@@ -1,0 +1,17 @@
+{
+  "job_id": "15faf0a4-4655-48a5-af9a-efad400b11fd",
+  "status": "failed",
+  "created_at": "2026-02-05 16:08:21.244488",
+  "started_at": null,
+  "finished_at": "2026-02-05 16:08:21.248006",
+  "question": "Why are timeouts happening?",
+  "input_log_path": "data/sample.log",
+  "model": "llama3",
+  "mode": "rag",
+  "error": "'JobStore' object has no attribute 'is_cancellation_requested'\n\nTraceback:\nTraceback (most recent call last):\n  File \"/Users/jay027/Desktop/github_repo/log-analysis-AI-agent/api/services/runner.py\", line 121, in run_job_background\n    _check_cancellation()\n  File \"/Users/jay027/Desktop/github_repo/log-analysis-AI-agent/api/services/runner.py\", line 106, in _check_cancellation\n    if self.job_store.is_cancellation_requested(job_id):\nAttributeError: 'JobStore' object has no attribute 'is_cancellation_requested'\n",
+  "artifacts": [],
+  "current_step": null,
+  "progress_pct": 10,
+  "duration_ms": 1,
+  "cancel_requested": false
+}

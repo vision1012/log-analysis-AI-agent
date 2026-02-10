@@ -1,0 +1,12 @@
+{
+  "job_id": "b062efef-3373-4f1f-b2b9-3add8027e8d0",
+  "status": "succeeded",
+  "created_at": "2026-02-05 15:47:17.078076",
+  "started_at": "2026-02-05 15:47:17.083423",
+  "finished_at": "2026-02-05 15:48:06.416467",
+  "question": "Why are timeouts happening?",
+  "input_log_path": "data/sample.log",
+  "model": "llama3",
+  "error": null,
+  "artifacts": []
+}

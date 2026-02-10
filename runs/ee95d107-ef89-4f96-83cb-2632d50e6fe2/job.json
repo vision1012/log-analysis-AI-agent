@@ -1,0 +1,35 @@
+{
+  "job_id": "ee95d107-ef89-4f96-83cb-2632d50e6fe2",
+  "status": "failed",
+  "created_at": "2026-02-05 16:26:52.720786",
+  "started_at": "2026-02-05 16:26:52.723683",
+  "finished_at": "2026-02-05 16:27:46.241497",
+  "question": "Why are timeouts happening?",
+  "input_log_path": "data/sample.log",
+  "model": "llama3",
+  "mode": "rag",
+  "error": "SUCCEEDED\n\nTraceback:\nTraceback (most recent call last):\n  File \"/Users/jay027/Desktop/github_repo/log-analysis-AI-agent/api/services/runner.py\", line 326, in run_job_background\n    status=JobStatus.SUCCEEDED,\n  File \"/opt/anaconda3/lib/python3.10/typing.py\", line 983, in __getattr__\n    return getattr(self.__origin__, attr)\n  File \"/opt/anaconda3/lib/python3.10/typing.py\", line 375, in __getattr__\n    raise AttributeError(item)\nAttributeError: SUCCEEDED\n",
+  "artifacts": [
+    {
+      "name": "retrieval.json",
+      "path": "artifacts/ee95d107-ef89-4f96-83cb-2632d50e6fe2/retrieval.json",
+      "content_type": "application/json"
+    },
+    {
+      "name": "findings.json",
+      "path": "artifacts/ee95d107-ef89-4f96-83cb-2632d50e6fe2/findings.json",
+      "content_type": "application/json"
+    },
+    {
+      "name": "final_answer.md",
+      "path": "artifacts/ee95d107-ef89-4f96-83cb-2632d50e6fe2/final_answer.md",
+      "content_type": "text/markdown"
+    }
+  ],
+  "current_step": null,
+  "progress_pct": 90,
+  "step_started_at": "2026-02-05 16:27:46.234748",
+  "step_timeout_seconds": null,
+  "duration_ms": 53518,
+  "cancel_requested": false
+}
