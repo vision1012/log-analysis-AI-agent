@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Analysis AI Agent - Desktop UI Mockups</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1600px; margin: 0 auto; }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 28px;
+            font-size: 2.2em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .screen-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+            gap: 32px;
+            margin-bottom: 40px;
+        }
+
+        .screen {
+            background: #1a1a1a;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+        }
+
+        .screen-title {
+            background: #252525;
+            color: #4A90E2;
+            font-size: 1.1em;
+            font-weight: bold;
+            padding: 12px 20px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+        }
+
+        /* Desktop window chrome */
+        .desktop-window {
+            background: #121212;
+            min-height: 480px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .window-titlebar {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            background: #1E1E1E;
+            border-bottom: 1px solid #333;
+        }
+
+        .window-dots {
+            display: flex;
+            gap: 8px;
+            margin-right: 12px;
+        }
+
+        .window-dots span {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .window-dots .red { background: #ff5f57; }
+        .window-dots .yellow { background: #febc2e; }
+        .window-dots .green { background: #28c840; }
+
+        .window-title {
+            color: #B0B0B0;
+            font-size: 13px;
+        }
+
+        .desktop-body {
+            flex: 1;
+            padding: 20px;
+            color: #e0e0e0;
+        }
+
+        /* Sidebar + main layout */
+        .app-layout {
+            display: flex;
+            min-height: 420px;
+        }
+
+        .sidebar {
+            width: 200px;
+            background: #1E1E1E;
+            border-radius: 8px;
+            padding: 16px;
+            margin-right: 20px;
+        }
+
+        .sidebar-item {
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            font-size: 14px;
+            color: #B0B0B0;
+        }
+
+        .sidebar-item {
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .sidebar-item:hover {
+            background: #333;
+            color: #fff;
+        }
+
+        .sidebar-item.active {
+            background: #4A90E2;
+            color: white;
+        }
+
+        .main-content { flex: 1; }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .top-bar h2 {
+            font-size: 20px;
+            color: #fff;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: #4A90E2;
+            color: white;
+        }
+
+        .btn-primary:hover { background: #3a7bc8; }
+
+        .btn-secondary {
+            background: #2A2A2A;
+            color: #4A90E2;
+            border: 1px solid #4A90E2;
+        }
+
+        .btn-secondary:hover { background: #333; }
+
+        .card {
+            background: #2A2A2A;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+            transition: background 0.2s;
+        }
+
+        .card:hover { background: #323232; }
+
+        .card-title {
+            color: #4A90E2;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .input-field {
+            background: #1E1E1E;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            color: #fff;
+            width: 100%;
+            margin-top: 8px;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: #2A2A2A;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            cursor: default;
+            transition: background 0.2s, transform 0.15s;
+        }
+
+        .stat-box:hover { background: #323232; transform: scale(1.02); }
+
+        .stat-value { font-size: 24px; font-weight: bold; color: #4A90E2; }
+        .stat-label { font-size: 12px; color: #B0B0B0; margin-top: 4px; }
+
+        .job-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .job-table th, .job-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+
+        .job-table th {
+            color: #4A90E2;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .job-table tbody tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .job-table tbody tr:hover { background: #2a2a2a; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .status-success { background: #4CAF50; color: white; }
+        .status-running { background: #FF9800; color: white; }
+        .status-failed { background: #F44336; color: white; }
+        .status-queued { background: #2196F3; color: white; }
+
+        .progress-bar {
+            background: #333;
+            border-radius: 8px;
+            height: 6px;
+            margin: 8px 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: #4A90E2;
+            height: 100%;
+            border-radius: 8px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .filter-tab {
+            background: #2A2A2A;
+            color: #B0B0B0;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .filter-tab:hover { background: #3a3a3a; color: #fff; }
+
+        .filter-tab.active { background: #4A90E2; color: white; }
+
+        .artifact-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #2A2A2A;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .artifact-row:hover { background: #363636; }
+
+        .report-preview {
+            background: #1E1E1E;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #B0B0B0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .auth-center {
+            max-width: 380px;
+            margin: 40px auto;
+            text-align: center;
+        }
+
+        .auth-center .card { margin-bottom: 20px; }
+
+        .link-muted {
+            color: #4A90E2;
+            font-size: 13px;
+            margin-top: 16px;
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            color: #B0B0B0;
+            margin-bottom: 6px;
+        }
+
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            background: #2A2A2A;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: background 0.2s;
+        }
+
+        .settings-row:hover { background: #323232; }
+
+        .link-muted, a.link-muted {
+            color: #4A90E2;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .link-muted:hover { color: #6ba3f0; }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #4A90E2;
+            box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.3);
+        }
+
+        .window-dots span { transition: opacity 0.2s; }
+        .window-dots span:hover { opacity: 0.8; }
+
+        /* Main / Landing screen */
+        .landing-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            background: #1E1E1E;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .landing-nav .logo {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4A90E2;
+        }
+
+        .landing-nav .nav-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .landing-nav .nav-links a {
+            color: #B0B0B0;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .landing-nav .nav-links a:hover { color: #4A90E2; }
+
+        .landing-nav .nav-btns {
+            display: flex;
+            gap: 12px;
+        }
+
+        .landing-hero {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            padding: 32px 0;
+            margin-bottom: 32px;
+        }
+
+        .landing-hero-text {
+            flex: 1;
+        }
+
+        .landing-hero-text h2 {
+            font-size: 28px;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+
+        .landing-hero-text p {
+            font-size: 15px;
+            color: #B0B0B0;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .landing-hero-img {
+            flex: 1;
+            min-height: 180px;
+            background: linear-gradient(135deg, #2A2A2A 0%, #1E1E1E 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #333;
+        }
+
+        .landing-hero-img .img-placeholder {
+            width: 100%;
+            height: 100%;
+            min-height: 160px;
+            background: linear-gradient(180deg, rgba(74,144,226,0.15) 0%, rgba(74,144,226,0.05) 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4A90E2;
+            font-size: 64px;
+            opacity: 0.8;
+        }
+
+        .landing-features {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .feature-card {
+            background: #2A2A2A;
+            border-radius: 10px;
+            padding: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            background: #323232;
+            box-shadow: 0 8px 24px rgba(74, 144, 226, 0.15);
+            border-color: #4A90E2;
+        }
+
+        .feature-card .feature-icon {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .feature-card .feature-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+
+        .feature-card .feature-desc {
+            font-size: 13px;
+            color: #B0B0B0;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ Log Analysis AI Agent - Desktop UI Mockups</h1>
+
+        <div class="screen-grid">
+            <!-- 0. Main / Landing Screen -->
+            <div class="screen">
+                <div class="screen-title">0. Main / Landing Screen</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Log Analysis AI Agent</span>
+                    </div>
+                    <div class="desktop-body">
+                        <nav class="landing-nav">
+                            <div class="logo">🔍 Log Analysis AI</div>
+                            <div class="nav-links">
+                                <a href="#">Features</a>
+                                <a href="#">Docs</a>
+                                <a href="#">About</a>
+                            </div>
+                            <div class="nav-btns">
+                                <button class="btn btn-secondary">Sign in</button>
+                                <button class="btn btn-primary">Sign up</button>
+                            </div>
+                        </nav>
+
+                        <div class="landing-hero">
+                            <div class="landing-hero-text">
+                                <h2>Debug smarter, not harder</h2>
+                                <p>AI-powered log analysis. Ask questions in plain English, get insights from your logs in seconds. RAG + heuristic modes, real-time progress, and downloadable artifacts.</p>
+                                <button class="btn btn-primary">Get started free</button>
+                            </div>
+                            <div class="landing-hero-img">
+                                <div class="img-placeholder" title="Log analysis pipeline diagram">📊 Log → RAG → Report</div>
+                            </div>
+                        </div>
+
+                        <div class="card" style="margin-bottom: 16px;">
+                            <div class="card-title">Features</div>
+                            <div class="landing-features">
+                                <div class="feature-card">
+                                    <div class="feature-icon">🤖</div>
+                                    <div class="feature-title">RAG + Heuristic</div>
+                                    <div class="feature-desc">Full RAG pipeline or fast rule-based analysis. Choose the mode that fits.</div>
+                                </div>
+                                <div class="feature-card">
+                                    <div class="feature-icon">📄</div>
+                                    <div class="feature-title">Artifacts & Reports</div>
+                                    <div class="feature-desc">retrieval.json, findings.json, final_answer.md — all downloadable.</div>
+                                </div>
+                                <div class="feature-card">
+                                    <div class="feature-icon">📊</div>
+                                    <div class="feature-title">Live Progress</div>
+                                    <div class="feature-desc">Step-level progress, timeouts, cancellation. Know where your job is.</div>
+                                </div>
+                                <div class="feature-card">
+                                    <div class="feature-icon">🔗</div>
+                                    <div class="feature-title">REST API</div>
+                                    <div class="feature-desc">FastAPI backend. Create jobs, poll status, fetch reports and artifacts.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1. Login -->
+            <div class="screen">
+                <div class="screen-title">1. Login</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Log Analysis AI — Sign in</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="auth-center">
+                            <div class="card">
+                                <div class="card-title">Sign in</div>
+                                <div class="form-group">
+                                    <label>Email or username</label>
+                                    <input type="text" class="input-field" placeholder="you@example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label>Password</label>
+                                    <input type="password" class="input-field" placeholder="••••••••">
+                                </div>
+                                <button class="btn btn-primary" style="width: 100%;">Sign in</button>
+                            </div>
+                            <a href="#" class="link-muted">Forgot password?</a>
+                            <a href="#" class="link-muted">Create account / Sign up</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Sign up -->
+            <div class="screen">
+                <div class="screen-title">2. Sign up (Create account)</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Log Analysis AI — Create account</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="auth-center">
+                            <div class="card">
+                                <div class="card-title">Create account</div>
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="email" class="input-field" placeholder="you@example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label>Username</label>
+                                    <input type="text" class="input-field" placeholder="username">
+                                </div>
+                                <div class="form-group">
+                                    <label>Password</label>
+                                    <input type="password" class="input-field" placeholder="••••••••">
+                                </div>
+                                <div class="form-group">
+                                    <label>Confirm password</label>
+                                    <input type="password" class="input-field" placeholder="••••••••">
+                                </div>
+                                <button class="btn btn-primary" style="width: 100%;">Create account</button>
+                            </div>
+                            <a href="#" class="link-muted">Already have an account? Sign in</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Home / Dashboard -->
+            <div class="screen">
+                <div class="screen-title">3. Home (Dashboard)</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Log Analysis AI</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="app-layout">
+                            <div class="sidebar">
+                                <div class="sidebar-item active">Home</div>
+                                <div class="sidebar-item">Jobs</div>
+                                <div class="sidebar-item">Settings</div>
+                            </div>
+                            <div class="main-content">
+                                <div class="top-bar">
+                                    <h2>Dashboard</h2>
+                                    <button class="btn btn-primary">+ New analysis</button>
+                                </div>
+                                <div class="stats-row">
+                                    <div class="stat-box">
+                                        <div class="stat-value">12</div>
+                                        <div class="stat-label">Jobs</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-value">3</div>
+                                        <div class="stat-label">Running</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-value">8</div>
+                                        <div class="stat-label">Succeeded</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-value">1</div>
+                                        <div class="stat-label">Failed</div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Recent jobs</div>
+                                    <div style="font-size: 13px; color: #B0B0B0;">
+                                        ✓ Error Analysis — 2 min ago <span class="status-badge status-success">Success</span><br>
+                                        ⏳ Timeout Issue — Running 65%<br>
+                                        ✓ Stack Trace Parse — 1 hour ago
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary">View all jobs</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. New Job -->
+            <div class="screen">
+                <div class="screen-title">4. New Job (Create job)</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">New analysis</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="app-layout">
+                            <div class="sidebar">
+                                <div class="sidebar-item">Home</div>
+                                <div class="sidebar-item active">New job</div>
+                                <div class="sidebar-item">Jobs</div>
+                                <div class="sidebar-item">Settings</div>
+                            </div>
+                            <div class="main-content">
+                                <div class="top-bar">
+                                    <h2>New analysis</h2>
+                                    <button class="btn btn-secondary">Cancel</button>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Your question</div>
+                                    <textarea class="input-field" rows="3" placeholder="e.g. Why are timeouts happening in the API?"></textarea>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Log file</div>
+                                    <input type="text" class="input-field" placeholder="Path or choose file...">
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Mode</div>
+                                    <div class="filter-tabs">
+                                        <button class="filter-tab active">RAG</button>
+                                        <button class="filter-tab">Heuristic</button>
+                                    </div>
+                                    <label style="font-size: 12px; color: #B0B0B0;">Model</label>
+                                    <select class="input-field" style="margin-top: 6px;">
+                                        <option>llama3</option>
+                                        <option>llama2</option>
+                                    </select>
+                                </div>
+                                <button class="btn btn-primary">Start analysis</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Job List -->
+            <div class="screen">
+                <div class="screen-title">5. Job List (All jobs)</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">All jobs</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="app-layout">
+                            <div class="sidebar">
+                                <div class="sidebar-item">Home</div>
+                                <div class="sidebar-item active">Jobs</div>
+                                <div class="sidebar-item">Settings</div>
+                            </div>
+                            <div class="main-content">
+                                <div class="top-bar">
+                                    <h2>All jobs</h2>
+                                    <button class="btn btn-primary">+ New analysis</button>
+                                </div>
+                                <div class="filter-tabs">
+                                    <button class="filter-tab active">All</button>
+                                    <button class="filter-tab">Running</button>
+                                    <button class="filter-tab">Succeeded</button>
+                                    <button class="filter-tab">Failed</button>
+                                </div>
+                                <table class="job-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Question</th>
+                                            <th>Status</th>
+                                            <th>Progress</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Why are timeouts happening?</td>
+                                            <td><span class="status-badge status-running">Running</span></td>
+                                            <td><div class="progress-bar"><div class="progress-fill" style="width: 65%"></div></div></td>
+                                            <td style="color: #B0B0B0; font-size: 12px;">2 min ago</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Error code search</td>
+                                            <td><span class="status-badge status-success">Succeeded</span></td>
+                                            <td>—</td>
+                                            <td style="color: #B0B0B0; font-size: 12px;">15 min ago</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Stack trace parse</td>
+                                            <td><span class="status-badge status-failed">Failed</span></td>
+                                            <td>—</td>
+                                            <td style="color: #B0B0B0; font-size: 12px;">1 hour ago</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Job Detail -->
+            <div class="screen">
+                <div class="screen-title">6. Job Detail</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Job details</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="app-layout">
+                            <div class="sidebar">
+                                <div class="sidebar-item">Home</div>
+                                <div class="sidebar-item">Jobs</div>
+                                <div class="sidebar-item active">Job detail</div>
+                                <div class="sidebar-item">Settings</div>
+                            </div>
+                            <div class="main-content">
+                                <div class="top-bar">
+                                    <h2>Error Analysis</h2>
+                                    <div>
+                                        <button class="btn btn-secondary" style="margin-right: 8px;">Cancel job</button>
+                                        <button class="btn btn-secondary">Back</button>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Status</div>
+                                    <span class="status-badge status-success">Succeeded</span>
+                                    <span style="margin-left: 12px; font-size: 13px; color: #B0B0B0;">Step: write_artifacts — 100%</span>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Actions</div>
+                                    <div style="display: flex; gap: 10px;">
+                                        <button class="btn btn-primary">View report</button>
+                                        <button class="btn btn-secondary">Artifacts</button>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Artifacts (3)</div>
+                                    <div class="artifact-row">
+                                        <span>final_answer.md</span>
+                                        <span style="color: #B0B0B0; font-size: 12px;">2.3 KB ⬇</span>
+                                    </div>
+                                    <div class="artifact-row">
+                                        <span>findings.json</span>
+                                        <span style="color: #B0B0B0; font-size: 12px;">1.8 KB ⬇</span>
+                                    </div>
+                                    <div class="artifact-row">
+                                        <span>retrieval.json</span>
+                                        <span style="color: #B0B0B0; font-size: 12px;">3.1 KB ⬇</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. Report View -->
+            <div class="screen">
+                <div class="screen-title">7. Report View</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Report — final_answer.md</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="top-bar">
+                            <h2>Report</h2>
+                            <div>
+                                <button class="btn btn-secondary" style="margin-right: 8px;">Copy</button>
+                                <button class="btn btn-secondary" style="margin-right: 8px;">Download</button>
+                                <button class="btn btn-secondary">Back to job</button>
+                            </div>
+                        </div>
+                        <div class="report-preview">
+                            <strong style="color: #4A90E2;">## Summary</strong><br><br>
+                            The analysis found 15 errors in the log file. The primary issues are related to timeout errors and service unavailability.<br><br>
+                            <strong style="color: #4A90E2;">## Findings</strong><br><br>
+                            1. <strong>Timeout issues</strong> — 8 occurrences; peak at 14:30; affected endpoints: /api/users, /api/data.<br>
+                            2. <strong>503 errors</strong> — 5 occurrences; service overload; recovery ~2 min.<br><br>
+                            [Scroll for more...]
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. Artifacts List -->
+            <div class="screen">
+                <div class="screen-title">8. Artifacts List</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Artifacts</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="top-bar">
+                            <h2>Artifacts</h2>
+                            <button class="btn btn-secondary">Back to job</button>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">Job: Error Analysis</div>
+                            <div class="artifact-row">
+                                <div>
+                                    <div style="font-weight: bold;">final_answer.md</div>
+                                    <div style="font-size: 12px; color: #B0B0B0;">text/markdown — 2.3 KB</div>
+                                </div>
+                                <button class="btn btn-secondary">Download</button>
+                            </div>
+                            <div class="artifact-row">
+                                <div>
+                                    <div style="font-weight: bold;">findings.json</div>
+                                    <div style="font-size: 12px; color: #B0B0B0;">application/json — 1.8 KB</div>
+                                </div>
+                                <button class="btn btn-secondary">Download</button>
+                            </div>
+                            <div class="artifact-row">
+                                <div>
+                                    <div style="font-weight: bold;">retrieval.json</div>
+                                    <div style="font-size: 12px; color: #B0B0B0;">application/json — 3.1 KB</div>
+                                </div>
+                                <button class="btn btn-secondary">Download</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. Settings -->
+            <div class="screen">
+                <div class="screen-title">9. Settings</div>
+                <div class="desktop-window">
+                    <div class="window-titlebar">
+                        <div class="window-dots">
+                            <span class="red"></span><span class="yellow"></span><span class="green"></span>
+                        </div>
+                        <span class="window-title">Settings</span>
+                    </div>
+                    <div class="desktop-body">
+                        <div class="app-layout">
+                            <div class="sidebar">
+                                <div class="sidebar-item">Home</div>
+                                <div class="sidebar-item">Jobs</div>
+                                <div class="sidebar-item active">Settings</div>
+                            </div>
+                            <div class="main-content">
+                                <div class="top-bar">
+                                    <h2>Settings</h2>
+                                    <button class="btn btn-primary">Save</button>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">API</div>
+                                    <div class="settings-row">
+                                        <span>API base URL</span>
+                                        <input type="text" class="input-field" placeholder="http://localhost:8000" style="width: 240px;">
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Model</div>
+                                    <div class="settings-row">
+                                        <span>Default model</span>
+                                        <select class="input-field" style="width: 160px;">
+                                            <option>llama3</option>
+                                            <option>llama2</option>
+                                            <option>mistral</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-title">Appearance</div>
+                                    <div class="settings-row">
+                                        <span>Theme</span>
+                                        <select class="input-field" style="width: 160px;">
+                                            <option>Dark</option>
+                                            <option>Light</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary">Back to Home</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // Make filter tabs clickable – toggle active state
+            document.querySelectorAll('.filter-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var parent = this.closest('.filter-tabs');
+                    if (parent) {
+                        parent.querySelectorAll('.filter-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                    }
+                });
+            });
+
+            // Make sidebar items clickable – toggle active state
+            document.querySelectorAll('.sidebar-item').forEach(function(item) {
+                item.addEventListener('click', function() {
+                    var sidebar = this.closest('.sidebar');
+                    if (sidebar) {
+                        sidebar.querySelectorAll('.sidebar-item').forEach(function(i) { i.classList.remove('active'); });
+                        this.classList.add('active');
+                    }
+                });
+            });
+
+            // Mode tabs (RAG / Heuristic) in New Job screen
+            document.querySelectorAll('.filter-tabs .filter-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var parent = this.closest('.filter-tabs');
+                    if (parent && parent.closest('.card')) {
+                        parent.querySelectorAll('.filter-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                    }
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -26,6 +26,9 @@ output/jobs/
 # Artifacts directory (job outputs)
 artifacts/
 
+# Data directory (HDFS logs, ML datasets — large files, do not push)
+data/
+
 # Test outputs
 *.log
 !requirements.txt
