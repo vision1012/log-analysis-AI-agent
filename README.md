@@ -242,11 +242,14 @@ curl http://localhost:8000/api/v1/jobs/{job_id}/report
 
 ## 🔮 Coming Soon  
 
-- ReactJS-based Web UI  
+- Interective Desktop App 
 - Automated pipeline for log ingestion  
 - Real-time log monitoring system with alerts  
-- LLM-enhanced advanced log reasoning  
-- Visualization dashboard for anomalies  
+- LLM-enhanced advanced Root Cause Analysis
+- Visualization dashboard for anomalies
+- Anomaly Detection
+- Intelligent CI/Cd pipeline
+  
 
 ---
 
