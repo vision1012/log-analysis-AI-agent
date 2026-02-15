@@ -1,0 +1,7 @@
+{
+  "window_size": 20,
+  "n_estimators": 300,
+  "contamination": 0.02,
+  "num_windows": 1981,
+  "num_templates": 192
+}

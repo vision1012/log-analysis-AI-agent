@@ -1,0 +1,1952 @@
+[
+  {
+    "rank":1,
+    "window_index":454,
+    "start_row":454,
+    "end_row":473,
+    "start_date":"081110",
+    "start_time":"103533",
+    "end_date":"081110",
+    "end_time":"103626",
+    "anomaly_score":0.4551087469,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_86a6a8efae",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir4\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8284438024",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir50\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8bf2325abc",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir27\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":2,
+    "window_index":455,
+    "start_row":455,
+    "end_row":474,
+    "start_date":"081110",
+    "start_time":"103534",
+    "end_date":"081110",
+    "end_time":"103631",
+    "anomaly_score":0.4530587715,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_5da3c3d10f",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir25\/<BLK>"
+      },
+      {
+        "template_id":"tpl_86a6a8efae",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir4\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8284438024",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir50\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":3,
+    "window_index":452,
+    "start_row":452,
+    "end_row":471,
+    "start_date":"081110",
+    "start_time":"103527",
+    "end_date":"081110",
+    "end_time":"103621",
+    "anomaly_score":0.4504488849,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_d4eb5279de",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir39\/<BLK>"
+      },
+      {
+        "template_id":"tpl_60489c33bb",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir47\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8bf2325abc",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir27\/<BLK>"
+      },
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":4,
+    "window_index":453,
+    "start_row":453,
+    "end_row":472,
+    "start_date":"081110",
+    "start_time":"103533",
+    "end_date":"081110",
+    "end_time":"103621",
+    "anomaly_score":0.4500590582,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_343227e909",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_95cd533991",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir21\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8284438024",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir50\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8bf2325abc",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir27\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":5,
+    "window_index":470,
+    "start_row":470,
+    "end_row":489,
+    "start_date":"081110",
+    "start_time":"103618",
+    "end_date":"081110",
+    "end_time":"103743",
+    "anomaly_score":0.4489769831,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8bf2325abc",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir27\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":6,
+    "window_index":456,
+    "start_row":456,
+    "end_row":475,
+    "start_date":"081110",
+    "start_time":"103538",
+    "end_date":"081110",
+    "end_time":"103631",
+    "anomaly_score":0.4482024203,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a9df66df5d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir38\/<BLK>"
+      },
+      {
+        "template_id":"tpl_fc257507ea",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir53\/<BLK>"
+      },
+      {
+        "template_id":"tpl_dd32cd6b71",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir16\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":7,
+    "window_index":457,
+    "start_row":457,
+    "end_row":476,
+    "start_date":"081110",
+    "start_time":"103547",
+    "end_date":"081110",
+    "end_time":"103634",
+    "anomaly_score":0.4479603913,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b4d89c6710",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir37\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_dd32cd6b71",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir16\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":8,
+    "window_index":1867,
+    "start_row":1867,
+    "end_row":1886,
+    "start_date":"081111",
+    "start_time":"090113",
+    "end_date":"081111",
+    "end_time":"090246",
+    "anomaly_score":0.4477624117,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_2a2435644c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir36\/<BLK>"
+      },
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_43dd433526",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir23\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a9df66df5d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir38\/<BLK>"
+      },
+      {
+        "template_id":"tpl_95499e398b",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir43\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":9,
+    "window_index":473,
+    "start_row":473,
+    "end_row":492,
+    "start_date":"081110",
+    "start_time":"103626",
+    "end_date":"081110",
+    "end_time":"103801",
+    "anomaly_score":0.4459780554,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_68445f1d33",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir7\/<BLK>"
+      },
+      {
+        "template_id":"tpl_85c340eec3",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir59\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":10,
+    "window_index":471,
+    "start_row":471,
+    "end_row":490,
+    "start_date":"081110",
+    "start_time":"103621",
+    "end_date":"081110",
+    "end_time":"103749",
+    "anomaly_score":0.4454338167,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8284438024",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir50\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":11,
+    "window_index":448,
+    "start_row":448,
+    "end_row":467,
+    "start_date":"081110",
+    "start_time":"103442",
+    "end_date":"081110",
+    "end_time":"103603",
+    "anomaly_score":0.4448368378,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_71772ffe0c",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir20\/<BLK>"
+      },
+      {
+        "template_id":"tpl_43dd433526",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir23\/<BLK>"
+      },
+      {
+        "template_id":"tpl_fc257507ea",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir53\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":12,
+    "window_index":445,
+    "start_row":445,
+    "end_row":464,
+    "start_date":"081110",
+    "start_time":"103432",
+    "end_date":"081110",
+    "end_time":"103557",
+    "anomaly_score":0.4445020595,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_bbe3ef6a66",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir60\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a9df66df5d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir38\/<BLK>"
+      },
+      {
+        "template_id":"tpl_60489c33bb",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir47\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":13,
+    "window_index":444,
+    "start_row":444,
+    "end_row":463,
+    "start_date":"081110",
+    "start_time":"103430",
+    "end_date":"081110",
+    "end_time":"103554",
+    "anomaly_score":0.442460625,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_5da3c3d10f",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir25\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f419688859",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir13\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":14,
+    "window_index":458,
+    "start_row":458,
+    "end_row":477,
+    "start_date":"081110",
+    "start_time":"103548",
+    "end_date":"081110",
+    "end_time":"103641",
+    "anomaly_score":0.4424523975,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b678289f73",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir48\/<BLK>"
+      },
+      {
+        "template_id":"tpl_331bef29e9",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir29\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":15,
+    "window_index":451,
+    "start_row":451,
+    "end_row":470,
+    "start_date":"081110",
+    "start_time":"103524",
+    "end_date":"081110",
+    "end_time":"103618",
+    "anomaly_score":0.4423230448,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3e56d2ab53",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_331bef29e9",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir29\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":16,
+    "window_index":450,
+    "start_row":450,
+    "end_row":469,
+    "start_date":"081110",
+    "start_time":"103512",
+    "end_date":"081110",
+    "end_time":"103615",
+    "anomaly_score":0.4411016458,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_331bef29e9",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir29\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b4d89c6710",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir37\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":17,
+    "window_index":447,
+    "start_row":447,
+    "end_row":466,
+    "start_date":"081110",
+    "start_time":"103442",
+    "end_date":"081110",
+    "end_time":"103600",
+    "anomaly_score":0.4410444626,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b5401cba52",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir32\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b678289f73",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir48\/<BLK>"
+      },
+      {
+        "template_id":"tpl_86a6a8efae",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir4\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":18,
+    "window_index":1868,
+    "start_row":1868,
+    "end_row":1887,
+    "start_date":"081111",
+    "start_time":"090113",
+    "end_date":"081111",
+    "end_time":"090339",
+    "anomaly_score":0.4408460689,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_95cd533991",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir21\/<BLK>"
+      },
+      {
+        "template_id":"tpl_43dd433526",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir23\/<BLK>"
+      },
+      {
+        "template_id":"tpl_c72aeadd17",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir61\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a9df66df5d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir38\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":19,
+    "window_index":463,
+    "start_row":463,
+    "end_row":482,
+    "start_date":"081110",
+    "start_time":"103554",
+    "end_date":"081110",
+    "end_time":"103717",
+    "anomaly_score":0.4403278899,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_60489c33bb",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir47\/<BLK>"
+      },
+      {
+        "template_id":"tpl_dd32cd6b71",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir16\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_d4eb5279de",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir39\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":20,
+    "window_index":476,
+    "start_row":476,
+    "end_row":495,
+    "start_date":"081110",
+    "start_time":"103634",
+    "end_date":"081110",
+    "end_time":"103819",
+    "anomaly_score":0.4401351738,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":2,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":21,
+    "window_index":864,
+    "start_row":864,
+    "end_row":883,
+    "start_date":"081110",
+    "start_time":"210450",
+    "end_date":"081110",
+    "end_time":"210555",
+    "anomaly_score":0.4399472654,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_b5401cba52",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir32\/<BLK>"
+      },
+      {
+        "template_id":"tpl_26e61dfed8",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir1\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_55a3970863",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir63\/<BLK>"
+      },
+      {
+        "template_id":"tpl_1836f9eebe",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir54\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":22,
+    "window_index":863,
+    "start_row":863,
+    "end_row":882,
+    "start_date":"081110",
+    "start_time":"210449",
+    "end_date":"081110",
+    "end_time":"210549",
+    "anomaly_score":0.439459368,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_3e56d2ab53",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b5401cba52",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir32\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_1836f9eebe",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir54\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3b61905fca",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir19\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":23,
+    "window_index":477,
+    "start_row":477,
+    "end_row":496,
+    "start_date":"081110",
+    "start_time":"103641",
+    "end_date":"081110",
+    "end_time":"103821",
+    "anomaly_score":0.439324369,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":2,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      },
+      {
+        "template_id":"tpl_bbe3ef6a66",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir60\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3d05ff2568",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir14\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":24,
+    "window_index":865,
+    "start_row":865,
+    "end_row":884,
+    "start_date":"081110",
+    "start_time":"210502",
+    "end_date":"081110",
+    "end_time":"210555",
+    "anomaly_score":0.439258207,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_b5401cba52",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir32\/<BLK>"
+      },
+      {
+        "template_id":"tpl_703207e1f5",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir55\/<BLK>"
+      },
+      {
+        "template_id":"tpl_bbe3ef6a66",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir60\/<BLK>"
+      },
+      {
+        "template_id":"tpl_790369a432",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir18\/<BLK>"
+      },
+      {
+        "template_id":"tpl_55a3970863",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir63\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":25,
+    "window_index":465,
+    "start_row":465,
+    "end_row":484,
+    "start_date":"081110",
+    "start_time":"103558",
+    "end_date":"081110",
+    "end_time":"103729",
+    "anomaly_score":0.4387599566,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_86a6a8efae",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir4\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      },
+      {
+        "template_id":"tpl_68445f1d33",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir7\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":26,
+    "window_index":869,
+    "start_row":869,
+    "end_row":888,
+    "start_date":"081110",
+    "start_time":"210512",
+    "end_date":"081110",
+    "end_time":"210601",
+    "anomaly_score":0.4384880561,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_c4c20edc4c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir33\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3d53b64f16",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir52\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3d05ff2568",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir14\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_703207e1f5",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir55\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":27,
+    "window_index":460,
+    "start_row":460,
+    "end_row":479,
+    "start_date":"081110",
+    "start_time":"103552",
+    "end_date":"081110",
+    "end_time":"103657",
+    "anomaly_score":0.4380717605,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8bf2325abc",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir27\/<BLK>"
+      },
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":1,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      },
+      {
+        "template_id":"tpl_382b796784",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir12\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":28,
+    "window_index":449,
+    "start_row":449,
+    "end_row":468,
+    "start_date":"081110",
+    "start_time":"103444",
+    "end_date":"081110",
+    "end_time":"103615",
+    "anomaly_score":0.4380367897,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0f39ca25aa",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir34\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f419688859",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir13\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b4d89c6710",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir37\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":29,
+    "window_index":446,
+    "start_row":446,
+    "end_row":465,
+    "start_date":"081110",
+    "start_time":"103437",
+    "end_date":"081110",
+    "end_time":"103558",
+    "anomaly_score":0.43768418,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_331bef29e9",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir29\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_95cd533991",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir21\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":30,
+    "window_index":474,
+    "start_row":474,
+    "end_row":493,
+    "start_date":"081110",
+    "start_time":"103631",
+    "end_date":"081110",
+    "end_time":"103812",
+    "anomaly_score":0.4368463466,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":2,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":31,
+    "window_index":469,
+    "start_row":469,
+    "end_row":488,
+    "start_date":"081110",
+    "start_time":"103615",
+    "end_date":"081110",
+    "end_time":"103739",
+    "anomaly_score":0.4367771933,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":32,
+    "window_index":868,
+    "start_row":868,
+    "end_row":887,
+    "start_date":"081110",
+    "start_time":"210511",
+    "end_date":"081110",
+    "end_time":"210600",
+    "anomaly_score":0.4361472555,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_c4c20edc4c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir33\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0f39ca25aa",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir34\/<BLK>"
+      },
+      {
+        "template_id":"tpl_86a6a8efae",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir4\/<BLK>"
+      },
+      {
+        "template_id":"tpl_703207e1f5",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir55\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":33,
+    "window_index":867,
+    "start_row":867,
+    "end_row":886,
+    "start_date":"081110",
+    "start_time":"210510",
+    "end_date":"081110",
+    "end_time":"210558",
+    "anomaly_score":0.4361472555,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_c4c20edc4c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir33\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      },
+      {
+        "template_id":"tpl_790369a432",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir18\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":34,
+    "window_index":479,
+    "start_row":479,
+    "end_row":498,
+    "start_date":"081110",
+    "start_time":"103657",
+    "end_date":"081110",
+    "end_time":"103840",
+    "anomaly_score":0.4361187837,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_632f57fcfe",
+        "count":2,
+        "template":"BLOCK* NameSystem.addStoredBlock: blockMap updated: <IP> is added to <BLK> size <NUM>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f644a21202",
+        "count":1,
+        "template":"BLOCK* NameSystem.allocateBlock: \/user\/root\/rand\/_temporary\/_task_200811101024_0001_m_000097_0\/part-<NUM>. <BLK>"
+      },
+      {
+        "template_id":"tpl_85c340eec3",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir59\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":35,
+    "window_index":866,
+    "start_row":866,
+    "end_row":885,
+    "start_date":"081110",
+    "start_time":"210509",
+    "end_date":"081110",
+    "end_time":"210558",
+    "anomaly_score":0.4360246844,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_b5401cba52",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir32\/<BLK>"
+      },
+      {
+        "template_id":"tpl_c4c20edc4c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir33\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a931da0fda",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir57\/<BLK>"
+      },
+      {
+        "template_id":"tpl_790369a432",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir18\/<BLK>"
+      },
+      {
+        "template_id":"tpl_55a3970863",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir63\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":36,
+    "window_index":472,
+    "start_row":472,
+    "end_row":491,
+    "start_date":"081110",
+    "start_time":"103621",
+    "end_date":"081110",
+    "end_time":"103755",
+    "anomaly_score":0.4353235155,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_dd32cd6b71",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir16\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":37,
+    "window_index":461,
+    "start_row":461,
+    "end_row":480,
+    "start_date":"081110",
+    "start_time":"103553",
+    "end_date":"081110",
+    "end_time":"103659",
+    "anomaly_score":0.4353159619,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f419688859",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir13\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8284438024",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir50\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f644a21202",
+        "count":1,
+        "template":"BLOCK* NameSystem.allocateBlock: \/user\/root\/rand\/_temporary\/_task_200811101024_0001_m_000097_0\/part-<NUM>. <BLK>"
+      },
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":1,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      }
+    ]
+  },
+  {
+    "rank":38,
+    "window_index":874,
+    "start_row":874,
+    "end_row":893,
+    "start_date":"081110",
+    "start_time":"210534",
+    "end_date":"081110",
+    "end_time":"210710",
+    "anomaly_score":0.4349866126,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_85c340eec3",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir59\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3e56d2ab53",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      },
+      {
+        "template_id":"tpl_26e61dfed8",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir1\/<BLK>"
+      },
+      {
+        "template_id":"tpl_77e04dc41f",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir22\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":39,
+    "window_index":875,
+    "start_row":875,
+    "end_row":894,
+    "start_date":"081110",
+    "start_time":"210537",
+    "end_date":"081110",
+    "end_time":"210721",
+    "anomaly_score":0.4349844076,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_85c340eec3",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir59\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_c4c20edc4c",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir33\/<BLK>"
+      },
+      {
+        "template_id":"tpl_dd32cd6b71",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir16\/<BLK>"
+      },
+      {
+        "template_id":"tpl_26e61dfed8",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir1\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":40,
+    "window_index":466,
+    "start_row":466,
+    "end_row":485,
+    "start_date":"081110",
+    "start_time":"103600",
+    "end_date":"081110",
+    "end_time":"103731",
+    "anomaly_score":0.4344460814,
+    "is_anomaly":true,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_fc257507ea",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir53\/<BLK>"
+      },
+      {
+        "template_id":"tpl_382b796784",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir12\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":41,
+    "window_index":1865,
+    "start_row":1865,
+    "end_row":1884,
+    "start_date":"081111",
+    "start_time":"090034",
+    "end_date":"081111",
+    "end_time":"090223",
+    "anomaly_score":0.4343015035,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_2a2435644c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir36\/<BLK>"
+      },
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_5dbdaf1727",
+        "count":1,
+        "template":"PacketResponder <NUM> for block <BLK> terminating"
+      },
+      {
+        "template_id":"tpl_7e2edf9e0a",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir46\/<BLK>"
+      },
+      {
+        "template_id":"tpl_984fc8f9de",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir42\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":42,
+    "window_index":1866,
+    "start_row":1866,
+    "end_row":1885,
+    "start_date":"081111",
+    "start_time":"090056",
+    "end_date":"081111",
+    "end_time":"090229",
+    "anomaly_score":0.4343015035,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_a9df66df5d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir38\/<BLK>"
+      },
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2a2435644c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir36\/<BLK>"
+      },
+      {
+        "template_id":"tpl_5ba776b8b9",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir17\/<BLK>"
+      },
+      {
+        "template_id":"tpl_984fc8f9de",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir42\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":43,
+    "window_index":467,
+    "start_row":467,
+    "end_row":486,
+    "start_date":"081110",
+    "start_time":"103603",
+    "end_date":"081110",
+    "end_time":"103734",
+    "anomaly_score":0.4338659144,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b4d89c6710",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir37\/<BLK>"
+      },
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":1,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      }
+    ]
+  },
+  {
+    "rank":44,
+    "window_index":1869,
+    "start_row":1869,
+    "end_row":1888,
+    "start_date":"081111",
+    "start_time":"090118",
+    "end_date":"081111",
+    "end_time":"090816",
+    "anomaly_score":0.4338251737,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_343227e909",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir6\/<BLK>"
+      },
+      {
+        "template_id":"tpl_632f57fcfe",
+        "count":2,
+        "template":"BLOCK* NameSystem.addStoredBlock: blockMap updated: <IP> is added to <BLK> size <NUM>"
+      },
+      {
+        "template_id":"tpl_60489c33bb",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir47\/<BLK>"
+      },
+      {
+        "template_id":"tpl_c72aeadd17",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir61\/<BLK>"
+      },
+      {
+        "template_id":"tpl_a9df66df5d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir38\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":45,
+    "window_index":478,
+    "start_row":478,
+    "end_row":497,
+    "start_date":"081110",
+    "start_time":"103655",
+    "end_date":"081110",
+    "end_time":"103827",
+    "anomaly_score":0.4331366106,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":2,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_632f57fcfe",
+        "count":2,
+        "template":"BLOCK* NameSystem.addStoredBlock: blockMap updated: <IP> is added to <BLK> size <NUM>"
+      },
+      {
+        "template_id":"tpl_f644a21202",
+        "count":1,
+        "template":"BLOCK* NameSystem.allocateBlock: \/user\/root\/rand\/_temporary\/_task_200811101024_0001_m_000097_0\/part-<NUM>. <BLK>"
+      }
+    ]
+  },
+  {
+    "rank":46,
+    "window_index":464,
+    "start_row":464,
+    "end_row":483,
+    "start_date":"081110",
+    "start_time":"103557",
+    "end_date":"081110",
+    "end_time":"103719",
+    "anomaly_score":0.4325845426,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_95cd533991",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir21\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":47,
+    "window_index":870,
+    "start_row":870,
+    "end_row":889,
+    "start_date":"081110",
+    "start_time":"210515",
+    "end_date":"081110",
+    "end_time":"210608",
+    "anomaly_score":0.4321139579,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_c4c20edc4c",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir33\/<BLK>"
+      },
+      {
+        "template_id":"tpl_cda3c9ffcd",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir10\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3b61905fca",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir19\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8bf2325abc",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir27\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":48,
+    "window_index":862,
+    "start_row":862,
+    "end_row":881,
+    "start_date":"081110",
+    "start_time":"210442",
+    "end_date":"081110",
+    "end_time":"210549",
+    "anomaly_score":0.4320848931,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_0f39ca25aa",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir34\/<BLK>"
+      },
+      {
+        "template_id":"tpl_b5401cba52",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir32\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3e56d2ab53",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_3b61905fca",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir19\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":49,
+    "window_index":468,
+    "start_row":468,
+    "end_row":487,
+    "start_date":"081110",
+    "start_time":"103615",
+    "end_date":"081110",
+    "end_time":"103735",
+    "anomaly_score":0.4315876467,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_9057054aa5",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir40\/<BLK>"
+      },
+      {
+        "template_id":"tpl_e09fc70470",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir26\/<BLK>"
+      },
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_331bef29e9",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir29\/<BLK>"
+      }
+    ]
+  },
+  {
+    "rank":50,
+    "window_index":475,
+    "start_row":475,
+    "end_row":494,
+    "start_date":"081110",
+    "start_time":"103631",
+    "end_date":"081110",
+    "end_time":"103818",
+    "anomaly_score":0.4312689208,
+    "is_anomaly":false,
+    "top_templates":[
+      {
+        "template_id":"tpl_2989ab0c8d",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir15\/<BLK>"
+      },
+      {
+        "template_id":"tpl_be685b10cf",
+        "count":2,
+        "template":"Received block <BLK> of size <NUM> from \/<IP>"
+      },
+      {
+        "template_id":"tpl_8f69677669",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir30\/<BLK>"
+      },
+      {
+        "template_id":"tpl_f710b08c0b",
+        "count":2,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir0\/<BLK>"
+      },
+      {
+        "template_id":"tpl_0db348e9b7",
+        "count":1,
+        "template":"Deleting block <BLK> file \/mnt\/hadoop\/dfs\/data\/current\/subdir24\/<BLK>"
+      }
+    ]
+  }
+]
