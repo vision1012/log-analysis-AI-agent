@@ -1,0 +1,1810 @@
+{
+  "window_size": 20,
+  "contamination": 0.02,
+  "num_windows": 1981,
+  "num_templates": 192,
+  "top_k": 20,
+  "anomalies_detected": 40,
+  "top_anomaly_windows": [
+    {
+      "rank": 1,
+      "window_start": 454,
+      "window_end": 473,
+      "anomaly_score": 0.4551087468889929,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          164,
+          1,
+          "tpl_dd32cd6b71"
+        ],
+        [
+          179,
+          1,
+          "tpl_f710b08c0b"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          168,
+          1,
+          "tpl_e09fc70470"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3437475890798229344 file /mnt/hadoop/dfs/data/current/subdir57/blk_-3437475890798229344",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103534",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1492402439215451727 file /mnt/hadoop/dfs/data/current/subdir25/blk_-1492402439215451727",
+          "template_id": "tpl_5da3c3d10f"
+        },
+        {
+          "date": "081110",
+          "time": "103538",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4298255715894292387 file /mnt/hadoop/dfs/data/current/subdir38/blk_-4298255715894292387",
+          "template_id": "tpl_a9df66df5d"
+        },
+        {
+          "date": "081110",
+          "time": "103547",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4295805058711840933 file /mnt/hadoop/dfs/data/current/subdir0/blk_-4295805058711840933",
+          "template_id": "tpl_f710b08c0b"
+        },
+        {
+          "date": "081110",
+          "time": "103548",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_830855781964014378 file /mnt/hadoop/dfs/data/current/subdir48/blk_830855781964014378",
+          "template_id": "tpl_b678289f73"
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "window_start": 455,
+      "window_end": 474,
+      "anomaly_score": 0.453058771480957,
+      "top_templates": [
+        [
+          107,
+          2,
+          "tpl_9057054aa5"
+        ],
+        [
+          164,
+          1,
+          "tpl_dd32cd6b71"
+        ],
+        [
+          179,
+          1,
+          "tpl_f710b08c0b"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          168,
+          1,
+          "tpl_e09fc70470"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103534",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1492402439215451727 file /mnt/hadoop/dfs/data/current/subdir25/blk_-1492402439215451727",
+          "template_id": "tpl_5da3c3d10f"
+        },
+        {
+          "date": "081110",
+          "time": "103538",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4298255715894292387 file /mnt/hadoop/dfs/data/current/subdir38/blk_-4298255715894292387",
+          "template_id": "tpl_a9df66df5d"
+        },
+        {
+          "date": "081110",
+          "time": "103547",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4295805058711840933 file /mnt/hadoop/dfs/data/current/subdir0/blk_-4295805058711840933",
+          "template_id": "tpl_f710b08c0b"
+        },
+        {
+          "date": "081110",
+          "time": "103548",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_830855781964014378 file /mnt/hadoop/dfs/data/current/subdir48/blk_830855781964014378",
+          "template_id": "tpl_b678289f73"
+        },
+        {
+          "date": "081110",
+          "time": "103551",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_8291708741145026623 file /mnt/hadoop/dfs/data/current/subdir57/blk_8291708741145026623",
+          "template_id": "tpl_a931da0fda"
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "window_start": 452,
+      "window_end": 471,
+      "anomaly_score": 0.450448884880036,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          35,
+          1,
+          "tpl_343227e909"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103527",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2425070029518924403 file /mnt/hadoop/dfs/data/current/subdir39/blk_-2425070029518924403",
+          "template_id": "tpl_d4eb5279de"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_826351419727053015 file /mnt/hadoop/dfs/data/current/subdir6/blk_826351419727053015",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3437475890798229344 file /mnt/hadoop/dfs/data/current/subdir57/blk_-3437475890798229344",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103534",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1492402439215451727 file /mnt/hadoop/dfs/data/current/subdir25/blk_-1492402439215451727",
+          "template_id": "tpl_5da3c3d10f"
+        },
+        {
+          "date": "081110",
+          "time": "103538",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4298255715894292387 file /mnt/hadoop/dfs/data/current/subdir38/blk_-4298255715894292387",
+          "template_id": "tpl_a9df66df5d"
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "window_start": 453,
+      "window_end": 472,
+      "anomaly_score": 0.4500590582084959,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          35,
+          1,
+          "tpl_343227e909"
+        ],
+        [
+          168,
+          1,
+          "tpl_e09fc70470"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_826351419727053015 file /mnt/hadoop/dfs/data/current/subdir6/blk_826351419727053015",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3437475890798229344 file /mnt/hadoop/dfs/data/current/subdir57/blk_-3437475890798229344",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103534",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1492402439215451727 file /mnt/hadoop/dfs/data/current/subdir25/blk_-1492402439215451727",
+          "template_id": "tpl_5da3c3d10f"
+        },
+        {
+          "date": "081110",
+          "time": "103538",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4298255715894292387 file /mnt/hadoop/dfs/data/current/subdir38/blk_-4298255715894292387",
+          "template_id": "tpl_a9df66df5d"
+        },
+        {
+          "date": "081110",
+          "time": "103547",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4295805058711840933 file /mnt/hadoop/dfs/data/current/subdir0/blk_-4295805058711840933",
+          "template_id": "tpl_f710b08c0b"
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "window_start": 470,
+      "window_end": 489,
+      "anomaly_score": 0.4489769831405283,
+      "top_templates": [
+        [
+          168,
+          2,
+          "tpl_e09fc70470"
+        ],
+        [
+          105,
+          2,
+          "tpl_8f69677669"
+        ],
+        [
+          26,
+          2,
+          "tpl_2989ab0c8d"
+        ],
+        [
+          179,
+          2,
+          "tpl_f710b08c0b"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ],
+        [
+          143,
+          1,
+          "tpl_be685b10cf"
+        ],
+        [
+          39,
+          1,
+          "tpl_382b796784"
+        ],
+        [
+          101,
+          1,
+          "tpl_8bf2325abc"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103618",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_2278708746675870163 file /mnt/hadoop/dfs/data/current/subdir27/blk_2278708746675870163",
+          "template_id": "tpl_8bf2325abc"
+        },
+        {
+          "date": "081110",
+          "time": "103621",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_153508158653341141 file /mnt/hadoop/dfs/data/current/subdir50/blk_153508158653341141",
+          "template_id": "tpl_8284438024"
+        },
+        {
+          "date": "081110",
+          "time": "103621",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1775264355226395799 file /mnt/hadoop/dfs/data/current/subdir26/blk_-1775264355226395799",
+          "template_id": "tpl_e09fc70470"
+        },
+        {
+          "date": "081110",
+          "time": "103626",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1599621098605751235 file /mnt/hadoop/dfs/data/current/subdir16/blk_-1599621098605751235",
+          "template_id": "tpl_dd32cd6b71"
+        },
+        {
+          "date": "081110",
+          "time": "103631",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1111344660779690782 file /mnt/hadoop/dfs/data/current/subdir40/blk_-1111344660779690782",
+          "template_id": "tpl_9057054aa5"
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "window_start": 456,
+      "window_end": 475,
+      "anomaly_score": 0.44820242028002577,
+      "top_templates": [
+        [
+          107,
+          2,
+          "tpl_9057054aa5"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          105,
+          1,
+          "tpl_8f69677669"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          164,
+          1,
+          "tpl_dd32cd6b71"
+        ],
+        [
+          175,
+          1,
+          "tpl_f419688859"
+        ],
+        [
+          101,
+          1,
+          "tpl_8bf2325abc"
+        ],
+        [
+          127,
+          1,
+          "tpl_a931da0fda"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103538",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4298255715894292387 file /mnt/hadoop/dfs/data/current/subdir38/blk_-4298255715894292387",
+          "template_id": "tpl_a9df66df5d"
+        },
+        {
+          "date": "081110",
+          "time": "103547",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4295805058711840933 file /mnt/hadoop/dfs/data/current/subdir0/blk_-4295805058711840933",
+          "template_id": "tpl_f710b08c0b"
+        },
+        {
+          "date": "081110",
+          "time": "103548",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_830855781964014378 file /mnt/hadoop/dfs/data/current/subdir48/blk_830855781964014378",
+          "template_id": "tpl_b678289f73"
+        },
+        {
+          "date": "081110",
+          "time": "103551",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_8291708741145026623 file /mnt/hadoop/dfs/data/current/subdir57/blk_8291708741145026623",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103552",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-921231092429668424 file /mnt/hadoop/dfs/data/current/subdir23/blk_-921231092429668424",
+          "template_id": "tpl_43dd433526"
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "window_start": 457,
+      "window_end": 476,
+      "anomaly_score": 0.4479603913259631,
+      "top_templates": [
+        [
+          107,
+          2,
+          "tpl_9057054aa5"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          179,
+          1,
+          "tpl_f710b08c0b"
+        ],
+        [
+          26,
+          1,
+          "tpl_2989ab0c8d"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          164,
+          1,
+          "tpl_dd32cd6b71"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103547",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4295805058711840933 file /mnt/hadoop/dfs/data/current/subdir0/blk_-4295805058711840933",
+          "template_id": "tpl_f710b08c0b"
+        },
+        {
+          "date": "081110",
+          "time": "103548",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_830855781964014378 file /mnt/hadoop/dfs/data/current/subdir48/blk_830855781964014378",
+          "template_id": "tpl_b678289f73"
+        },
+        {
+          "date": "081110",
+          "time": "103551",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_8291708741145026623 file /mnt/hadoop/dfs/data/current/subdir57/blk_8291708741145026623",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103552",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-921231092429668424 file /mnt/hadoop/dfs/data/current/subdir23/blk_-921231092429668424",
+          "template_id": "tpl_43dd433526"
+        },
+        {
+          "date": "081110",
+          "time": "103553",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1581605246928123722 file /mnt/hadoop/dfs/data/current/subdir13/blk_-1581605246928123722",
+          "template_id": "tpl_f419688859"
+        }
+      ]
+    },
+    {
+      "rank": 8,
+      "window_start": 1867,
+      "window_end": 1886,
+      "anomaly_score": 0.447762411691853,
+      "top_templates": [
+        [
+          27,
+          2,
+          "tpl_2a2435644c"
+        ],
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          95,
+          1,
+          "tpl_85c340eec3"
+        ],
+        [
+          153,
+          1,
+          "tpl_cda3c9ffcd"
+        ],
+        [
+          21,
+          1,
+          "tpl_26e61dfed8"
+        ],
+        [
+          41,
+          1,
+          "tpl_3b61905fca"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          62,
+          1,
+          "tpl_5ba776b8b9"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081111",
+          "time": "090113",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_1369784431092292099 file /mnt/hadoop/dfs/data/current/subdir36/blk_1369784431092292099",
+          "template_id": "tpl_2a2435644c"
+        },
+        {
+          "date": "081111",
+          "time": "090113",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-8060252929692927663 file /mnt/hadoop/dfs/data/current/subdir21/blk_-8060252929692927663",
+          "template_id": "tpl_95cd533991"
+        },
+        {
+          "date": "081111",
+          "time": "090118",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5344266425789048231 file /mnt/hadoop/dfs/data/current/subdir47/blk_-5344266425789048231",
+          "template_id": "tpl_60489c33bb"
+        },
+        {
+          "date": "081111",
+          "time": "090126",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2518425063392446785 file /mnt/hadoop/dfs/data/current/subdir6/blk_-2518425063392446785",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081111",
+          "time": "090129",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5598693099021996971 file /mnt/hadoop/dfs/data/current/subdir19/blk_-5598693099021996971",
+          "template_id": "tpl_3b61905fca"
+        }
+      ]
+    },
+    {
+      "rank": 9,
+      "window_start": 473,
+      "window_end": 492,
+      "anomaly_score": 0.44597805538630014,
+      "top_templates": [
+        [
+          179,
+          2,
+          "tpl_f710b08c0b"
+        ],
+        [
+          26,
+          2,
+          "tpl_2989ab0c8d"
+        ],
+        [
+          105,
+          2,
+          "tpl_8f69677669"
+        ],
+        [
+          95,
+          1,
+          "tpl_85c340eec3"
+        ],
+        [
+          135,
+          1,
+          "tpl_b484417a1c"
+        ],
+        [
+          164,
+          1,
+          "tpl_dd32cd6b71"
+        ],
+        [
+          168,
+          1,
+          "tpl_e09fc70470"
+        ],
+        [
+          74,
+          1,
+          "tpl_68445f1d33"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103626",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1599621098605751235 file /mnt/hadoop/dfs/data/current/subdir16/blk_-1599621098605751235",
+          "template_id": "tpl_dd32cd6b71"
+        },
+        {
+          "date": "081110",
+          "time": "103631",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1111344660779690782 file /mnt/hadoop/dfs/data/current/subdir40/blk_-1111344660779690782",
+          "template_id": "tpl_9057054aa5"
+        },
+        {
+          "date": "081110",
+          "time": "103631",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_3585588704565901062 file /mnt/hadoop/dfs/data/current/subdir15/blk_3585588704565901062",
+          "template_id": "tpl_2989ab0c8d"
+        },
+        {
+          "date": "081110",
+          "time": "103634",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_2756799797410851893 file /mnt/hadoop/dfs/data/current/subdir24/blk_2756799797410851893",
+          "template_id": "tpl_0db348e9b7"
+        },
+        {
+          "date": "081110",
+          "time": "103641",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_7323287581932922676 file /mnt/hadoop/dfs/data/current/subdir12/blk_7323287581932922676",
+          "template_id": "tpl_382b796784"
+        }
+      ]
+    },
+    {
+      "rank": 10,
+      "window_start": 471,
+      "window_end": 490,
+      "anomaly_score": 0.4454338166716013,
+      "top_templates": [
+        [
+          168,
+          2,
+          "tpl_e09fc70470"
+        ],
+        [
+          26,
+          2,
+          "tpl_2989ab0c8d"
+        ],
+        [
+          105,
+          2,
+          "tpl_8f69677669"
+        ],
+        [
+          179,
+          2,
+          "tpl_f710b08c0b"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ],
+        [
+          143,
+          1,
+          "tpl_be685b10cf"
+        ],
+        [
+          107,
+          1,
+          "tpl_9057054aa5"
+        ],
+        [
+          39,
+          1,
+          "tpl_382b796784"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103621",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_153508158653341141 file /mnt/hadoop/dfs/data/current/subdir50/blk_153508158653341141",
+          "template_id": "tpl_8284438024"
+        },
+        {
+          "date": "081110",
+          "time": "103621",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1775264355226395799 file /mnt/hadoop/dfs/data/current/subdir26/blk_-1775264355226395799",
+          "template_id": "tpl_e09fc70470"
+        },
+        {
+          "date": "081110",
+          "time": "103626",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1599621098605751235 file /mnt/hadoop/dfs/data/current/subdir16/blk_-1599621098605751235",
+          "template_id": "tpl_dd32cd6b71"
+        },
+        {
+          "date": "081110",
+          "time": "103631",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1111344660779690782 file /mnt/hadoop/dfs/data/current/subdir40/blk_-1111344660779690782",
+          "template_id": "tpl_9057054aa5"
+        },
+        {
+          "date": "081110",
+          "time": "103631",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_3585588704565901062 file /mnt/hadoop/dfs/data/current/subdir15/blk_3585588704565901062",
+          "template_id": "tpl_2989ab0c8d"
+        }
+      ]
+    },
+    {
+      "rank": 11,
+      "window_start": 448,
+      "window_end": 467,
+      "anomaly_score": 0.4448368378389133,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          175,
+          1,
+          "tpl_f419688859"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          46,
+          1,
+          "tpl_3e56d2ab53"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-7096508472270520039 file /mnt/hadoop/dfs/data/current/subdir20/blk_-7096508472270520039",
+          "template_id": "tpl_71772ffe0c"
+        },
+        {
+          "date": "081110",
+          "time": "103444",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1939956833921604216 file /mnt/hadoop/dfs/data/current/subdir34/blk_-1939956833921604216",
+          "template_id": "tpl_0f39ca25aa"
+        },
+        {
+          "date": "081110",
+          "time": "103512",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3860035787700398391 file /mnt/hadoop/dfs/data/current/subdir6/blk_-3860035787700398391",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103524",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6008397446568765070 file /mnt/hadoop/dfs/data/current/blk_-6008397446568765070",
+          "template_id": "tpl_3e56d2ab53"
+        },
+        {
+          "date": "081110",
+          "time": "103527",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2425070029518924403 file /mnt/hadoop/dfs/data/current/subdir39/blk_-2425070029518924403",
+          "template_id": "tpl_d4eb5279de"
+        }
+      ]
+    },
+    {
+      "rank": 12,
+      "window_start": 445,
+      "window_end": 464,
+      "anomaly_score": 0.4445020594726625,
+      "top_templates": [
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          137,
+          1,
+          "tpl_b5401cba52"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103432",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4223625526513535681 file /mnt/hadoop/dfs/data/current/subdir60/blk_-4223625526513535681",
+          "template_id": "tpl_bbe3ef6a66"
+        },
+        {
+          "date": "081110",
+          "time": "103437",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6400421658804613208 file /mnt/hadoop/dfs/data/current/subdir29/blk_-6400421658804613208",
+          "template_id": "tpl_331bef29e9"
+        },
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5880591395067598620 file /mnt/hadoop/dfs/data/current/subdir32/blk_-5880591395067598620",
+          "template_id": "tpl_b5401cba52"
+        },
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-7096508472270520039 file /mnt/hadoop/dfs/data/current/subdir20/blk_-7096508472270520039",
+          "template_id": "tpl_71772ffe0c"
+        },
+        {
+          "date": "081110",
+          "time": "103444",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1939956833921604216 file /mnt/hadoop/dfs/data/current/subdir34/blk_-1939956833921604216",
+          "template_id": "tpl_0f39ca25aa"
+        }
+      ]
+    },
+    {
+      "rank": 13,
+      "window_start": 444,
+      "window_end": 463,
+      "anomaly_score": 0.4424606249550144,
+      "top_templates": [
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          105,
+          1,
+          "tpl_8f69677669"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103430",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4368236874477798428 file /mnt/hadoop/dfs/data/current/subdir33/blk_-4368236874477798428",
+          "template_id": "tpl_c4c20edc4c"
+        },
+        {
+          "date": "081110",
+          "time": "103432",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-4223625526513535681 file /mnt/hadoop/dfs/data/current/subdir60/blk_-4223625526513535681",
+          "template_id": "tpl_bbe3ef6a66"
+        },
+        {
+          "date": "081110",
+          "time": "103437",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6400421658804613208 file /mnt/hadoop/dfs/data/current/subdir29/blk_-6400421658804613208",
+          "template_id": "tpl_331bef29e9"
+        },
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5880591395067598620 file /mnt/hadoop/dfs/data/current/subdir32/blk_-5880591395067598620",
+          "template_id": "tpl_b5401cba52"
+        },
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-7096508472270520039 file /mnt/hadoop/dfs/data/current/subdir20/blk_-7096508472270520039",
+          "template_id": "tpl_71772ffe0c"
+        }
+      ]
+    },
+    {
+      "rank": 14,
+      "window_start": 458,
+      "window_end": 477,
+      "anomaly_score": 0.4424523974552196,
+      "top_templates": [
+        [
+          107,
+          2,
+          "tpl_9057054aa5"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          168,
+          1,
+          "tpl_e09fc70470"
+        ],
+        [
+          105,
+          1,
+          "tpl_8f69677669"
+        ],
+        [
+          39,
+          1,
+          "tpl_382b796784"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          175,
+          1,
+          "tpl_f419688859"
+        ],
+        [
+          127,
+          1,
+          "tpl_a931da0fda"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103548",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_830855781964014378 file /mnt/hadoop/dfs/data/current/subdir48/blk_830855781964014378",
+          "template_id": "tpl_b678289f73"
+        },
+        {
+          "date": "081110",
+          "time": "103551",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_8291708741145026623 file /mnt/hadoop/dfs/data/current/subdir57/blk_8291708741145026623",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103552",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-921231092429668424 file /mnt/hadoop/dfs/data/current/subdir23/blk_-921231092429668424",
+          "template_id": "tpl_43dd433526"
+        },
+        {
+          "date": "081110",
+          "time": "103553",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1581605246928123722 file /mnt/hadoop/dfs/data/current/subdir13/blk_-1581605246928123722",
+          "template_id": "tpl_f419688859"
+        },
+        {
+          "date": "081110",
+          "time": "103554",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2445347158368483245 file /mnt/hadoop/dfs/data/current/subdir30/blk_-2445347158368483245",
+          "template_id": "tpl_8f69677669"
+        }
+      ]
+    },
+    {
+      "rank": 15,
+      "window_start": 451,
+      "window_end": 470,
+      "anomaly_score": 0.442323044751373,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          46,
+          1,
+          "tpl_3e56d2ab53"
+        ],
+        [
+          101,
+          1,
+          "tpl_8bf2325abc"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          35,
+          1,
+          "tpl_343227e909"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103524",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6008397446568765070 file /mnt/hadoop/dfs/data/current/blk_-6008397446568765070",
+          "template_id": "tpl_3e56d2ab53"
+        },
+        {
+          "date": "081110",
+          "time": "103527",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2425070029518924403 file /mnt/hadoop/dfs/data/current/subdir39/blk_-2425070029518924403",
+          "template_id": "tpl_d4eb5279de"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_826351419727053015 file /mnt/hadoop/dfs/data/current/subdir6/blk_826351419727053015",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3437475890798229344 file /mnt/hadoop/dfs/data/current/subdir57/blk_-3437475890798229344",
+          "template_id": "tpl_a931da0fda"
+        },
+        {
+          "date": "081110",
+          "time": "103534",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1492402439215451727 file /mnt/hadoop/dfs/data/current/subdir25/blk_-1492402439215451727",
+          "template_id": "tpl_5da3c3d10f"
+        }
+      ]
+    },
+    {
+      "rank": 16,
+      "window_start": 450,
+      "window_end": 469,
+      "anomaly_score": 0.441101645815951,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          46,
+          1,
+          "tpl_3e56d2ab53"
+        ],
+        [
+          175,
+          1,
+          "tpl_f419688859"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ],
+        [
+          156,
+          1,
+          "tpl_d4eb5279de"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103512",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3860035787700398391 file /mnt/hadoop/dfs/data/current/subdir6/blk_-3860035787700398391",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103524",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6008397446568765070 file /mnt/hadoop/dfs/data/current/blk_-6008397446568765070",
+          "template_id": "tpl_3e56d2ab53"
+        },
+        {
+          "date": "081110",
+          "time": "103527",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2425070029518924403 file /mnt/hadoop/dfs/data/current/subdir39/blk_-2425070029518924403",
+          "template_id": "tpl_d4eb5279de"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_826351419727053015 file /mnt/hadoop/dfs/data/current/subdir6/blk_826351419727053015",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103533",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3437475890798229344 file /mnt/hadoop/dfs/data/current/subdir57/blk_-3437475890798229344",
+          "template_id": "tpl_a931da0fda"
+        }
+      ]
+    },
+    {
+      "rank": 17,
+      "window_start": 447,
+      "window_end": 466,
+      "anomaly_score": 0.44104446264032204,
+      "top_templates": [
+        [
+          127,
+          2,
+          "tpl_a931da0fda"
+        ],
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          175,
+          1,
+          "tpl_f419688859"
+        ],
+        [
+          138,
+          1,
+          "tpl_b678289f73"
+        ],
+        [
+          49,
+          1,
+          "tpl_43dd433526"
+        ],
+        [
+          46,
+          1,
+          "tpl_3e56d2ab53"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5880591395067598620 file /mnt/hadoop/dfs/data/current/subdir32/blk_-5880591395067598620",
+          "template_id": "tpl_b5401cba52"
+        },
+        {
+          "date": "081110",
+          "time": "103442",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-7096508472270520039 file /mnt/hadoop/dfs/data/current/subdir20/blk_-7096508472270520039",
+          "template_id": "tpl_71772ffe0c"
+        },
+        {
+          "date": "081110",
+          "time": "103444",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1939956833921604216 file /mnt/hadoop/dfs/data/current/subdir34/blk_-1939956833921604216",
+          "template_id": "tpl_0f39ca25aa"
+        },
+        {
+          "date": "081110",
+          "time": "103512",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3860035787700398391 file /mnt/hadoop/dfs/data/current/subdir6/blk_-3860035787700398391",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081110",
+          "time": "103524",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6008397446568765070 file /mnt/hadoop/dfs/data/current/blk_-6008397446568765070",
+          "template_id": "tpl_3e56d2ab53"
+        }
+      ]
+    },
+    {
+      "rank": 18,
+      "window_start": 1868,
+      "window_end": 1887,
+      "anomaly_score": 0.4408460689084545,
+      "top_templates": [
+        [
+          35,
+          2,
+          "tpl_343227e909"
+        ],
+        [
+          95,
+          1,
+          "tpl_85c340eec3"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          130,
+          1,
+          "tpl_a9df66df5d"
+        ],
+        [
+          117,
+          1,
+          "tpl_984fc8f9de"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          111,
+          1,
+          "tpl_95499e398b"
+        ],
+        [
+          87,
+          1,
+          "tpl_7e2edf9e0a"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081111",
+          "time": "090113",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-8060252929692927663 file /mnt/hadoop/dfs/data/current/subdir21/blk_-8060252929692927663",
+          "template_id": "tpl_95cd533991"
+        },
+        {
+          "date": "081111",
+          "time": "090118",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5344266425789048231 file /mnt/hadoop/dfs/data/current/subdir47/blk_-5344266425789048231",
+          "template_id": "tpl_60489c33bb"
+        },
+        {
+          "date": "081111",
+          "time": "090126",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-2518425063392446785 file /mnt/hadoop/dfs/data/current/subdir6/blk_-2518425063392446785",
+          "template_id": "tpl_343227e909"
+        },
+        {
+          "date": "081111",
+          "time": "090129",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-5598693099021996971 file /mnt/hadoop/dfs/data/current/subdir19/blk_-5598693099021996971",
+          "template_id": "tpl_3b61905fca"
+        },
+        {
+          "date": "081111",
+          "time": "090131",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_901963876338651405 file /mnt/hadoop/dfs/data/current/subdir1/blk_901963876338651405",
+          "template_id": "tpl_26e61dfed8"
+        }
+      ]
+    },
+    {
+      "rank": 19,
+      "window_start": 463,
+      "window_end": 482,
+      "anomaly_score": 0.44032788988708427,
+      "top_templates": [
+        [
+          107,
+          2,
+          "tpl_9057054aa5"
+        ],
+        [
+          136,
+          1,
+          "tpl_b4d89c6710"
+        ],
+        [
+          177,
+          1,
+          "tpl_f644a21202"
+        ],
+        [
+          67,
+          1,
+          "tpl_60489c33bb"
+        ],
+        [
+          26,
+          1,
+          "tpl_2989ab0c8d"
+        ],
+        [
+          113,
+          1,
+          "tpl_95cd533991"
+        ],
+        [
+          164,
+          1,
+          "tpl_dd32cd6b71"
+        ],
+        [
+          34,
+          1,
+          "tpl_331bef29e9"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103554",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-1897524391075610396 file /mnt/hadoop/dfs/data/current/subdir47/blk_-1897524391075610396",
+          "template_id": "tpl_60489c33bb"
+        },
+        {
+          "date": "081110",
+          "time": "103557",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-8588908000680498 file /mnt/hadoop/dfs/data/current/subdir21/blk_-8588908000680498",
+          "template_id": "tpl_95cd533991"
+        },
+        {
+          "date": "081110",
+          "time": "103558",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_561417755647618727 file /mnt/hadoop/dfs/data/current/subdir4/blk_561417755647618727",
+          "template_id": "tpl_86a6a8efae"
+        },
+        {
+          "date": "081110",
+          "time": "103600",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-6127741703501838658 file /mnt/hadoop/dfs/data/current/subdir53/blk_-6127741703501838658",
+          "template_id": "tpl_fc257507ea"
+        },
+        {
+          "date": "081110",
+          "time": "103603",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_-3636681193077858741 file /mnt/hadoop/dfs/data/current/subdir37/blk_-3636681193077858741",
+          "template_id": "tpl_b4d89c6710"
+        }
+      ]
+    },
+    {
+      "rank": 20,
+      "window_start": 476,
+      "window_end": 495,
+      "anomaly_score": 0.4401351737764231,
+      "top_templates": [
+        [
+          105,
+          2,
+          "tpl_8f69677669"
+        ],
+        [
+          143,
+          2,
+          "tpl_be685b10cf"
+        ],
+        [
+          179,
+          2,
+          "tpl_f710b08c0b"
+        ],
+        [
+          95,
+          1,
+          "tpl_85c340eec3"
+        ],
+        [
+          177,
+          1,
+          "tpl_f644a21202"
+        ],
+        [
+          74,
+          1,
+          "tpl_68445f1d33"
+        ],
+        [
+          70,
+          1,
+          "tpl_632f57fcfe"
+        ],
+        [
+          135,
+          1,
+          "tpl_b484417a1c"
+        ]
+      ],
+      "preview_first5": [
+        {
+          "date": "081110",
+          "time": "103634",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_2756799797410851893 file /mnt/hadoop/dfs/data/current/subdir24/blk_2756799797410851893",
+          "template_id": "tpl_0db348e9b7"
+        },
+        {
+          "date": "081110",
+          "time": "103641",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_7323287581932922676 file /mnt/hadoop/dfs/data/current/subdir12/blk_7323287581932922676",
+          "template_id": "tpl_382b796784"
+        },
+        {
+          "date": "081110",
+          "time": "103655",
+          "level": "INFO",
+          "component": "dfs.DataNode$PacketResponder",
+          "message": "Received block blk_-4935573595350235765 of size 67108864 from /10.251.123.195",
+          "template_id": "tpl_be685b10cf"
+        },
+        {
+          "date": "081110",
+          "time": "103657",
+          "level": "INFO",
+          "component": "dfs.FSNamesystem",
+          "message": "BLOCK* NameSystem.allocateBlock: /user/root/rand/_temporary/_task_200811101024_0001_m_000097_0/part-00097. blk_496376132244907301",
+          "template_id": "tpl_f644a21202"
+        },
+        {
+          "date": "081110",
+          "time": "103659",
+          "level": "INFO",
+          "component": "dfs.FSDataset",
+          "message": "Deleting block blk_2731617036199392057 file /mnt/hadoop/dfs/data/current/subdir39/blk_2731617036199392057",
+          "template_id": "tpl_d4eb5279de"
+        }
+      ]
+    }
+  ]
+}
