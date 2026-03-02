@@ -10,6 +10,128 @@ An intelligent, end-to-end **AI-powered log analysis system** designed to stream
 
 ---
 
+## 🏗️ Project Architecture
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                        │
+│         (CLI / REST API / Future: Desktop App, Mobile App)                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              API LAYER (FastAPI)                                 │
+│  POST /api/v1/jobs  │  GET /jobs/{id}  │  GET /report  │  GET /artifacts         │
+│  Middleware: CORS, Observability (X-Request-Id, logging)                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           AGENT / PIPELINE LAYER                                 │
+│  Job Store  │  Runner (background)  │  Worker (orchestrator)                     │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                    ┌───────────────────┴───────────────────┐
+                    ▼                                       ▼
+┌──────────────────────────────┐         ┌──────────────────────────────────────┐
+│   HEURISTIC MODE             │         │   RAG / LLM MODE                      │
+│   Heuristic Planner          │         │   Retrieval → Investigation → Reporter │
+│   (keyword → tool mapping)   │         │   Vector store, chunker, embedder      │
+└──────────────────────────────┘         └──────────────────────────────────────┘
+                    │                                       │
+                    └───────────────────┬───────────────────┘
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         TOOL EXECUTOR + TOOL REGISTRY                            │
+│  time_slice │ search_keyword │ filter_log_level │ log_summary │ stacktrace       │
+│  error_code │ error_lines │ retrieve_context                                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         UTILITIES LAYER (run_* functions)                        │
+│  Core log processing: slice_by_time, filter_by_log_level, extract_stacktraces   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         MACHINE LEARNING LAYER (optional)                         │
+│  HDFS parsing │ Template extraction │ IsolationForest │ Anomaly inference        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ✅ Implemented Components
+
+### 1. API Layer
+- **FastAPI** app with CORS, observability middleware
+- **Jobs router**: `POST /api/v1/jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/report`, `GET /jobs/{id}/artifacts`
+- **Health router**: `/health`
+- **Job store** (in-memory) and **runner** (background execution)
+- **Schemas**: JobRequest, JobResponse, artifact metadata
+
+### 2. Agent Layer
+- **Worker** (`agent/runtime/worker.py`): Orchestrates job execution, resume support, idempotency
+- **Planner router**: Heuristic or LLM mode
+- **Heuristic planner**: Keyword-based tool selection (timeout, error, stacktrace, etc.)
+- **LLM planner**: LLM-based tool selection (Ollama/LLaMA client)
+- **Tool registry** + **tool executor**: Maps tool names to `run_*()` functions, validates results
+- **RAG pipeline**:
+  - **Retrieval agent**: Chunk logs → embed → vector store → retrieve context
+  - **Investigation agent**: LLM analysis of retrieved context
+  - **Reporter agent**: Generate markdown report
+- **Storage**: Job directories (`runs/<job_id>/`), artifact paths, plan persistence
+
+### 3. Utilities (Log Tools)
+| Tool | Description |
+|------|-------------|
+| `run_time_slice` | Filter logs by time range |
+| `run_search_keyword` | Search by keyword(s) |
+| `run_filter_log_level` | Filter by ERROR, WARN, INFO, etc. |
+| `run_log_summary` | AI-driven log summary |
+| `run_stacktrace` | Extract and analyze stack traces |
+| `run_error_code_search` | Search by error code(s) |
+| `run_error_lines` | Extract error lines |
+| `retrieve_context` | RAG retrieval from indexed logs |
+
+### 4. Machine Learning
+- **HDFS log parsing** (notebooks 01–04): Parse → features → train IsolationForest → results
+- **Template extraction** (Drain-style), **window features**, **encoder**
+- **IsolationForest** model for anomaly detection on HDFS block traces
+- **Pipelines**: `train_anomaly.py`, `infer_anomaly.py` (scaffolded)
+- **Data**: HDFS_v1 dataset support, processed outputs in `machine_learning/data/`
+
+### 5. Testing & Verification
+- **Pipeline verification** (`scripts/verify_pipeline.py`): Heuristic, LLM graceful failure, resume
+- **API tests** (`code_testing/test_api.py`), schema contracts, RAG chunker, planner tests
+
+### 6. Documentation & Mockups
+- **Docs**: Architecture, pipeline flow, job workflow, RAG design, tech stack
+- **Desktop UI mockups** (`docs/desktop_ui_mockups.html`)
+- **Mobile UI mockups** (`docs/mobile_ui_mockups.html`)
+- **AI roadmap** (`roadmaps/AI_roadmap.html`)
+
+---
+
+## 🔮 To Be Implemented
+
+| Area | Items |
+|------|-------|
+| **Desktop App** | Interactive desktop app (Electron/Tauri) – mockups exist |
+| **Mobile App** | Mobile UI – mockups exist |
+| **Log Ingestion** | Automated pipeline for continuous log ingestion |
+| **Real-time Monitoring** | Real-time log streaming with alerts |
+| **Advanced RCA** | LLM-enhanced root-cause analysis (deeper reasoning) |
+| **Visualization** | Dashboard for anomalies, trends, and metrics |
+| **ML Integration** | Wire ML anomaly detection into API/agent (train/infer pipelines) |
+| **CI/CD** | Intelligent CI/CD pipeline integration |
+| **Production API** | Persistent job store, queue (Redis/Celery), auth |
+
+---
+
 ## ✨ Key Features  
 
 ### 🔹 ErrorSplitter  
@@ -44,30 +166,6 @@ Centralized entry point providing menu-driven access to all log analysis utiliti
 
 ---
 
-## 🏗️ System Architecture
-
-The following diagram illustrates the end-to-end flow of the log analysis system:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
----
-
 ## 📂 Dataset Sources  
 
 We use publicly available datasets for training and benchmarking:
@@ -82,25 +180,47 @@ We use publicly available datasets for training and benchmarking:
 
 ```text
 log-analysis-AI-agent/
-├── 🤖 agent/
-│   ├── agent_core.py        # Core agent orchestration
-│   ├── reasoning.py         # Logic and reasoning modules
-│   └── tools.py             # Utility tools for the agent
-├── 💾 data/
-│   ├── 📥 input/            # Directory for raw log files
-│   └── 📤 output/           # Directory for analysis results
-├── 🖥️ ui/
-│   └── app.py               # Main application interface
-├── ⚙️ utilities/
-│   ├── error_code.py         # Search and extract error codes
-│   ├── error_lines.py        # Extract specific error lines
-│   ├── filter_log_level.py  # Filter logs by log level (INFO, ERROR, etc.)
-│   ├── log_summary.py       # Generate comprehensive log summaries
-│   ├── log_utility_main.py  # Main entry point - unified access to all utilities
+├── api/                     # FastAPI backend
+│   ├── main.py              # App entry, CORS, middleware
+│   ├── routers/             # health, jobs
+│   ├── services/            # job_store, runner
+│   ├── schemas/             # JobRequest, JobResponse
+│   └── core/                # paths, config
+├── agent/                   # AI agent (RAG, planning, tools)
+│   ├── llm/                 # LLaMA, Ollama clients
+│   ├── planner/             # heuristic_planner, llm_planner, planner_router
+│   ├── rag/                 # chunker, embedder, retriever, vector_store, index_manager
+│   ├── roles/               # retrieval_agent, investigation_agent, reporter_agent
+│   └── runtime/             # worker, tool_executor, tool_registry, storage, job_models
+├── machine_learning/        # ML anomaly detection
+│   ├── data/                # parser, hdfs_loader, labels
+│   ├── features/            # templates, vectorize, embeddings
+│   ├── models/              # isolation_forest, evaluator
+│   ├── pipelines/           # train_anomaly, infer_anomaly
+│   └── config.py
+├── notebooks/               # ML pipeline notebooks
+│   ├── 01_parse_hdfs.ipynb
+│   ├── 02_build_features.ipynb
+│   ├── 03_train_isoforest.ipynb
+│   └── 04_results_isoforest.ipynb
+├── utilities/               # Log analysis tools
+│   ├── error_code.py        # Search and extract error codes
+│   ├── error_lines.py       # Extract specific error lines
+│   ├── filter_log_level.py  # Filter logs by log level
+│   ├── log_summary.py       # Generate log summaries
+│   ├── log_utility_main.py  # Unified CLI entry point
 │   ├── search_on_keyword.py # Keyword-based search
-│   ├── stacktrace.py        # Stacktrace parsing and analysis
-│   └── time_slice.py        # Filter logs by time windows
-└── 📄 README.md             # Project documentation
+│   ├── stacktrace.py        # Stacktrace parsing
+│   ├── time_slice.py        # Filter logs by time windows
+│   └── retrieve_context.py  # RAG retrieval
+├── code_testing/            # Tests (API, pipeline, RAG, utilities)
+├── docs/                    # Architecture, mockups, workflows
+├── roadmaps/                # AI_roadmap.html
+├── scripts/                 # verify_pipeline, run_job, smoke tests
+├── data/                    # Input/output logs
+├── output/                  # Indexes, vector store
+├── runs/                    # Job run data (runs/<job_id>/)
+└── README.md
 ```
 
 ## Safety Check
@@ -237,19 +357,6 @@ curl http://localhost:8000/api/v1/jobs/{job_id}
 # Get final report
 curl http://localhost:8000/api/v1/jobs/{job_id}/report
 ```
-
----
-
-## 🔮 Coming Soon  
-
-- Interective Desktop App 
-- Automated pipeline for log ingestion  
-- Real-time log monitoring system with alerts  
-- LLM-enhanced advanced Root Cause Analysis
-- Visualization dashboard for anomalies
-- Anomaly Detection
-- Intelligent CI/Cd pipeline
-  
 
 ---
 
