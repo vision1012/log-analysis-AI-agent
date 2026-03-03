@@ -1,257 +1,239 @@
-# Deterministic RCA Algorithm v1
+# Deterministic RCA Engine v1
 
-Production-ready RCA algorithm using only graph traversals and the 10 signals in `graph/confidence_signals.md`. No LLM. No code. Deterministic.
+Production-ready RCA engine using only graph traversals and the 10 signals in `graph/confidence_signals.md`. No LLM. No code. Deterministic.
 
 ---
 
 ## 1. Candidate Generation Rules
 
-### Input
+### Traversal: Anomaly → StackFrame → File
 
-- **Anomaly** with id, timestamp, service_ref, trace_ref
-- **Scope:** Anomaly.service_ref for deployment correlation
-
-### Traversal: Anomaly → Files
-
-1. **Start:** Anomaly
-2. **Traverse:** Anomaly -[:HAS_FRAME]-> StackFrame (ordered by frame_order)
-3. **Filter:** StackFrame.resolution = `resolved` (exclude unresolved)
-4. **Traverse:** StackFrame -[:IN_FILE]-> File
-5. **Collect:** Distinct File nodes reached
+| Step | Action |
+|------|--------|
+| 1 | Start at Anomaly |
+| 2 | Traverse Anomaly -[:HAS_FRAME]-> StackFrame (ordered by frame_order ascending) |
+| 3 | **max_depth=20:** Consider only frames with frame_order < 20 (top 20 frames of stack) |
+| 4 | Filter: StackFrame.resolution = `resolved` (exclude unresolved) |
+| 5 | Traverse StackFrame -[:IN_FILE]-> File |
+| 6 | Collect distinct File nodes reached |
 
 ### Candidate Set
 
 | Rule | Description |
 |------|-------------|
 | **Source** | Files reachable via Anomaly → HAS_FRAME → StackFrame → IN_FILE → File |
-| **Resolved only** | Only StackFrames with resolution=resolved and IN_FILE to a File |
-| **Per-file aggregation** | One candidate per distinct File; each File may have multiple frames (stack positions) pointing to it |
-| **Representative frame** | For scoring, use the frame with smallest frame_order (closest to top) among frames pointing to that File |
-
-### Exclusion (Pre-Filter)
-
-| Exclusion | Action |
-|-----------|--------|
-| **Unresolved files** | StackFrames with resolution=unknown have no IN_FILE; they never produce File candidates. Excluded by design. |
-| **Vendor/stdlib** | Files whose path matches exclusion patterns (see Guardrails) are removed from candidate set before scoring. |
-| **Cap** | After exclusions, if candidate count exceeds cap (default 20), apply tie-breaker to retain top N (see Guardrails). |
+| **Depth limit** | Only frames with frame_order in [0, 19] contribute. Frames at depth ≥ 20 are ignored. |
+| **Resolved only** | StackFrames with resolution=unknown have no IN_FILE; excluded by design. |
+| **Per-file aggregation** | One candidate per distinct File; representative frame = smallest frame_order among frames pointing to that File |
+| **Cap K=5** | After exclusions, retain at most K=5 candidates for scoring. Apply pre-score tie-breaker (see Ranking). |
 
 ### Empty Candidate Set
 
 | Condition | Action |
 |----------|--------|
-| All frames unresolved | No candidates. Block RCA; do not write attribution. Per I2: entire trace unresolved = reject or quarantine. |
-| All candidates excluded (vendor/stdlib) | No candidates. Block RCA; do not write attribution. |
-| Partial trace (some resolved) | Proceed with resolved frames only; trace_completeness signal < 1; confidence degraded. |
+| All frames unresolved | No candidates. Block RCA; do not write attribution. |
+| All candidates excluded (stdlib/vendor) | No candidates. Block RCA; do not write attribution. |
+| No frames within max_depth | No candidates. Block RCA. |
+| Partial trace (some resolved) | Proceed with resolved frames only; trace_completeness < 1. |
 
 ---
 
-## 2. Scoring Model
+## 2. Exclusion Rules
+
+### Unresolved
+
+| Rule | Implementation |
+|------|----------------|
+| **StackFrame.resolution=unknown** | No IN_FILE; never produces File candidates. Excluded by traversal. |
+| **Explicit filter** | When building candidates, skip frames where resolution ≠ resolved. |
+
+### Stdlib / Vendor
+
+| Rule | Implementation |
+|------|----------------|
+| **Path patterns** | Remove from candidate set any File whose path matches exclusion patterns. |
+| **Patterns** | `node_modules/`, `vendor/`, `site-packages/`, `lib/python`, `node:internal`, `node:internal`, `runtime.`, `java.`, `sun.`, `jdk.` |
+| **Match** | Prefix or substring; case-sensitive. See `graph/confidence_signals.md`. |
+| **When** | Apply before scoring; before cap K=5. |
+
+### Order of Operations
+
+1. Traverse (max_depth=20, resolved only) → collect Files
+2. Exclude stdlib/vendor paths
+3. Cap to K=5 (pre-score tie-breaker)
+4. Score remaining candidates
+
+---
+
+## 3. Scoring Model
 
 ### Per-Candidate Score
-
-For each candidate (File, representative_frame):
 
 ```
 score = Σ (weight_i × signal_i)   for i in 1..10
 ```
 
-All signals in [0, 1]. Weights sum to 1.0. Default weights:
+All signals in [0, 1]. Weights sum to 1.0.
 
-| # | Signal | Default Weight | Notes |
-|---|--------|----------------|-------|
-| 1 | top_frame | 0.20 | Top frame is strongest indicator |
+### Initial Safe Weights
+
+| # | Signal | Weight | Rationale |
+|---|--------|--------|------------|
+| 1 | top_frame | 0.15 | Strong indicator; not dominant |
 | 2 | frame_depth | 0.10 | Depth in stack |
-| 3 | last_touch_recency | 0.15 | Recency of file change |
-| 4 | deploy_proximity | 0.12 | Deployment timing |
-| 5 | deploy_recency_rank | 0.08 | Most recent deploy |
+| 3 | last_touch_recency | 0.12 | Often available; moderate |
+| 4 | deploy_proximity | 0.10 | Often missing; moderate |
+| 5 | deploy_recency_rank | 0.08 | Often missing |
 | 6 | historical_recurrence | 0.10 | Prior attributions |
-| 7 | trace_completeness | 0.08 | Full vs partial trace |
-| 8 | path_exclusion | 0.05 | Application vs vendor (0 or 1) |
-| 9 | deployment_timing_valid | 0.07 | Deploy before incident |
-| 10 | file_frame_count | 0.05 | Multiple frames in file |
+| 7 | trace_completeness | 0.10 | Full vs partial trace |
+| 8 | path_exclusion | 0.05 | Binary; candidates already filtered |
+| 9 | deployment_timing_valid | 0.10 | Often missing; moderate |
+| 10 | file_frame_count | 0.10 | Multiple frames in file |
 
 **Total:** 1.00
 
-### Signal Values When Unavailable
+**Safe design:** No single signal > 0.15. Deployment signals (4, 5, 9) sum to 0.28; when deployment data is missing, remaining signals still drive ranking.
+
+---
+
+## 4. Missing-Data Fallbacks
+
+### Deployment Missing
+
+| Condition | Behavior |
+|----------|----------|
+| **No deployments** | deploy_proximity, deploy_recency_rank, deployment_timing_valid = 0. Proceed with remaining 7 signals. Do not block. |
+| **All deployments pending** | Same as no deployments. Exclude from correlation. |
+| **service_ref mismatch** | Exclude that deployment from correlation (I10). |
+| **Deployment exists but Commit not in graph** | Exclude that deployment; treat as missing for that candidate. |
+
+### Commit Missing
+
+| Condition | Behavior |
+|----------|----------|
+| **File has no TOUCHED** | last_touch_recency = 0. Candidate still scored. |
+| **Commit not in graph** | last_touch_recency = 0. (e.g. rebased/squashed) |
+| **Last-touch query returns empty** | last_touch_recency = 0. |
+
+### Incomplete Trace
+
+| Condition | Behavior |
+|----------|----------|
+| **Partial trace** | Use only resolved frames. trace_completeness = resolved_count / total_count. Proceed; confidence degraded. |
+| **Entire trace unresolved** | No candidates. Block RCA. |
+| **Frames beyond max_depth** | Ignored; not counted in trace_completeness denominator. trace_completeness = resolved_in_depth / total_in_depth. |
+| **Single frame resolved** | One candidate; trace_completeness < 1. |
+
+### Summary: Signal Values When Unavailable
 
 | Signal | When Unavailable | Value |
 |--------|------------------|-------|
-| last_touch_recency | No TOUCHED to File; no Commit | 0 |
-| deploy_proximity | No Deployment; no DEPLOYED_COMMIT; Commit not deployed | 0 |
-| deploy_recency_rank | Same as above | 0 |
-| historical_recurrence | No prior RCA_ATTRIBUTED for this file | 0 |
-| trace_completeness | Always computable from trace | 0–1 |
-| path_exclusion | Always computable | 0 or 1 |
+| last_touch_recency | No TOUCHED; no Commit | 0 |
+| deploy_proximity | No Deployment; Commit not deployed | 0 |
+| deploy_recency_rank | Same | 0 |
 | deployment_timing_valid | No Deployment; or Deployment.timestamp ≥ Anomaly.timestamp | 0 |
-| file_frame_count | Always computable | 0–1 |
-
-### Confidence Threshold
-
-| Threshold | Default | Purpose |
-|-----------|---------|---------|
-| **min_confidence** | 0.25 | Minimum weighted score to write any attribution |
-| **auto_accept_threshold** | 0.70 | If top candidate ≥ this, write as accepted (optional auto-confirm) |
+| historical_recurrence | No prior RCA_ATTRIBUTED for file | 0 |
+| trace_completeness | Always computable | 0–1 |
+| path_exclusion | Always computable (1 for candidates after exclusion filter) | 1 |
+| top_frame, frame_depth, file_frame_count | Always computable from trace | 0–1 |
 
 ---
 
-## 3. Tie-Breakers and Fallback Logic
+## 5. Ranking and Tie-Breakers
 
-### Tie-Breaker Order (Same Score)
+### Ranking Order
 
-When two or more candidates have the same weighted score:
+1. **Primary:** Descending weighted score
+2. **Tie-breaker (same score):**
+   - 1. Smallest representative frame_order (closer to top)
+   - 2. Higher last_touch_recency
+   - 3. Higher historical_recurrence
+   - 4. Lexicographic File.path (ascending)
 
-| Priority | Rule | Description |
-|----------|------|-------------|
-| 1 | **Smallest frame_order** | Prefer the candidate whose representative frame is closer to top of stack |
-| 2 | **Higher last_touch_recency** | Prefer more recently modified file |
-| 3 | **Higher historical_recurrence** | Prefer file with prior attributions |
-| 4 | **Lexicographic path** | Deterministic: prefer smaller File.path (string compare) |
+### Pre-Score Cap (K=5)
 
-### Fallback: Deployment Info Missing
+When candidate count exceeds K=5 after exclusions, retain top 5 by:
 
-| Condition | Behavior |
-|----------|----------|
-| **No Deployments** | deploy_proximity, deploy_recency_rank, deployment_timing_valid = 0. RCA proceeds with remaining 7 signals. Do not block. |
-| **All deployments pending** | Same as no deployments. Exclude from correlation. |
-| **Deployment exists but Commit not in graph** | Exclude that deployment; treat as missing for that candidate. |
-| **service_ref mismatch** | Exclude deployment from correlation (I10). |
+1. Smallest representative frame_order
+2. Lexicographic File.path
 
-### Fallback: Frames Unresolved
+### Output Selection
 
-| Condition | Behavior |
-|----------|----------|
-| **Partial trace** | Use only resolved frames for candidates. trace_completeness = resolved_count / total_count. Proceed; degrade confidence. |
-| **Entire trace unresolved** | No candidates. Block RCA. |
-| **Single frame resolved** | One candidate; score with trace_completeness < 1. |
-
-### Fallback: No Last-Touch Commit
-
-| Condition | Behavior |
-|----------|----------|
-| **File has no TOUCHED** | last_touch_recency = 0. Candidate still scored; other signals apply. |
-| **Commit not in graph** | last_touch_recency = 0. |
-
-### Fallback: No Candidates After Guardrails
-
-| Condition | Action |
-|----------|--------|
-| All excluded (vendor/stdlib) | Do not write attribution. Return "no candidate" result. |
-| Cap reduces to empty | Should not occur; cap applies after scoring. |
+After scoring and ranking: select **top N=3** candidates for output. If fewer than 3 candidates exist, output all. If all have score below min_confidence (default 0.25), output none.
 
 ---
 
-## 4. Output Writing Rules
+## 6. Output Rules
 
-### RCA_ATTRIBUTED Edge
+### Write Top N=3 as status=candidate Only
 
-| Property | Required | Value |
-|----------|----------|-------|
-| run_id | Yes | RCA run identifier (UUID/ULID) |
-| method | Yes | `deterministic` |
-| confidence | Yes | Final weighted score (0.0–1.0) |
-| status | Yes | `candidate` or `accepted` |
-| evidence_ref | Yes | Bundle ID (bundle_id) |
-| attributed_at | Yes | ISO 8601 UTC |
+| Rule | Description |
+|------|-------------|
+| **Count** | Write up to N=3 RCA_ATTRIBUTED edges per Anomaly |
+| **Status** | All written with status=candidate. No auto-accept. |
+| **Target** | Each edge: Anomaly -[:RCA_ATTRIBUTED]-> StackFrame (representative frame for that File) |
+| **Order** | Rank 1, 2, 3 by score (tie-breakers applied) |
 
-**Direction:** Anomaly -[:RCA_ATTRIBUTED]-> StackFrame
+### RCA_ATTRIBUTED Edge Properties
 
-**Target:** The representative StackFrame (smallest frame_order among frames pointing to winning File).
+| Property | Value |
+|----------|-------|
+| run_id | RCA run identifier (UUID/ULID) |
+| method | `deterministic` |
+| confidence | Weighted score (0.0–1.0) |
+| status | `candidate` (always) |
+| evidence_ref | Bundle ID (bundle_id) |
+| attributed_at | ISO 8601 UTC |
 
-### When to Create RCA_ATTRIBUTED
+### When to Write
 
 | Condition | Action |
 |----------|--------|
-| Top candidate score ≥ min_confidence | Create RCA_ATTRIBUTED to representative StackFrame |
-| Top candidate score < min_confidence | Do not create attribution |
-| No candidates | Do not create attribution |
-
-### Status: candidate vs accepted
-
-| Condition | status |
-|----------|--------|
-| **Default** | `candidate` |
-| **Auto-confirm** | If top candidate score ≥ auto_accept_threshold (default 0.70), may set `accepted` |
-| **Manual confirm** | Human action; candidate → accepted (see rca_run_lifecycle.md) |
+| ≥ 1 candidate with score ≥ min_confidence | Write top min(3, count) attributions; each with own evidence bundle |
+| All candidates < min_confidence | Do not write |
+| No candidates | Do not write |
 
 ### Superseding Prior Attribution
 
 | Rule | Description |
 |------|-------------|
 | **Before write** | For this Anomaly, set any existing RCA_ATTRIBUTED with status in {candidate, accepted} to status=superseded |
-| **Then write** | Create new RCA_ATTRIBUTED with status=candidate (or accepted if auto-confirm) |
-| **Invariant** | At most one non-superseded attribution per Anomaly (I8, I9) |
+| **Then write** | Create up to 3 new RCA_ATTRIBUTED edges, each status=candidate |
+| **Invariant note** | Multi-candidate mode allows multiple candidates per anomaly; I8 may require relaxation for this engine. |
 
-### Evidence Bundle
+### Evidence Bundle (Per Attribution)
 
-| Field | Source |
-|-------|--------|
-| bundle_id | New UUID/ULID; = evidence_ref |
-| anomaly_id | Anomaly.id |
-| trace_ref | Anomaly.trace_ref |
-| rca_run_id | run_id |
-| attributed_file_id | Winning File.id |
-| attributed_frame_id | Representative StackFrame.id |
-| evidence_symbol | StackFrame.symbol_name |
-| last_touch_commit_sha | Commit.sha from last-touch traversal, or empty |
-| signal_scores | Map of 10 signal names → values |
-| method | `deterministic` |
-| rule_version | `deterministic_rca_v1` |
-| schema_version | Bundle contract version (e.g. 1.0.0) |
-| decision_timestamp | attributed_at |
-| deployment_id | Deployment.id if deployment correlation used; optional |
+One bundle per RCA_ATTRIBUTED edge. Fields: bundle_id, anomaly_id, trace_ref, rca_run_id, attributed_file_id, attributed_frame_id, evidence_symbol, last_touch_commit_sha, signal_scores, method=`deterministic`, rule_version=`deterministic_rca_v1`, schema_version, decision_timestamp, deployment_id (optional).
 
 ---
 
-## 5. Guardrails
+## 7. Algorithm Summary (Plain English)
 
-### Exclude Unresolved Files
-
-| Rule | Implementation |
-|------|----------------|
-| **Unresolved frames** | StackFrames with resolution=unknown have no IN_FILE. They never produce File candidates. No explicit filter needed; traversal excludes them. |
-| **Explicit check** | If building candidates from frames, skip frames where resolution ≠ resolved. |
-
-### Exclude Vendor/Stdlib
-
-| Rule | Implementation |
-|------|----------------|
-| **Path patterns** | Before scoring, remove from candidate set any File where path matches exclusion patterns (see confidence_signals.md). |
-| **Patterns** | `node_modules/`, `vendor/`, `site-packages/`, `lib/python`, `node:internal`, `runtime.`, `java.`, `sun.`, `jdk.` (configurable). |
-| **Match** | Prefix or substring match; case-sensitive for paths. |
-
-### Cap Number of Candidates
-
-| Rule | Implementation |
-|------|----------------|
-| **Default cap** | 20 candidates max before scoring |
-| **When exceeded** | Apply pre-score tie-breaker: retain candidates with smallest representative frame_order first; then by path. Keep top 20. |
-| **After scoring** | Select single winner (highest score; tie-breakers). Cap does not limit output; only limits how many are scored. |
-
-### Block Conditions
-
-| Condition | Action |
-|----------|--------|
-| Entire trace unresolved | Block; no RCA |
-| No candidates after exclusions | Block; no attribution |
-| Pre-RCA gate failures (I1, I2, I6, I8, I9) | Block run for that anomaly |
-
----
-
-## 6. Algorithm Summary (Plain English)
-
-1. **Load** Anomaly by id; verify HAS_FRAME exists.
-2. **Traverse** to resolved StackFrames (IN_FILE → File).
+1. **Load** Anomaly; verify HAS_FRAME exists.
+2. **Traverse** Anomaly → HAS_FRAME → StackFrame (frame_order < 20, resolution=resolved) → IN_FILE → File.
 3. **Collect** distinct Files; assign representative frame (smallest frame_order per file).
-4. **Exclude** Files matching vendor/stdlib path patterns.
-5. **Cap** to 20 candidates if needed (tie-break by frame_order, path).
-6. **For each candidate:** Compute 10 signals via graph traversals; apply weights; sum.
-7. **Select** winner: max score; tie-break by frame_order, last_touch_recency, historical_recurrence, path.
-8. **If** winner score ≥ min_confidence: supersede prior attribution; create RCA_ATTRIBUTED; create evidence bundle.
-9. **Set** status = accepted if score ≥ auto_accept_threshold, else candidate.
+4. **Exclude** Files matching stdlib/vendor path patterns.
+5. **Cap** to K=5 candidates (tie-break by frame_order, path).
+6. **Score** each candidate: compute 10 signals; apply weights; sum.
+7. **Rank** by score; apply tie-breakers.
+8. **Select** top N=3 with score ≥ min_confidence.
+9. **Supersede** prior attributions for this Anomaly.
+10. **Write** up to 3 RCA_ATTRIBUTED edges, each status=candidate; create evidence bundle per attribution.
 
 ---
 
-## 7. Determinism Guarantee
+## 8. Parameters Summary
 
-Same inputs (Anomaly, graph state) → same output (attributed_file_id, confidence, signal_scores). No randomness. No LLM. All traversals and formulas are deterministic.
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| K | 5 | Max candidates to score |
+| max_depth | 20 | Max frame_order to consider (0..19) |
+| N | 3 | Max RCA_ATTRIBUTED edges to write |
+| min_confidence | 0.25 | Minimum score to include in output |
+| status | candidate | All attributions; no auto-accept |
+
+---
+
+## 9. Determinism Guarantee
+
+Same inputs (Anomaly, graph state) → same output (attributed files, confidence scores, signal_scores, ranking). No randomness. No LLM. All traversals and formulas are deterministic.
