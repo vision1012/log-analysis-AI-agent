@@ -2,9 +2,30 @@
 
 Hybrid RCA execution: auto trigger when anomalies are ingested, manual trigger via API. Pre-RCA and Post-RCA gate enforcement, concurrency, retry policy, late data handling, evidence bundle timing, and observability.
 
+**Locked decisions:** RCA attribution targets File; N_candidates=3, K_frames=5; never auto-supersede accepted; bundle-first atomicity; per-anomaly atomic write.
+
 ---
 
-## 1. Hybrid Triggering
+## 1. Attribution Target and Parameters
+
+### RCA Attribution Targets File
+
+| Rule | Description |
+|------|-------------|
+| **Primary target** | RCA attribution identifies a File as root cause. attributed_file_id is the canonical target. |
+| **Evidence** | The representative StackFrame (smallest frame_order among frames pointing to that File) provides evidence. Evidence bundle stores attributed_file_id and attributed_frame_id. |
+| **Output** | Up to N_candidates=3 Files per anomaly. Each attribution links Anomaly to the File (via representative StackFrame for graph traversal). |
+
+### Parameters
+
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| **N_candidates** | 3 | Max RCA_ATTRIBUTED edges (candidates) written per anomaly. |
+| **K_frames** | 5 | Max candidates scored. Cap before ranking. |
+
+---
+
+## 2. Hybrid Triggering
 
 ### Auto Trigger
 
@@ -22,6 +43,14 @@ Hybrid RCA execution: auto trigger when anomalies are ingested, manual trigger v
 
 | Idempotency | Auto runs may use derived key (e.g. anomaly_id + window_id). Same anomaly + same window → one run. |
 
+### Accepted Block: Never Auto-Supersede
+
+| Rule | Description |
+|------|-------------|
+| **Block auto-run if accepted exists** | Before an auto-triggered RCA run executes (or at Pre-RCA), check: does this anomaly have an RCA_ATTRIBUTED with status=accepted? If yes, **block** the auto-run. Do not supersede. Do not write new candidates. |
+| **No auto-supersede** | Auto-run never supersedes an accepted attribution. Human's confirmed root cause is preserved. |
+| **Manual override** | Manual trigger may include override flag. When override=true, the run proceeds even if accepted exists. Supersedes prior (candidate or accepted). Use for explicit re-analysis. |
+
 ### Manual Trigger
 
 | Trigger | When |
@@ -30,16 +59,15 @@ Hybrid RCA execution: auto trigger when anomalies are ingested, manual trigger v
 
 | Flow | Description |
 |------|-------------|
-| **Request** | anomaly_id, idempotency key (required for manual). |
+| **Request** | anomaly_id, idempotency key (required for manual), optional override flag. |
+| **Check accepted** | If anomaly has accepted attribution and override=false: block or warn. If override=true: proceed. |
 | **Check idempotency** | Same key + prior run completed → return existing result. Same key + prior in progress → return in-progress. |
 | **Enqueue** | If new run, add job to queue. Scope = anomaly_id. |
 | **Process** | Worker picks up job; executes Pre-RCA through write. |
 
-| Idempotency key | Client-supplied. Same key prevents duplicate runs and duplicate candidates. |
-
 ---
 
-## 2. Pre-RCA Gate Enforcement
+## 3. Pre-RCA Gate Enforcement
 
 ### When
 
@@ -57,6 +85,13 @@ Immediately before RCA execution starts (after job is dequeued, before candidate
 | I10, I11 (deployment scope) | — | Yes |
 | I13, I15 (missing timestamps) | — | Yes |
 
+### Accepted Block (Auto-Run Only)
+
+| Check | Action |
+|-------|--------|
+| **Anomaly has accepted attribution** | If trigger=auto and override not set: **Block**. Skip RCA. Do not supersede. Log: "accepted exists; auto-run blocked." |
+| **Manual with override** | Proceed. Supersede prior (candidate or accepted) before write. |
+
 ### Enforcement
 
 | Outcome | Action |
@@ -71,7 +106,7 @@ Pre-RCA runs per anomaly in scope. Batch job: some anomalies may block; others p
 
 ---
 
-## 3. Concurrency Rules
+## 4. Concurrency Rules
 
 ### Per-Anomaly Lock
 
@@ -106,7 +141,7 @@ Pre-RCA runs per anomaly in scope. Batch job: some anomalies may block; others p
 
 ---
 
-## 4. Retry Policy
+## 5. Retry Policy
 
 ### Transient Failures
 
@@ -126,6 +161,7 @@ Pre-RCA runs per anomaly in scope. Batch job: some anomalies may block; others p
 | Failure type | Retry? | Action |
 |--------------|--------|--------|
 | Pre-RCA block | No | Anomaly excluded. Job completed (no attribution). |
+| Accepted block (auto-run) | No | Job completed. No write. Log "accepted exists." |
 | Post-RCA block | No | Discard proposed. Job completed (no attribution). |
 | No candidates | No | Job completed. No write. |
 | Deterministic logic error | No | Fail job. Fix and redeploy. |
@@ -140,7 +176,7 @@ Pre-RCA runs per anomaly in scope. Batch job: some anomalies may block; others p
 
 ---
 
-## 5. Late Data During a Run
+## 6. Late Data During a Run
 
 ### Scenario
 
@@ -175,60 +211,78 @@ New data arrives while an RCA run is in progress: late deployments, new commits 
 
 ---
 
-## 6. Evidence Bundle Creation Timing
+## 7. Evidence Bundle Creation Timing (Bundle-First Atomicity)
+
+### Rule: Bundle Before Edges
+
+| Rule | Description |
+|------|-------------|
+| **Evidence bundle must be created before writing RCA_ATTRIBUTED edges** | Create and persist evidence bundles first. Only then write edges. Edges reference bundle_id (evidence_ref); bundle must exist. |
+| **Bundle-first atomicity** | No edge without a valid bundle. No orphan edges pointing to non-existent bundles. |
 
 ### Order of Operations
 
 | Step | Action |
 |------|--------|
 | 1 | Post-RCA gate passes. Proposed attributions validated. |
-| 2 | **Create evidence bundles** (in-memory or to temp). One per proposed attribution. bundle_id = evidence_ref. |
-| 3 | **Write RCA_ATTRIBUTED edges** to graph. evidence_ref points to bundle_id. |
-| 4 | **Persist evidence bundles** to artifact store. |
-
-### Timing: Before or After Edges?
-
-| Option | Pros | Cons |
-|--------|------|------|
-| **Bundles before edges** | Edges reference valid bundles. No orphan edges. | If edge write fails, bundles exist but unused. Cleanup or leave. |
-| **Bundles after edges** | Edges written first. If bundle fails, edges have evidence_ref; backfill bundle. | Brief window where evidence_ref points to not-yet-persisted bundle. |
-
-### Recommended
-
-| Order | Create bundle content (bundle_id, signal_scores, etc.). Write edges with evidence_ref=bundle_id. Persist bundles. If bundle persist fails, retry. If edges written, bundles must eventually persist (backfill). |
-|-------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Atomic** | Optionally: write edges and bundles in same transaction if supported. Or: write bundles first, then edges; if edges fail, delete orphan bundles. |
+| 2 | **Create evidence bundles.** One per proposed attribution (up to N_candidates=3). bundle_id = evidence_ref. |
+| 3 | **Persist evidence bundles** to artifact store. All bundles for this anomaly must be persisted before any edge write. |
+| 4 | **Write RCA_ATTRIBUTED edges** to graph. evidence_ref points to bundle_id. |
+| 5 | **Release lock.** Done. |
 
 ### Failure Cases
 
 | Case | Behavior |
 |------|----------|
-| **Edges written, bundle persist fails** | Retry bundle persist. Edges have evidence_ref. Backfill bundle when store available. |
-| **Bundle persist succeeds, edge write fails** | Retry edge write. Bundles exist; idempotent. Or: delete orphan bundles if edge write permanently fails. |
+| **Bundle persist fails** | Retry. Do not write edges. If persistent failure after retries, fail job. No edges written. |
+| **Bundles persisted, edge write fails** | Retry edge write. Bundles exist; idempotent. Orphan bundles if edge write permanently fails; cleanup or retain for audit. |
+| **Partial bundle persist** | Do not write any edges. All-or-nothing for bundle persist per anomaly. |
 
 ---
 
-## 7. Post-RCA Gate Enforcement
+## 8. Per-Anomaly Atomic Transaction Boundary
+
+### Rule
+
+| Rule | Description |
+|------|-------------|
+| **Per-anomaly atomic write** | All candidates (up to N_candidates=3) for one anomaly are written atomically. Either all are written or none. No partial writes. |
+
+### Boundary
+
+| Scope | One anomaly. One run. Up to 3 RCA_ATTRIBUTED edges. |
+|-------|-----------------------------------------------------|
+| **Atomic** | Supersede prior (if any) + write all new candidates in one atomic unit. |
+| **No partial** | If write fails after 1 of 3 edges, rollback or compensate. Do not leave anomaly with partial state (e.g. 1 new candidate, 2 missing). |
+
+### Implementation Note
+
+| Mechanism | Use transaction (graph + artifact store if supported), or: write all edges in one batch; if any fails, fail entire batch; retry. No single-edge commits. |
+|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+
+---
+
+## 9. Post-RCA Gate Enforcement
 
 ### When
 
-Immediately before RCA_ATTRIBUTED edges are written. After ranking and selection. Validates proposed attributions in memory.
+Immediately before evidence bundles are created and RCA_ATTRIBUTED edges are written. After ranking and selection. Validates proposed attributions in memory.
 
 ### Checks
 
 | Invariant | Check | Action on failure |
-|-----------|-------|-------------------|
-| I4 | Target StackFrame in Anomaly's trace (HAS_FRAME) | Discard proposed attribution. Do not write. |
-| I8 | Would not create multiple current (candidate/accepted) per anomaly | Supersede prior; then write. If supersede fails, discard. |
-| I9 | Would not create multiple accepted | Supersede prior; then write. If supersede fails, discard. |
+|-----------|-------|------------------|
+| I4 | Target (File via representative StackFrame) in Anomaly's trace (HAS_FRAME) | Discard proposed attribution. Do not write. |
+| I8 | Would not create multiple current (candidate/accepted) per anomaly | Supersede prior (manual override only); then write. If supersede fails, discard. |
+| I9 | Would not create multiple accepted | Supersede prior (manual override only); then write. If supersede fails, discard. |
 | I16 | attributed_at present | Reject. Do not write. |
 
 ### Enforcement
 
 | Outcome | Action |
 |---------|--------|
-| **Pass** | Proceed to write edges and bundles. |
-| **Block** | Discard proposed attribution(s). Do not write. No evidence bundle. Log reason. Job completes; anomaly has no new attribution. |
+| **Pass** | Proceed to create bundles, then write edges. |
+| **Block** | Discard proposed attribution(s). Do not create bundles. Do not write edges. Log reason. Job completes; anomaly has no new attribution. |
 
 ### No Degrade
 
@@ -236,18 +290,19 @@ Post-RCA has no degrade outcome. All violations block.
 
 ---
 
-## 8. Observability
+## 10. Observability
 
 ### Logs Required
 
 | Event | Log fields |
 |-------|------------|
-| **RCA run started** | run_id, anomaly_id, trigger (auto|manual), idempotency_key, timestamp |
+| **RCA run started** | run_id, anomaly_id, trigger (auto|manual), idempotency_key, override, timestamp |
+| **Accepted block** | run_id, anomaly_id, reason="accepted exists", trigger=auto |
 | **Pre-RCA result** | run_id, anomaly_id, pass|block|degrade, excluded_anomaly_ids, excluded_deployment_ids, reason |
 | **Candidate count** | run_id, anomaly_id, candidate_count, excluded_count |
 | **Post-RCA result** | run_id, anomaly_id, pass|block, discarded_reason if block |
+| **Bundles persisted** | run_id, anomaly_id, bundle_ids |
 | **Edges written** | run_id, anomaly_id, attribution_count, evidence_refs |
-| **Bundle written** | run_id, bundle_id, anomaly_id |
 | **Run completed** | run_id, anomaly_id, status (completed|failed), duration_ms |
 | **Run failed** | run_id, anomaly_id, error, failure_step, retry_count |
 | **Lock acquired/released** | anomaly_id, lock_id, acquired|released, timestamp |
@@ -260,6 +315,7 @@ Post-RCA has no degrade outcome. All violations block.
 | **rca_run_duration_seconds** | Histogram | trigger, status | Run latency |
 | **rca_candidates_per_run** | Histogram | — | Candidate count distribution |
 | **rca_attributions_written** | Counter | — | Attributions written |
+| **rca_accepted_blocks** | Counter | — | Auto-runs blocked by accepted |
 | **rca_pre_rca_blocks** | Counter | reason | Pre-RCA blocks by reason |
 | **rca_post_rca_blocks** | Counter | reason | Post-RCA blocks by reason |
 | **rca_queue_depth** | Gauge | — | Jobs in queue |
@@ -276,8 +332,8 @@ Post-RCA has no degrade outcome. All violations block.
 | **signal_computation** | run_id, candidate_count |
 | **ranking** | run_id |
 | **post_rca_gate** | run_id, result |
-| **write_edges** | run_id, attribution_count |
 | **write_bundles** | run_id, bundle_count |
+| **write_edges** | run_id, attribution_count |
 
 | Propagation | Trace ID propagated across queue, worker, and storage. |
 
@@ -291,11 +347,11 @@ Post-RCA has no degrade outcome. All violations block.
 
 ---
 
-## 9. End-to-End Flow Summary
+## 11. End-to-End Flow Summary
 
 ```
 Auto: Anomaly ingested → Post-ingestion pass → Enqueue RCA
-Manual: API request (anomaly_id, idempotency_key) → Check idempotency → Enqueue or return existing
+Manual: API request (anomaly_id, idempotency_key, override?) → Check idempotency → Enqueue or return existing
 
       │
       ▼
@@ -304,8 +360,11 @@ Dequeue job → Acquire per-anomaly lock (or queue/reject)
       ▼
 Pre-RCA gate → Block: skip. Degrade: exclude deployments. Pass: proceed.
       │
+      ├── [Auto] Accepted exists? → Block. Release lock. Done.
+      └── [Manual] Override? → If no override and accepted exists: block. Else proceed.
+      │
       ▼
-Candidate generation → Signal computation → Ranking
+Candidate generation (K_frames=5) → Signal computation → Ranking → Top N_candidates=3
       │
       ├── No candidates / below threshold → Release lock; done
       └── Top N qualify
@@ -314,7 +373,10 @@ Candidate generation → Signal computation → Ranking
 Post-RCA gate → Block: discard. Pass: proceed.
       │
       ▼
-Create evidence bundles → Write RCA_ATTRIBUTED edges → Persist bundles
+Create evidence bundles → Persist bundles (bundle-first)
+      │
+      ▼
+Write RCA_ATTRIBUTED edges (per-anomaly atomic transaction)
       │
       ▼
 Release lock → Done
