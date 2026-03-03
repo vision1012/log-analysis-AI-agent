@@ -1,6 +1,6 @@
 # Deterministic RCA Engine v1 — Autonomous Debugging Platform
 
-Production-ready RCA engine for the Autonomous Debugging platform. Graph-only signals. No LLM. Uses nodes: Anomaly, StackFrame, File, Commit, Deployment. Relationships: HAS_FRAME, IN_FILE, TOUCHED, DEPLOYED_COMMIT, RCA_ATTRIBUTED. Output top N=3 candidates only. No automatic acceptance.
+Production-ready RCA engine for the Autonomous Debugging platform. Graph-only signals. No LLM. Uses nodes: Anomaly, StackFrame, File, Commit, Deployment. Relationships: HAS_FRAME, IN_FILE, TOUCHED, DEPLOYED_COMMIT, RCA_ATTRIBUTED. Output top N=3 candidates only. No automatic acceptance. Hybrid triggering: auto + manual re-run.
 
 ---
 
@@ -181,11 +181,19 @@ Select top N=3 from ranked list. Include only candidates with score ≥ min_conf
 | evidence_ref | Yes | Bundle ID (bundle_id) |
 | attributed_at | Yes | ISO 8601 UTC |
 
-### Idempotency Behavior
+### Idempotency Rules for Reruns
+
+| Rule | Behavior |
+|------|----------|
+| **Same idempotency key, prior run completed** | Return existing result. Do not re-execute. Do not duplicate candidates. run_id unchanged. |
+| **Same idempotency key, prior run in progress** | Return in-progress status. Do not start duplicate run. |
+| **Same idempotency key, no prior run** | Execute RCA; assign run_id; write candidates. |
+| **No idempotency key** | Every request is new run. New run_id each time. |
+
+**No duplicate candidates:** When same idempotency key is supplied and prior run completed, the system does not create new RCA_ATTRIBUTED edges. Existing attributions are returned. Same anomaly + same graph state + same idempotency key → same output; no duplicate edges.
 
 | Scenario | Behavior |
 |----------|----------|
-| **Same anomaly, same graph state, rerun** | Same run_id if idempotency key supplied; same candidates, scores, ranking. Supersede prior attributions; write same top 3. |
 | **Superseding** | Before write, set any existing RCA_ATTRIBUTED with status in {candidate, accepted} to status=superseded for this Anomaly. |
 | **Dedupe** | One RCA_ATTRIBUTED per (Anomaly, StackFrame, run_id). Same run_id + same anomaly + same proposed attributions → skip duplicate writes. |
 | **Evidence bundle** | One per attribution. evidence_ref = bundle_id. Idempotent: same inputs → same bundle content. |
@@ -259,6 +267,35 @@ Select top N=3 from ranked list. Include only candidates with score ≥ min_conf
 
 ---
 
-## 9. Determinism Guarantee
+## 9. Hybrid Triggering: Auto + Manual Re-Run
+
+### Trigger Modes
+
+| Mode | Description |
+|------|-------------|
+| **Auto** | RCA runs automatically when new anomalies arrive (e.g. ingestion complete, time window closes). Scheduled or event-driven. |
+| **Manual re-run** | Human or system explicitly requests RCA for an anomaly (e.g. after graph update, deployment backfill, or to refresh candidates). |
+
+### Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| **Auto trigger** | Scope = anomalies in time window or batch. Run per anomaly or batch. Idempotency key optional (e.g. anomaly_id + window_id). |
+| **Manual re-run** | Scope = specified anomaly_id(s). Client may supply idempotency key. Same key + prior completed → return existing; no duplicate candidates. |
+| **Graph updated** | Manual re-run with new idempotency key (or no key) produces new run. New candidates if graph state changed (e.g. new TOUCHED, new Deployment). |
+| **Same inputs** | With idempotency key, same anomaly + same graph state → same run_id, same candidates. No duplicate. |
+
+### Idempotency Key for Re-Runs
+
+| Key format | Use case |
+|------------|----------|
+| `{anomaly_id}_{window_id}` | Auto: one run per anomaly per window. Re-run same window → return existing. |
+| `{anomaly_id}_{window_id}_{rca_version}` | Include RCA version; new version → new run. |
+| Client-generated UUID | Manual: client controls idempotency. Same UUID → return existing. |
+| None | Every request is new run. |
+
+---
+
+## 10. Determinism Guarantee
 
 Same inputs (Anomaly, graph state) → same output (attributed files, confidence scores, signal_scores, ranking). No randomness. No LLM. All traversals and formulas are deterministic.

@@ -1,12 +1,12 @@
 # Confirmation Workflow — Human Feedback Lifecycle
 
-Defines the human confirmation lifecycle for RCA attributions: confirm candidate, reject candidate, reject all, rollback. State transitions, invariants, audit requirements, idempotency, and how recurrence and resolution-quality signals are updated.
+Defines the human confirmation lifecycle for RCA attributions: confirm candidate, reject candidate, reject all, rollback. State transitions, invariants, audit requirements, idempotency, and how accepted/rejected edges impact Historical Recurrence and Resolution Quality signals.
 
 ---
 
 ## 1. Human Confirmation Lifecycle
 
-### 1. Confirm Candidate
+### Confirm Candidate
 
 | Transition | Effect |
 |------------|--------|
@@ -15,7 +15,7 @@ Defines the human confirmation lifecycle for RCA attributions: confirm candidate
 
 **Result:** Anomaly has exactly one accepted root cause.
 
-### 2. Reject Candidate
+### Reject Candidate
 
 | Transition | Effect |
 |------------|--------|
@@ -23,20 +23,21 @@ Defines the human confirmation lifecycle for RCA attributions: confirm candidate
 
 **Result:** Other candidates unchanged. Anomaly may still have other candidates or an accepted attribution.
 
-### 3. Reject All
+### Reject All
 
 | Transition | Effect |
 |------------|--------|
 | **All candidates → rejected** | Every attribution with status=candidate for the anomaly becomes rejected. |
+| **Anomaly has no accepted root cause** | No attribution has status=accepted. |
 
-**Result:** Anomaly has no accepted root cause. All proposed candidates are rejected.
+**Result:** All proposed candidates rejected. Anomaly has no current root cause.
 
-### 4. Rollback
+### Rollback
 
 | Transition | Effect |
 |------------|--------|
 | **accepted → rejected** | The accepted attribution is rolled back; human says it was wrong. |
-| **Anomaly returns to no accepted state** | No attribution has status=accepted. Anomaly has no current root cause. |
+| **Anomaly returns to no accepted root cause** | No attribution has status=accepted. |
 
 **Result:** Anomaly may be re-run for RCA (new run_id, new candidates).
 
@@ -95,13 +96,13 @@ Defines the human confirmation lifecycle for RCA attributions: confirm candidate
 
 ## 4. Audit Requirements
 
-### Who, When, Why
+### Required Fields
 
 | Field | Required | Purpose |
 |-------|----------|---------|
-| **Who (reviewer_id)** | Yes | User ID or system account that performed the action. Identifies the human (or automated process). |
-| **When (reviewed_at)** | Yes | ISO 8601 UTC. When the feedback was applied. |
-| **Why (reason)** | Optional | Free-text explanation. Human rationale for confirm, reject, or rollback. |
+| **actor_id** | Yes | User ID or system account that performed the action. Identifies who performed the feedback. |
+| **timestamp** | Yes | ISO 8601 UTC. When the feedback was applied. |
+| **reason** | Optional | Free-text explanation. Human rationale for confirm, reject, or rollback. |
 
 ### Full Audit Record Per Feedback Event
 
@@ -111,9 +112,9 @@ Defines the human confirmation lifecycle for RCA attributions: confirm candidate
 | anomaly_id | Yes | Anomaly being acted on |
 | action | Yes | confirm_candidate, reject_candidate, reject_all, rollback_accepted |
 | attribution_id | Conditional | evidence_ref or (run_id, attributed_frame_id) when action targets one attribution |
-| reviewer_id | Yes | Who |
-| reviewed_at | Yes | When |
-| reason | Optional | Why |
+| actor_id | Yes | Who performed the action |
+| timestamp | Yes | When the action was applied |
+| reason | Optional | Why (human rationale) |
 | before_status | Yes | Status of affected attribution(s) before |
 | after_status | Yes | Status after |
 | affected_count | Conditional | For reject_all: number of attributions updated |
@@ -127,21 +128,27 @@ Defines the human confirmation lifecycle for RCA attributions: confirm candidate
 
 ---
 
-## 5. Idempotency Behavior
+## 5. Idempotency Behavior for Repeated Actions
 
 ### Principle
 
-Same feedback request applied twice produces the same final state. No duplicate side effects.
+Same feedback action applied twice produces the same final state. No duplicate side effects.
 
-### Idempotency Rules
+### Repeated Action Behavior
 
-| Scenario | Behavior |
-|----------|----------|
-| **Confirm same candidate twice** | First: candidate → accepted. Second: already accepted; no-op. Return success. Idempotent. |
-| **Reject same candidate twice** | First: candidate → rejected. Second: already rejected; no-op. Return success. Idempotent. |
-| **Reject all twice** | First: all candidates → rejected. Second: no candidates; no-op or return success. Idempotent. |
-| **Rollback same attribution twice** | First: accepted → rejected. Second: already rejected; invalid (rollback requires accepted). Reject request. |
-| **Feedback on terminal status** | rejected, superseded: no transitions allowed. Reject request. |
+| Action | First application | Second application (repeated) |
+|--------|-------------------|------------------------------|
+| **Confirm candidate** | candidate → accepted; others → rejected | Target already accepted; no-op. Return success. Idempotent. |
+| **Reject candidate** | candidate → rejected | Target already rejected; no-op. Return success. Idempotent. |
+| **Reject all** | All candidates → rejected | No candidates; no-op. Return success. Idempotent. |
+| **Rollback** | accepted → rejected | Target already rejected; invalid. Reject request (rollback requires accepted). |
+
+### Terminal Status
+
+| Status | Repeated action |
+|--------|-----------------|
+| **rejected** | No transitions allowed. Reject request. |
+| **superseded** | No transitions allowed. Reject request. |
 
 ### Idempotency Key (Optional)
 
@@ -164,38 +171,54 @@ When the client supplies an idempotency key for a feedback request:
 
 ---
 
-## 6. How Recurrence and Resolution-Quality Signals Are Updated
+## 6. Impact on Historical Recurrence and Resolution Quality Signals
 
-### Recurrence Signal (historical_recurrence)
+### Historical Recurrence Signal
 
-| Signal | Description | Updated By Feedback? |
-|--------|-------------|----------------------|
-| **historical_recurrence** | Count of prior RCA_ATTRIBUTED with status in {accepted, candidate} for same File (and service_ref). Normalized. | **Yes, indirectly.** |
+| Signal | Description | Counted in |
+|--------|-------------|------------|
+| **historical_recurrence** | Prior attributions for same File (and service_ref). Normalized count. | RCA_ATTRIBUTED with status in {accepted, candidate} only. |
 
-**Mechanism:** Feedback changes RCA_ATTRIBUTED status. The graph is updated. Future RCA runs compute historical_recurrence from the current graph state. No explicit recomputation at feedback time.
+**Rule:** Rejected and superseded attributions do **not** contribute to historical_recurrence.
 
-| Action | Effect on historical_recurrence (Future Runs) |
-|--------|-----------------------------------------------|
-| **Confirm candidate** | Adds one accepted for that File. historical_recurrence for that File increases in future RCA runs (same or different anomalies). |
-| **Reject candidate** | Adds one rejected. Rejected attributions do not count toward historical_recurrence. No increase. |
-| **Reject all** | All become rejected. No accepted/candidate for those Files. No increase. |
-| **Rollback** | Removes one accepted (now rejected). historical_recurrence for that File decreases in future runs. |
+### How Accepted Edges Impact Historical Recurrence
 
-**Rule:** historical_recurrence is derived from prior RCA_ATTRIBUTED with status in {accepted, candidate}. Rejected and superseded do not contribute. When feedback changes status, the next RCA run sees the updated graph and computes accordingly.
+| Action | Effect |
+|--------|--------|
+| **Confirm candidate** | One attribution → accepted. That File gains one prior accepted. historical_recurrence for that File **increases** in future RCA runs (same or different anomalies). |
+| **Reject candidate** | One attribution → rejected. Rejected does not count. historical_recurrence **unchanged** (no prior accepted/candidate added). |
+| **Reject all** | All candidates → rejected. No accepted. historical_recurrence **unchanged** for those Files. |
+| **Rollback** | One accepted → rejected. That File loses one prior accepted. historical_recurrence for that File **decreases** in future RCA runs. |
 
-### Resolution-Quality Signal (trace_completeness)
+### Summary: Accepted vs Rejected
 
-| Signal | Description | Updated By Feedback? |
-|--------|-------------|----------------------|
-| **trace_completeness** | Fraction of frames in trace with resolution=resolved. 1 if all resolved. | **No.** |
+| Status | Contributes to historical_recurrence? |
+|--------|--------------------------------------|
+| accepted | Yes |
+| candidate | Yes |
+| rejected | No |
+| superseded | No |
 
-**Mechanism:** trace_completeness is derived from StackFrame.resolution (from ingestion). It reflects whether the trace was fully resolved to Files. Human feedback does not change StackFrame.resolution or trace structure. Resolution-quality is fixed at ingestion.
+**Mechanism:** Feedback changes status. Graph is updated. Future RCA runs compute historical_recurrence from current graph state. No explicit recomputation at feedback time.
+
+### Resolution Quality Signal (trace_completeness)
+
+| Signal | Description | Source |
+|--------|-------------|--------|
+| **trace_completeness** | Fraction of frames in trace with resolution=resolved. 1 if all resolved. | StackFrame.resolution (from ingestion). |
+
+### How Accepted/Rejected Edges Impact Resolution Quality
+
+| Impact | Rule |
+|--------|------|
+| **None** | trace_completeness is derived from StackFrame.resolution. Human feedback does not change StackFrame.resolution or trace structure. Resolution quality is fixed at ingestion. |
+| **Accepted/rejected** | Do not affect trace_completeness. |
 
 **Rule:** trace_completeness is not updated by the confirmation workflow. It is a property of the anomaly's trace, not of human feedback.
 
 ### Summary
 
-| Signal | Source | Feedback Updates |
-|--------|--------|------------------|
-| historical_recurrence | Prior RCA_ATTRIBUTED (accepted, candidate) | Yes. Status changes alter the set of prior attributions; next RCA run computes different value. |
-| trace_completeness | StackFrame.resolution (ingestion) | No. Fixed at ingestion. |
+| Signal | Updated by feedback? | How |
+|--------|----------------------|-----|
+| **historical_recurrence** | Yes, indirectly | Status changes alter the set of prior accepted/candidate attributions. Next RCA run computes different value. |
+| **trace_completeness** | No | Fixed at ingestion. StackFrame.resolution unchanged by feedback. |
