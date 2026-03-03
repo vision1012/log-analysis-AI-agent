@@ -2,18 +2,21 @@
 Neo4j client for RCA graph operations.
 
 Connects to Neo4j via NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD.
+Requires: pip install neo4j
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-# neo4j>=5.0.0 (add to requirements when used)
-# from neo4j import GraphDatabase
+try:
+    from neo4j import GraphDatabase
+except ImportError:
+    GraphDatabase = None  # type: ignore[misc, assignment]
 
 
 class Neo4jClient:
-    """Minimal Neo4j client. Implement execute_read/execute_write."""
+    """Minimal Neo4j client. execute_read/execute_write for graph operations."""
 
     def __init__(
         self,
@@ -31,12 +34,13 @@ class Neo4jClient:
 
     def connect(self) -> None:
         """Open connection. Call before use."""
-        # self._driver = GraphDatabase.driver(
-        #     self._uri,
-        #     auth=(self._user, self._password),
-        #     max_connection_lifetime=self._max_connection_lifetime,
-        # )
-        pass
+        if GraphDatabase is None:
+            raise ImportError("neo4j package required. Install with: pip install neo4j")
+        self._driver = GraphDatabase.driver(
+            self._uri,
+            auth=(self._user, self._password),
+            max_connection_lifetime=self._max_connection_lifetime,
+        )
 
     def close(self) -> None:
         """Close connection."""
@@ -46,16 +50,14 @@ class Neo4jClient:
 
     def execute_read(self, query: str, parameters: Optional[dict] = None) -> list[dict]:
         """Execute read-only Cypher query. Returns list of records as dicts."""
-        # with self._driver.session() as session:
-        #     result = session.run(query, parameters or {})
-        #     return [dict(r) for r in result]
-        return []
+        with self._driver.session() as session:
+            result = session.run(query, parameters or {})
+            return [dict(r) for r in result]
 
     def execute_write(self, query: str, parameters: Optional[dict] = None) -> None:
         """Execute write Cypher query."""
-        # with self._driver.session() as session:
-        #     session.run(query, parameters or {})
-        pass
+        with self._driver.session() as session:
+            session.run(query, parameters or {})
 
     def __enter__(self) -> "Neo4jClient":
         self.connect()

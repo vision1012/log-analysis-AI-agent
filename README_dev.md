@@ -31,15 +31,7 @@ docker rm neo4j-rca
 
 ```bash
 # After setting NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
-python -c "
-import os
-from graph.migrations import run_migrations
-run_migrations(
-    os.environ['NEO4J_URI'],
-    os.environ['NEO4J_USER'],
-    os.environ['NEO4J_PASSWORD'],
-)
-"
+python -m graph.migrations
 ```
 
 ---
@@ -75,8 +67,8 @@ For evidence bundle persistence (future):
 
 ## Dependencies
 
-Add when implementing graph layer:
+For graph migrations and RCA:
 
-```
-neo4j>=5.0.0
+```bash
+pip install neo4j>=5.0.0
 ```
