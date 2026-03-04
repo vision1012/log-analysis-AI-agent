@@ -59,6 +59,15 @@ class Neo4jClient:
         with self._driver.session() as session:
             session.run(query, parameters or {})
 
+    def execute_write_tx(
+        self, operations: list[tuple[str, dict[str, Any]]]
+    ) -> None:
+        """Execute multiple write queries in one atomic transaction."""
+        with self._driver.session() as session:
+            with session.begin_transaction() as tx:
+                for query, params in operations:
+                    tx.run(query, params)
+
     def __enter__(self) -> "Neo4jClient":
         self.connect()
         return self
