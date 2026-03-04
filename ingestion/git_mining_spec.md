@@ -2,9 +2,59 @@
 
 Deterministic rules for mapping commits to files, handling renames, squashes, monorepo/multi-repo, merge commits, and bootstrap vs incremental mining.
 
+Aligns with `graph/ontology.md` File Identity (locked).
+
 ---
 
-## 1. Required Fields from Commit
+## 1. File Identity (Locked)
+
+### Formula
+
+```
+file_id = hash(repo_ref + "|" + canonical_repo_relative_path)
+```
+
+The path is the **identity path** — the path at first creation, normalized. Immutable.
+
+### Hash
+
+| Aspect | Rule |
+|--------|------|
+| Algorithm | SHA-256 |
+| Output | 32 hex chars (first 16 bytes, lowercase) |
+| Encoding | UTF-8 |
+
+### Canonical Path Normalization
+
+Apply before hashing and for all path comparisons:
+
+| Rule | Description |
+|------|-------------|
+| Repo-relative | Strip leading `./`, `/`, or repo root prefix. |
+| Separator | Forward slash `/` only. |
+| Collapse | `//` → `/`. |
+| Trailing slash | Strip. |
+| Whitespace | Trim. |
+| Unicode | NFC normalization. |
+
+### Immutability
+
+- **file_id never changes.** Once assigned at creation, immutable.
+- On rename: update `canonical_path`, `previous_paths`; do **not** change `file_id` or create a new File.
+
+### Renames (Identity Preservation)
+
+When git reports rename A → B:
+
+| Action | Rule |
+|--------|------|
+| **Update existing File** | File(A) exists. Set `canonical_path = B`, `previous_paths = [A, …]`. |
+| **Do not create File(B)** | Same logical file; one File node. file_id stays hash(repo_ref + "|" + A). |
+| **TOUCHED** | Commit -[:TOUCHED]-> File(A). File is identified by file_id; path used at commit time was A. |
+
+---
+
+## 2. Required Fields from Commit
 
 ### Must Have
 
@@ -32,7 +82,7 @@ Deterministic rules for mapping commits to files, handling renames, squashes, mo
 
 ---
 
-## 2. Populating TOUCHED Edges
+## 3. Populating TOUCHED Edges
 
 ### Rule
 
@@ -40,9 +90,9 @@ For each commit and each path in modified_files: create or ensure Commit -[:TOUC
 
 ### Steps
 
-1. **Resolve File:** Lookup File by (repo_ref, path). Create if missing.
+1. **Resolve File:** Normalize path; compute file_id = hash(repo_ref + "|" + canonical_path). Lookup File by file_id. Create if missing (path = identity path, file_id, canonical_path = path, previous_paths = []).
 2. **Create TOUCHED:** Create edge from Commit to File. Dedupe by (commit_id, file_id); skip if exists.
-3. **Path normalization:** Apply same normalization as stacktrace parsing (repo-relative, `/` separators, strip prefixes).
+3. **Path normalization:** Apply canonical path rules (§1) before lookup/creation.
 
 ### What Counts as "Touched"
 
@@ -51,7 +101,7 @@ For each commit and each path in modified_files: create or ensure Commit -[:TOUC
 | added | Yes |
 | modified | Yes |
 | deleted | Yes (file was touched; "last modified" includes deletion) |
-| renamed | Yes for both old and new path (or old path only if rename creates new) |
+| renamed | Yes for old path (File identity preserved; update canonical_path on existing File) |
 
 ### Rename Handling
 
@@ -59,9 +109,9 @@ When git reports a rename (old_path → new_path):
 
 | Action | Rule |
 |--------|------|
-| **Create File nodes** | Create File(old_path) and File(new_path) if missing. |
-| **Create TOUCHED** | Commit -[:TOUCHED]-> File(old_path) and Commit -[:TOUCHED]-> File(new_path). Both paths were touched by the commit. |
-| **Update drift props** | Per repo_drift_handling: set File(old_path).canonical_path = new_path, previous_paths = [old_path]. |
+| **Resolve File** | Lookup by file_id = hash(repo_ref + "|" + canonical(old_path)). File exists from prior TOUCHED or create now. |
+| **Update File** | Set canonical_path = new_path, previous_paths = [old_path, …]. Do not create File(new_path). |
+| **Create TOUCHED** | Commit -[:TOUCHED]-> File (the single File node; file_id unchanged). |
 
 ### Idempotency
 
@@ -70,7 +120,7 @@ When git reports a rename (old_path → new_path):
 
 ---
 
-## 3. Merge Commits
+## 4. Merge Commits
 
 ### Definition
 
@@ -103,7 +153,7 @@ Commit with more than one parent (git merge).
 
 ---
 
-## 4. Renames
+## 5. Renames (Detail)
 
 ### Detection
 
@@ -114,17 +164,17 @@ Commit with more than one parent (git merge).
 
 | Scenario | Action |
 |----------|--------|
-| **Rename A→B in commit** | Create TOUCHED to File(A) and File(B). Update File(A).canonical_path = B, previous_paths = [A]. |
-| **Copy (A exists, B added)** | Not a rename. TOUCHED to File(B) only. |
+| **Rename A→B in commit** | Resolve File by file_id = hash(repo_ref + "|" + canonical(A)). Create if missing. TOUCHED to that File. Update File: canonical_path = B, previous_paths = [A]. |
+| **Copy (A exists, B added)** | Not a rename. Create File(B) with file_id = hash(repo_ref + "|" + canonical(B)). TOUCHED to File(B) only. |
 | **Delete only** | TOUCHED to File(A). File may become orphan if no IN_FILE; handle per I18. |
 
 ### Path at Commit Time
 
-TOUCHED uses the path as it was at commit time. Commit touches File(old_path) with path=old_path; File node is immutable on path. canonical_path and previous_paths are for drift/query, not for TOUCHED creation.
+TOUCHED links Commit to File by file_id. File identity (file_id) is immutable. canonical_path and previous_paths track current location for query; they do not affect file_id.
 
 ---
 
-## 5. Squashes and Rebases
+## 6. Squashes and Rebases
 
 ### Squash
 
@@ -144,7 +194,7 @@ Mine in chronological order (oldest first) or reverse (newest first). Idempotent
 
 ---
 
-## 6. Monorepo / Multi-Repo
+## 7. Monorepo / Multi-Repo
 
 ### Monorepo
 
@@ -174,7 +224,7 @@ When a deployment includes commits from multiple repos: create one Deployment no
 
 ---
 
-## 7. Bootstrap vs Incremental Mining
+## 8. Bootstrap vs Incremental Mining
 
 ### Bootstrap (Initial Load)
 
@@ -209,13 +259,14 @@ Git mining does not use event-time watermark for completeness (unlike anomaly wi
 
 ---
 
-## 8. Summary
+## 9. Summary
 
 | Aspect | Rule |
 |--------|------|
+| **File identity** | file_id = hash(repo_ref + "|" + canonical_path); SHA-256 truncated 32 hex; UTF-8; immutable |
 | **Required fields** | sha, timestamp, repo_ref, modified_files (path) |
-| **TOUCHED** | One per (Commit, File) for each path in modified_files; dedupe |
-| **Renames** | TOUCHED to both old and new path; update canonical_path, previous_paths |
+| **TOUCHED** | One per (Commit, File) for each path in modified_files; dedupe by (commit_id, file_id) |
+| **Renames** | Update canonical_path, previous_paths on existing File; do not create new File; file_id unchanged |
 | **Merge commits** | Include; TOUCHED only for merges with diffs; no TOUCHED for no-op merges; last-touch uses commits with actual file changes |
 | **Squashes/rebases** | Mine current branch; replaces_sha in separate drift job |
 | **Monorepo** | One repo_ref; full paths; optional path filter |

@@ -6,6 +6,8 @@ Minimal strategy for keeping the graph correct as repos change, without reproces
 
 **v1 property additions:** File gains `canonical_path`, `previous_paths`; Commit gains `replaces_sha`. All optional; backfill when drift is detected.
 
+**File identity (locked):** `file_id = hash(repo_ref + "|" + canonical_repo_relative_path)`. Immutable. See `graph/ontology.md` and `ingestion/git_mining_spec.md`.
+
 ---
 
 ## Problem Summary
@@ -29,30 +31,31 @@ A file moves from path A to path B. Commits in history touched A; current code l
 
 | Property | Type | Purpose |
 |----------|------|---------|
-| path | string | Path this File node represents (immutable; used for Commit→File, TOUCHED) |
-| canonical_path | string | Current path after all renames; single source of truth for "where it lives now" |
+| file_id | string | Immutable identity. hash(repo_ref + "|" + canonical_path at creation). See ontology.md. |
+| path | string | Identity path at creation (immutable). Same as input to file_id hash. |
+| canonical_path | string | Current path after renames; "where it lives now" |
 | previous_paths | array of string | Paths this logical file had before; chronological [oldest, …, newest before canonical] |
 
 **Semantics:**
-- On creation: `path` = path at creation; `canonical_path` = path; `previous_paths` = [].
-- On rename A→B detected: Create File(B) if missing (path=B, canonical_path=B, previous_paths=[A]). Update File(A): set `canonical_path` = B; set `previous_paths` = [A]. Do **not** change `path` (historical accuracy).
-- For "same logical file": Files share the same `canonical_path`. Query: `WHERE canonical_path = $target OR path = $target`.
+- On creation: `file_id` = hash(repo_ref + "|" + canonical(path)); `path` = identity path; `canonical_path` = path; `previous_paths` = [].
+- On rename A→B detected: Update existing File(A): set `canonical_path` = B; set `previous_paths` = [A, …]. Do **not** create File(B). Do **not** change `file_id` or `path`.
+- For "same logical file": One File node. Identity preserved via immutable file_id.
 
 ### Backfill (Delta Only)
 
 - Run rename detection on repo (e.g. git log --follow, or diff-based).
-- For each newly detected rename: create File(new_path) if missing; update File(old_path) with canonical_path=new_path and previous_paths=[old_path, …].
+- For each newly detected rename: resolve File by file_id = hash(repo_ref + "|" + canonical(old_path)); update with canonical_path=new_path and previous_paths=[old_path, …]. Do not create File(new_path).
 - Do not reprocess all commits; only process renames not yet in graph.
 
 ### Query Behavior
 
 - "Current path for this file": use `canonical_path`.
-- "Last commit to touch this file": find all Files where canonical_path = X or path in previous_paths of File with canonical_path = X; traverse TOUCHED from each; union; take max timestamp.
-- "StackFrame in file": if Frame points to File with path in previous_paths, treat as same logical file as canonical_path.
+- "Last commit to touch this file": find File where canonical_path = X or path = X or X in previous_paths; traverse TOUCHED; take max timestamp.
+- "StackFrame in file": Frame points to File by file_id; File identity is stable across renames.
 
 ### Invariant
 
-`canonical_path` is the leaf; no File points to another File's path as canonical. Chain of renames: A→B→C; File(A) and File(B) have canonical_path=C; File(C) has canonical_path=C.
+`canonical_path` is the leaf. Chain of renames A→B→C: one File node (created at A) has file_id = hash(A), canonical_path=C, previous_paths=[A,B]. No File(B) or File(C) created.
 
 ### Graduation to v2 (RENAMED_TO)
 

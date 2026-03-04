@@ -30,6 +30,75 @@ The ontology covers:
 | Job | Debugging job / analysis run |
 | Investigation | Investigation step or finding |
 
+---
+
+## File Identity (Locked)
+
+File nodes use a deterministic, immutable identity. Aligns with `ingestion/git_mining_spec.md`.
+
+### Formula
+
+```
+file_id = hash(repo_ref + "|" + canonical_repo_relative_path)
+```
+
+Where `canonical_repo_relative_path` is the **identity path** — the path at first creation, normalized. See canonical path rules below.
+
+### Hash Function
+
+| Aspect | Rule |
+|--------|------|
+| Algorithm | SHA-256 |
+| Output | Truncated to 32 hex chars (first 16 bytes) |
+| Encoding | UTF-8 for input string |
+| Format | Lowercase hex string |
+
+### Canonical Path Normalization
+
+Apply before hashing and for all path comparisons:
+
+| Rule | Description |
+|------|-------------|
+| Repo-relative | Path must be relative to repo root. Strip leading `./`, `/`, or repo root prefix. |
+| Separator | Forward slash `/` only. Convert backslashes to forward slashes. |
+| Collapse | Replace multiple consecutive slashes with one. |
+| Trailing slash | Strip for files. Root `""` or `"/"` → `""`. |
+| Whitespace | Trim leading and trailing whitespace. |
+| Case | Preserve (paths are case-sensitive). |
+| Unicode | Normalize to NFC. |
+
+### Immutability
+
+| Rule | Description |
+|------|-------------|
+| **file_id never changes** | Once assigned at creation, file_id is immutable for the lifetime of the File node. |
+| Identity path | The path used to compute file_id (at first creation) is the identity path. Stored as `path` or `identity_path`. |
+| Lookup | File is uniquely identified by file_id. Use path/canonical_path for human-facing lookup. |
+
+### Renames and Identity Preservation
+
+When a file is renamed (A → B):
+
+| Property | Behavior |
+|----------|----------|
+| **file_id** | Unchanged. Identity preserved. |
+| **path** (identity path) | Unchanged. Original path at creation. |
+| **canonical_path** | Updated to B. Current path after rename. |
+| **previous_paths** | Append A (or chain). Paths this logical file had before. |
+
+Do **not** create a new File node for the new path. Update the existing File: set `canonical_path = B`, `previous_paths = [A, …]`. The same logical file keeps the same file_id across renames.
+
+### Lookup by Path
+
+Given a path P (e.g. from commit or stacktrace):
+
+1. Normalize P to canonical form.
+2. Compute `candidate_id = hash(repo_ref + "|" + canonical(P))`.
+3. If File exists with `file_id = candidate_id`, match.
+4. Else: lookup by `canonical_path = canonical(P)` or `path = canonical(P)` or `canonical(P) IN previous_paths` (for renamed files created before identity was adopted).
+
+---
+
 ## Versioning
 
 - **Version**: 1.0
