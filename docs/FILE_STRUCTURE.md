@@ -91,7 +91,6 @@ log-analysis-AI-agent/
 ├── docs/                         # Documentation
 │   ├── README.md
 │   ├── ai_agent_implementation_roadmap.md
-│   ├── architecture_diagram.md
 │   ├── architecture_overview.md
 │   ├── desktop_app_tech_stack_recommendations.md
 │   ├── desktop_ui_workflow.md

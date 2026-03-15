@@ -16,15 +16,7 @@ This directory contains comprehensive documentation for the Log Analysis AI Agen
    - Error handling patterns
    - Future enhancements
 
-2. **architecture_diagram.md**
-   - Visual architecture diagrams
-   - Data flow diagrams
-   - Function call hierarchy
-   - File organization structure
-   - Return dictionary structure
-   - Integration examples
-
-3. **run_functions_api.md**
+2. **run_functions_api.md**
    - Complete API reference for all `run_*()` functions
    - Function signatures and parameters
    - Return structures
@@ -79,8 +71,7 @@ This directory contains comprehensive documentation for the Log Analysis AI Agen
 ### For Developers
 
 1. Start with **architecture_overview.md** to understand the system structure
-2. Review **architecture_diagram.md** for visual representations
-3. Check **run_functions_api.md** for function reference
+2. Check **run_functions_api.md** for function reference
 
 ### For AI Agent Integration
 
@@ -139,7 +130,6 @@ CLI convenience wrappers:
 docs/
 ├── README.md (this file)
 ├── architecture_overview.md      # System architecture
-├── architecture_diagram.md       # Visual diagrams
 ├── run_functions_api.md          # API reference
 ├── worker_runtime_guide.md       # Worker runtime system guide
 ├── job_execution_workflow.md     # End-to-end job execution workflow
