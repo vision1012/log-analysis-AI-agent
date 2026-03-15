@@ -156,6 +156,21 @@ Reference: graph design for trace_ref. Goal: dedupe + join stability across runs
 | **Partial trace** | At least one frame has IN_FILE; at least one lacks IN_FILE. **Degrade** — RCA proceeds with resolved frames only; confidence lowered. |
 | **Entire trace unresolved** | All frames lack IN_FILE. **Block** — No function-level RCA possible; reject or quarantine anomaly. |
 
+### StackFrame Identity (Deterministic)
+
+```
+stackframe_id = hash(trace_ref + "|" + frame_order + "|" + symbol_name + "|" + normalized_path)
+```
+
+| Aspect | Rule |
+|--------|------|
+| **Hash** | SHA-256 truncated to 32 hex chars (lowercase) |
+| **Encoding** | UTF-8 |
+| **normalized_path** | Repo-relative; `/` separators; collapse `//`; strip `./`; use `<unresolved>` when resolution=unknown |
+| **symbol_name** | Use `<unknown>` when empty or unparseable |
+| **frame_order** | Integer as string (e.g. `"0"`, `"1"`) |
+| **Immutability** | stackframe_id never changes once assigned |
+
 ### Property on StackFrame
 
 | Property | Values | Purpose |

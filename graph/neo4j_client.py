@@ -7,12 +7,25 @@ Requires: pip install neo4j
 
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 
 try:
     from neo4j import GraphDatabase
 except ImportError:
     GraphDatabase = None  # type: ignore[misc, assignment]
+
+
+def _env_uri() -> str:
+    return os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+
+
+def _env_user() -> str:
+    return os.environ.get("NEO4J_USER", "neo4j")
+
+
+def _env_password() -> str:
+    return os.environ.get("NEO4J_PASSWORD", "")
 
 
 class Neo4jClient:
@@ -74,3 +87,22 @@ class Neo4jClient:
 
     def __exit__(self, *args: Any) -> None:
         self.close()
+
+    @classmethod
+    def from_env(cls) -> "Neo4jClient":
+        """Create client from NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars."""
+        return cls(_env_uri(), _env_user(), _env_password())
+
+    def health_check(self) -> bool:
+        """Verify connectivity. Returns True if healthy."""
+        if not self._driver:
+            return False
+        try:
+            self._driver.verify_connectivity()
+            return True
+        except Exception:
+            return False
+
+    def session(self):
+        """Session helper for use in 'with' block. Requires connect() first."""
+        return self._driver.session()

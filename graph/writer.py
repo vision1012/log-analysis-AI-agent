@@ -6,10 +6,26 @@ Idempotent upserts and links. Safe for retries. Supports per-anomaly atomic tran
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import re
 from typing import Any, List, Optional, Tuple
 
 from graph.neo4j_client import Neo4jClient
+
+
+def _canonical_path(path: str) -> str:
+    """Normalize path per ontology: repo-relative, / separator, collapse //, strip."""
+    p = path.strip().replace("\\", "/")
+    p = re.sub(r"/+", "/", p).strip("/")
+    return p or ""
+
+
+def _compute_file_id(repo_ref: str, path: str) -> str:
+    """file_id = hash(repo_ref + "|" + canonical_path), SHA-256 truncated to 32 hex."""
+    canonical = _canonical_path(path)
+    s = f"{repo_ref}|{canonical}".encode("utf-8")
+    return hashlib.sha256(s).hexdigest()[:32]
 
 logger = logging.getLogger(__name__)
 
@@ -125,14 +141,16 @@ class GraphWriter:
         _batch: Optional[List[_Op]] = None,
         **props: Any,
     ) -> None:
-        """Upsert File node. MERGE on (path, repo_ref). Sets id on create. Pass _batch for atomic."""
-        fid = file_id or f"{repo_ref}:{path}"
+        """Upsert File node. MERGE on file_id (hash per ontology). Pass _batch for atomic."""
+        fid = file_id or _compute_file_id(repo_ref, path)
+        canonical = _canonical_path(path)
         q = """
-        MERGE (f:File {path: $path, repo_ref: $repo_ref})
-        ON CREATE SET f.id = $file_id
-        ON MATCH SET f.id = COALESCE($file_id, f.id)
+        MERGE (f:File {file_id: $file_id})
+        ON CREATE SET f.path = $path, f.repo_ref = $repo_ref, f.canonical_path = $path
+        ON MATCH SET f.path = COALESCE($path, f.path),
+                     f.repo_ref = COALESCE($repo_ref, f.repo_ref)
         """
-        params: dict[str, Any] = {"path": path, "repo_ref": repo_ref, "file_id": fid}
+        params: dict[str, Any] = {"file_id": fid, "path": canonical, "repo_ref": repo_ref}
         params.update(props)
         self._run_or_batch((q, params), _batch)
         if _batch is None:
@@ -222,7 +240,7 @@ class GraphWriter:
         """
         q = """
         MATCH (s:StackFrame {id: $stackframe_id})
-        MATCH (f:File) WHERE f.id = $file_id
+        MATCH (f:File {file_id: $file_id})
         MERGE (s)-[r:IN_FILE]->(f)
         ON CREATE SET r.resolution = $resolution, r.source = $source, r.confidence = $confidence
         ON MATCH SET r.resolution = COALESCE($resolution, r.resolution),
@@ -254,8 +272,7 @@ class GraphWriter:
         """
         q = """
         MATCH (c:Commit {sha: $commit_sha, repo_ref: $repo_ref})
-        MATCH (f:File) WHERE f.id = $file_id
-        WITH c, f LIMIT 1
+        MATCH (f:File {file_id: $file_id})
         MERGE (c)-[:TOUCHED]->(f)
         """
         params = {"commit_sha": commit_sha, "repo_ref": repo_ref, "file_id": file_id}

@@ -88,7 +88,29 @@ When a file is renamed (A → B):
 
 Do **not** create a new File node for the new path. Update the existing File: set `canonical_path = B`, `previous_paths = [A, …]`. The same logical file keeps the same file_id across renames.
 
-### Lookup by Path
+---
+
+## StackFrame Identity (Locked)
+
+StackFrame nodes use a deterministic, immutable identity. Aligns with `ingestion/stacktrace_parsing_spec.md`.
+
+### Formula
+
+```
+stackframe_id = hash(trace_ref + "|" + frame_order + "|" + symbol_name + "|" + normalized_path)
+```
+
+| Aspect | Rule |
+|--------|------|
+| **Hash** | SHA-256 truncated to 32 hex chars (lowercase) |
+| **Encoding** | UTF-8 |
+| **normalized_path** | Repo-relative; `/` separators; collapse `//`; use `<unresolved>` when resolution=unknown |
+| **symbol_name** | Use `<unknown>` when empty or unparseable |
+| **frame_order** | Integer as string in hash input |
+
+---
+
+## File Lookup by Path
 
 Given a path P (e.g. from commit or stacktrace):
 

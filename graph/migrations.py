@@ -4,6 +4,11 @@ Graph migrations for Neo4j schema.
 Creates uniqueness constraints and indexes per ontology and relationships spec.
 Idempotent (IF NOT EXISTS). Minimal, no frameworks.
 
+RCA_ATTRIBUTED uniqueness (application-level; Neo4j has no relationship constraints):
+- (anomaly_id, run_id): pre_rca_gate blocks when run_id already has candidates (idempotency).
+- One accepted per anomaly: pre_rca_gate blocks auto-run if accepted exists; supersede_prior_attributions before write.
+- writer uses supersede + write_rca_attributed in atomic batch for per-anomaly consistency.
+
 Usage:
     from graph.migrations import apply_migrations
     apply_migrations(uri, user, password)
