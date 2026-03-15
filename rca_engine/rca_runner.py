@@ -16,7 +16,153 @@ from graph.writer import GraphWriter
 
 from rca_engine.candidate_generator import Candidate, generate_candidates
 from rca_engine.ranking_model import RankedCandidate, rank_candidates
-from rca_engine.signal_computation import CandidateSignals, compute_signals
+from rca_engine.signal_computation import (
+    compute_signals,
+    fetch_anomaly_context,
+    fetch_file_metadata,
+)
+
+
+def run_deterministic_rca(
+    anomaly_id: str,
+    trigger_type: str,
+    *,
+    graph_client: Neo4jClient,
+    graph_writer: GraphWriter,
+    evidence_store: EvidenceStore,
+    run_id: Optional[str] = None,
+    override: bool = False,
+    K_frames: int = 5,
+    max_depth: int = 20,
+    min_confidence: float = 0.25,
+) -> Optional["RCARunResult"]:
+    """
+    Execute deterministic RCA for one anomaly. Single transaction per anomaly.
+
+    Flow:
+    1. Run pre_rca_gate
+    2. Generate candidates
+    3. Compute signals
+    4. Rank candidates
+    5. Create evidence bundle (bundle-first)
+    6. Write RCA_ATTRIBUTED edges to File (atomic)
+
+    Edge properties: run_id, created_at, method='deterministic', confidence,
+    status='candidate', evidence_ref.
+
+    Returns RCARunResult or None if blocked/failed.
+    """
+    run_id = run_id or str(uuid.uuid4())
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    # 1. Pre-RCA gate
+    gate_result = run_pre_rca_gate(
+        graph_client,
+        anomaly_id,
+        run_id=run_id,
+        trigger=trigger_type,
+        override=override,
+    )
+    if gate_result.result == GateResult.BLOCK:
+        return None
+
+    # 2. Generate candidates
+    candidates = generate_candidates(
+        graph_client,
+        anomaly_id,
+        K_frames=K_frames,
+        max_depth=max_depth,
+        excluded_deployment_ids=gate_result.excluded_deployment_ids,
+    )
+    if not candidates:
+        return None
+
+    # 3. Compute signals
+    signal_scores_by_file = compute_signals(
+        graph_client,
+        anomaly_id,
+        candidates,
+        max_depth=max_depth,
+        excluded_deployment_ids=gate_result.excluded_deployment_ids,
+    )
+    if not signal_scores_by_file:
+        return None
+
+    # 4. Rank candidates
+    ranked = rank_candidates(
+        signal_scores_by_file,
+        candidates=candidates,
+        min_confidence=min_confidence,
+    )
+    if not ranked:
+        return None
+
+    cand_by_file = {c.file_id: c for c in candidates}
+    ctx = fetch_anomaly_context(graph_client, anomaly_id, max_depth)
+    file_metadata = fetch_file_metadata(
+        graph_client,
+        anomaly_id,
+        [c.file_id for c in candidates],
+        ctx,
+        gate_result.excluded_deployment_ids,
+    )
+
+    # 5. Bundle-first: create and persist evidence bundles
+    trace_ref = ctx.get("trace_ref") or ""
+    bundle_ids: list[str] = []
+
+    for r in ranked:
+        c = cand_by_file.get(r.file_id)
+        meta = file_metadata.get(r.file_id, {})
+        if not c:
+            continue
+
+        bundle_payload: dict[str, Any] = {
+            "anomaly_id": anomaly_id,
+            "trace_ref": trace_ref,
+            "rca_run_id": run_id,
+            "method": "deterministic",
+            "attributed_file_id": r.file_id,
+            "evidence_symbol": c.symbol_name or "",
+            "last_touch_commit_sha": meta.get("last_commit_sha") or "",
+            "signal_scores": r.signal_scores,
+            "decision_timestamp": created_at,
+            "schema_version": "1.0.0",
+            "attributed_frame_id": r.frame_id,
+            "frame_order": r.frame_order,
+        }
+        if meta.get("deployment_id"):
+            bundle_payload["deployment_id"] = meta["deployment_id"]
+
+        bundle_id = evidence_store.create_bundle(bundle_payload)
+        bundle_ids.append(bundle_id)
+
+    # 6. Write RCA_ATTRIBUTED to File (single transaction)
+    batch: list[tuple[str, dict[str, Any]]] = []
+    graph_writer.supersede_prior_attributions(anomaly_id, run_id, _batch=batch)
+
+    for i, r in enumerate(ranked):
+        if i < len(bundle_ids):
+            graph_writer.write_rca_attributed_to_file(
+                anomaly_id,
+                r.file_id,
+                run_id,
+                "deterministic",
+                r.capped_score if r.capped_score is not None else r.score,
+                "candidate",
+                bundle_ids[i],
+                created_at,
+                _batch=batch,
+            )
+
+    graph_writer.write_atomic(batch)
+
+    return RCARunResult(
+        run_id=run_id,
+        anomaly_id=anomaly_id,
+        attribution_count=len(ranked),
+        bundle_ids=bundle_ids,
+    )
 
 
 def run_rca(
@@ -70,32 +216,34 @@ def run_rca(
         return None
 
     # 3. Signal computation
-    candidate_signals, ctx = compute_signals(
+    signal_scores_by_file = compute_signals(
         graph_client,
         anomaly_id,
         candidates,
         max_depth=max_depth,
         excluded_deployment_ids=gate_result.excluded_deployment_ids,
     )
-    if len(candidate_signals) != len(candidates):
+    if not signal_scores_by_file:
         return None
 
     # 4. Ranking
     ranked = rank_candidates(
-        candidates,
-        [cs.scores for cs in candidate_signals],
+        signal_scores_by_file,
+        candidates=candidates,
         min_confidence=min_confidence,
-        top_n=top_n,
     )
     if not ranked:
         return None
 
-    # Build file_id -> CandidateSignals for bundle metadata
-    sig_by_file = {
-        candidates[i].file_id: candidate_signals[i]
-        for i in range(len(candidates))
-    }
     cand_by_file = {c.file_id: c for c in candidates}
+    ctx = fetch_anomaly_context(graph_client, anomaly_id, max_depth)
+    file_metadata = fetch_file_metadata(
+        graph_client,
+        anomaly_id,
+        [c.file_id for c in candidates],
+        ctx,
+        gate_result.excluded_deployment_ids,
+    )
 
     # 5. Bundle-first: create and persist evidence bundles
     trace_ref = ctx.get("trace_ref") or ""
@@ -103,9 +251,9 @@ def run_rca(
     bundle_ids: list[str] = []
 
     for r in ranked:
-        cs = sig_by_file.get(r.file_id)
         c = cand_by_file.get(r.file_id)
-        if not cs or not c:
+        meta = file_metadata.get(r.file_id, {})
+        if not c:
             continue
 
         bundle_payload: dict[str, Any] = {
@@ -115,15 +263,15 @@ def run_rca(
             "method": "deterministic",
             "attributed_file_id": r.file_id,
             "evidence_symbol": c.symbol_name or "",
-            "last_touch_commit_sha": cs.last_commit_sha or "",
+            "last_touch_commit_sha": meta.get("last_commit_sha") or "",
             "signal_scores": r.signal_scores,
             "decision_timestamp": decision_ts,
             "schema_version": "1.0.0",
             "attributed_frame_id": r.frame_id,
             "frame_order": r.frame_order,
         }
-        if cs.deployment_id:
-            bundle_payload["deployment_id"] = cs.deployment_id
+        if meta.get("deployment_id"):
+            bundle_payload["deployment_id"] = meta["deployment_id"]
 
         bundle_id = evidence_store.create_bundle(bundle_payload)
         bundle_ids.append(bundle_id)

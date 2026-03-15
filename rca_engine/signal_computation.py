@@ -1,53 +1,37 @@
 """
-Compute the 10 deterministic signals from graph/confidence_signals.md.
+Compute deterministic signals for RCA scoring.
 
-Uses graph queries for last-touch commit, deployment proximity, recurrence, spike correlation.
+Uses Neo4j queries only. Returns {file_id: signal_scores}.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime
+from typing import Any, Optional, Union
 
 from graph.neo4j_client import Neo4jClient
 
 from rca_engine.candidate_generator import Candidate
 
-# Decay window for last_touch_recency (seconds)
+# Decay window for recency signals (seconds)
 DECAY_WINDOW_SEC = 7 * 24 * 3600  # 7 days
 MAX_RECURRENCE_CAP = 5
-VALID_RESOLUTIONS = ("exact", "probable")
+VALID_RESOLUTIONS = ("exact", "probable", "resolved")
 
-
-@dataclass
-class SignalScores:
-    """All 10 signals for one candidate."""
-
-    top_frame: float
-    frame_depth: float
-    last_touch_recency: float
-    deploy_proximity: float
-    deploy_recency_rank: float
-    historical_recurrence: float
-    trace_completeness: float
-    path_exclusion: float
-    deployment_timing_valid: float
-    file_frame_count: float
-
-    def to_dict(self) -> dict[str, float]:
-        return {
-            "top_frame": self.top_frame,
-            "frame_depth": self.frame_depth,
-            "last_touch_recency": self.last_touch_recency,
-            "deploy_proximity": self.deploy_proximity,
-            "deploy_recency_rank": self.deploy_recency_rank,
-            "historical_recurrence": self.historical_recurrence,
-            "trace_completeness": self.trace_completeness,
-            "path_exclusion": self.path_exclusion,
-            "deployment_timing_valid": self.deployment_timing_valid,
-            "file_frame_count": self.file_frame_count,
-        }
+# Signal names
+SIGNAL_NAMES = (
+    "top_frame_presence",
+    "frame_depth_penalty",
+    "last_touch_recency",
+    "deploy_proximity",
+    "deploy_recency_rank",
+    "historical_recurrence",
+    "resolution_quality",
+    "spike_correlation_strength",
+    "trace_completeness",
+    "file_touch_sparsity",
+)
 
 
 def _parse_ts(ts: Any) -> Optional[float]:
@@ -55,7 +39,7 @@ def _parse_ts(ts: Any) -> Optional[float]:
     if ts is None:
         return None
     if isinstance(ts, (int, float)):
-        return float(ts) if ts > 1e10 else ts  # assume seconds if small
+        return float(ts) if ts > 1e10 else ts
     if isinstance(ts, str):
         try:
             dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -69,80 +53,90 @@ def _clamp(v: float) -> float:
     return max(0.0, min(1.0, v))
 
 
-@dataclass
-class CandidateSignals:
-    """Signals plus metadata for evidence bundle."""
-
-    scores: SignalScores
-    last_commit_sha: str
-    deployment_id: Optional[str]
+def _zero_scores() -> dict[str, float]:
+    """All signals at 0 (or neutral)."""
+    return {name: 0.0 for name in SIGNAL_NAMES}
 
 
 def compute_signals(
     client: Neo4jClient,
     anomaly_id: str,
-    candidates: list[Candidate],
+    candidate_files: list[Union[Candidate, dict[str, Any]]],
     *,
     max_depth: int = 20,
     excluded_deployment_ids: Optional[list[str]] = None,
-) -> list[CandidateSignals]:
+) -> dict[str, dict[str, float]]:
     """
-    Compute 10 signals for each candidate.
+    Compute signals for each candidate file. Neo4j queries only.
 
-    Fetches anomaly context and per-file data via graph queries.
-    Returns CandidateSignals with scores and bundle metadata (last_commit_sha, deployment_id).
+    Returns:
+        {file_id: {signal_name: score}} for each candidate.
     """
+    if not candidate_files:
+        return {}
+
+    # Normalize to (file_id, frame_order) per candidate
+    file_ids: list[str] = []
+    frame_order_by_file: dict[str, int] = {}
+    for c in candidate_files:
+        if isinstance(c, Candidate):
+            fid = c.file_id
+            order = c.representative_frame_order
+        else:
+            fid = c.get("file_id", "")
+            rep = c.get("representative_frame") or {}
+            order = rep.get("frame_order", c.get("representative_frame_order", 999))
+        if fid:
+            file_ids.append(fid)
+            frame_order_by_file[fid] = order
+
     ctx = _fetch_anomaly_context(client, anomaly_id, max_depth)
     if not ctx:
-        return (
-            [
-                CandidateSignals(scores=_zero_signals(), last_commit_sha="", deployment_id=None)
-                for _ in candidates
-            ],
-            {},
-        )
+        return {fid: _zero_scores() for fid in file_ids}
 
     file_data = _fetch_file_data(
         client,
         anomaly_id,
-        [c.file_id for c in candidates],
+        file_ids,
         ctx,
         excluded_deployment_ids or [],
     )
 
-    result: list[CandidateSignals] = []
-    for c in candidates:
-        fd = file_data.get(c.file_id, {})
-        scores = _compute_one(c, ctx, fd)
-        result.append(
-            CandidateSignals(
-                scores=scores,
-                last_commit_sha=fd.get("last_commit_sha") or "",
-                deployment_id=fd.get("deployment_id"),
-            )
-        )
-    return result, ctx or {}
+    result: dict[str, dict[str, float]] = {}
+    for fid in file_ids:
+        fd = file_data.get(fid, {})
+        frame_order = frame_order_by_file.get(fid, 999)
+        result[fid] = _compute_one(fid, frame_order, ctx, fd)
+    return result
 
 
-def _zero_signals() -> SignalScores:
-    return SignalScores(
-        top_frame=0.0,
-        frame_depth=0.0,
-        last_touch_recency=0.0,
-        deploy_proximity=0.0,
-        deploy_recency_rank=0.0,
-        historical_recurrence=0.0,
-        trace_completeness=0.0,
-        path_exclusion=1.0,
-        deployment_timing_valid=0.0,
-        file_frame_count=0.0,
+def fetch_anomaly_context(
+    client: Neo4jClient, anomaly_id: str, max_depth: int = 20
+) -> dict[str, Any]:
+    """Fetch anomaly context (trace_ref, etc.) for bundle creation. Neo4j only."""
+    ctx = _fetch_anomaly_context(client, anomaly_id, max_depth)
+    return ctx or {}
+
+
+def fetch_file_metadata(
+    client: Neo4jClient,
+    anomaly_id: str,
+    file_ids: list[str],
+    ctx: dict[str, Any],
+    excluded_deployment_ids: Optional[list[str]] = None,
+) -> dict[str, dict[str, Any]]:
+    """Fetch last_commit_sha, deployment_id per file for bundle creation. Neo4j only."""
+    if not file_ids:
+        return {}
+    return _fetch_file_data(
+        client, anomaly_id, file_ids, ctx, excluded_deployment_ids or []
     )
 
 
 def _fetch_anomaly_context(
     client: Neo4jClient, anomaly_id: str, max_depth: int
 ) -> Optional[dict[str, Any]]:
-    """Fetch anomaly timestamp, service_ref, and frame stats in scope."""
+    """Fetch anomaly timestamp, service_ref, frame stats via Neo4j."""
     q = """
     MATCH (a:Anomaly {id: $anomaly_id})
     OPTIONAL MATCH (a)-[r:HAS_FRAME]->(s:StackFrame)
@@ -188,12 +182,14 @@ def _fetch_file_data(
     ctx: dict[str, Any],
     excluded_deployment_ids: list[str],
 ) -> dict[str, dict[str, Any]]:
-    """Fetch last-touch commit, deployment, recurrence per file."""
+    """Fetch last-touch commit, deployment, recurrence, touch count per file via Neo4j."""
     if not file_ids:
         return {}
 
     anomaly_ts = ctx.get("anomaly_ts")
     service_ref = ctx.get("service_ref")
+    anomaly_ts_str = str(int(anomaly_ts)) if anomaly_ts else None
+    excluded = excluded_deployment_ids or []
 
     # Last-touch commit per file
     q_touch = """
@@ -201,7 +197,6 @@ def _fetch_file_data(
     WHERE f.file_id IN $file_ids
     OPTIONAL MATCH (f)<-[:TOUCHED]-(c:Commit)
     WHERE c.timestamp IS NOT NULL
-      AND ($anomaly_ts IS NULL OR toString(c.timestamp) <= $anomaly_ts_str)
     WITH f, c
     ORDER BY f.file_id, c.timestamp DESC
     WITH f.file_id AS file_id, collect(c)[0] AS last_commit
@@ -210,17 +205,21 @@ def _fetch_file_data(
            last_commit.timestamp AS last_commit_ts,
            last_commit.repo_ref AS repo_ref
     """
-    anomaly_ts_str = str(int(anomaly_ts)) if anomaly_ts else None
     touch_rows = client.execute_read(
         q_touch,
-        {
-            "file_ids": file_ids,
-            "anomaly_ts": anomaly_ts,
-            "anomaly_ts_str": anomaly_ts_str,
-        },
+        {"file_ids": file_ids},
     )
 
-    # Frame count per file (frames in scope pointing to file)
+    # Touch count per file (for file_touch_sparsity)
+    q_touch_count = """
+    MATCH (f:File)<-[:TOUCHED]-(c:Commit)
+    WHERE f.file_id IN $file_ids
+    RETURN f.file_id AS file_id, count(c) AS touch_count
+    """
+    touch_count_rows = client.execute_read(q_touch_count, {"file_ids": file_ids})
+    touch_counts = {r["file_id"]: r["touch_count"] for r in touch_count_rows}
+
+    # Frame count per file
     q_frames = """
     MATCH (a:Anomaly {id: $anomaly_id})-[r:HAS_FRAME]->(s:StackFrame)-[:IN_FILE]->(f:File)
     WHERE r.frame_order < $max_depth AND f.file_id IN $file_ids
@@ -232,7 +231,7 @@ def _fetch_file_data(
     )
     frame_counts = {r["file_id"]: r["frame_count"] for r in frame_rows}
 
-    # Historical recurrence: prior RCA_ATTRIBUTED for same file + service_ref
+    # Historical recurrence
     q_recur = """
     MATCH (a2:Anomaly)-[r:RCA_ATTRIBUTED]->(s:StackFrame)-[:IN_FILE]->(f:File)
     WHERE f.file_id IN $file_ids
@@ -247,8 +246,7 @@ def _fetch_file_data(
     )
     recur_counts = {r["file_id"]: r["prior_count"] for r in recur_rows}
 
-    # Deployments: find deployment for last-touch commit, service_ref match
-    # Most recent deployment before anomaly for service_ref
+    # Most recent deployment before anomaly
     q_deploy = """
     MATCH (d:Deployment)
     WHERE d.service_ref = $service_ref
@@ -260,7 +258,6 @@ def _fetch_file_data(
     LIMIT 1
     RETURN d.id AS most_recent_dep_id, d.timestamp AS most_recent_dep_ts
     """
-    excluded = excluded_deployment_ids or []
     deploy_ctx = client.execute_read(
         q_deploy,
         {
@@ -270,9 +267,7 @@ def _fetch_file_data(
         },
     )
     most_recent_dep_id = deploy_ctx[0]["most_recent_dep_id"] if deploy_ctx else None
-    most_recent_dep_ts = _parse_ts(deploy_ctx[0]["most_recent_dep_ts"]) if deploy_ctx else None
 
-    # Per-file: deployment that deployed last-touch commit
     out: dict[str, dict[str, Any]] = {}
     for r in touch_rows:
         fid = r.get("file_id")
@@ -319,33 +314,34 @@ def _fetch_file_data(
             "is_most_recent_deployment": is_most_recent,
             "frame_count": frame_counts.get(fid, 0),
             "prior_recurrence": recur_counts.get(fid, 0),
+            "touch_count": touch_counts.get(fid, 0),
         }
 
     return out
 
 
 def _compute_one(
-    c: Candidate,
+    file_id: str,
+    frame_order: int,
     ctx: dict[str, Any],
     fd: dict[str, Any],
-) -> SignalScores:
+) -> dict[str, float]:
+    """Compute all 10 signals for one file."""
     total = ctx.get("total_frames") or 1
     max_order = ctx.get("max_order") or 0
     resolved = ctx.get("resolved_count") or 0
     anomaly_ts = ctx.get("anomaly_ts")
 
-    # 1. top_frame
-    top_frame = 1.0 if c.representative_frame_order == 0 else 0.0
+    # 1. top_frame_presence
+    top_frame_presence = 1.0 if frame_order == 0 else 0.0
 
-    # 2. frame_depth
-    frame_depth = (
-        1.0 - (c.representative_frame_order / max_order)
-        if max_order > 0
-        else 1.0
+    # 2. frame_depth_penalty (higher = deeper = more penalty)
+    frame_depth_penalty = (
+        frame_order / max_order if max_order > 0 else 0.0
     )
-    frame_depth = _clamp(frame_depth)
+    frame_depth_penalty = _clamp(frame_depth_penalty)
 
-    # 3. last_touch_recency (commit must be before anomaly)
+    # 3. last_touch_recency
     last_ts = fd.get("last_commit_ts")
     if last_ts is None or anomaly_ts is None or last_ts > anomaly_ts:
         last_touch_recency = 0.0
@@ -368,34 +364,28 @@ def _compute_one(
     prior = fd.get("prior_recurrence", 0)
     historical_recurrence = _clamp(prior / MAX_RECURRENCE_CAP)
 
-    # 7. trace_completeness
+    # 7. resolution_quality (fraction of resolved frames in trace)
+    resolution_quality = resolved / total if total > 0 else 0.0
+
+    # 8. spike_correlation_strength (deployment proximity as proxy; deployment near anomaly = spike)
+    spike_correlation_strength = deploy_proximity  # same as deploy_proximity when data exists
+
+    # 9. trace_completeness
     trace_completeness = resolved / total if total > 0 else 0.0
 
-    # 8. path_exclusion (candidates already filtered; always 1)
-    path_exclusion = 1.0
+    # 10. file_touch_sparsity (sparse = few touches = higher; 1/(1+touch_count) normalized)
+    touch_count = fd.get("touch_count", 0)
+    file_touch_sparsity = _clamp(1.0 / (1.0 + touch_count)) if touch_count >= 0 else 0.0
 
-    # 9. deployment_timing_valid
-    deployment_timing_valid = (
-        1.0
-        if fd.get("deployment_ts") is not None
-        and anomaly_ts is not None
-        and fd.get("deployment_ts", 0) < anomaly_ts
-        else 0.0
-    )
-
-    # 10. file_frame_count
-    fc = fd.get("frame_count", 0)
-    file_frame_count = _clamp(fc / total) if total > 0 else 0.0
-
-    return SignalScores(
-        top_frame=top_frame,
-        frame_depth=frame_depth,
-        last_touch_recency=last_touch_recency,
-        deploy_proximity=deploy_proximity,
-        deploy_recency_rank=deploy_recency_rank,
-        historical_recurrence=historical_recurrence,
-        trace_completeness=trace_completeness,
-        path_exclusion=path_exclusion,
-        deployment_timing_valid=deployment_timing_valid,
-        file_frame_count=file_frame_count,
-    )
+    return {
+        "top_frame_presence": top_frame_presence,
+        "frame_depth_penalty": frame_depth_penalty,
+        "last_touch_recency": last_touch_recency,
+        "deploy_proximity": deploy_proximity,
+        "deploy_recency_rank": deploy_recency_rank,
+        "historical_recurrence": historical_recurrence,
+        "resolution_quality": resolution_quality,
+        "spike_correlation_strength": spike_correlation_strength,
+        "trace_completeness": trace_completeness,
+        "file_touch_sparsity": file_touch_sparsity,
+    }

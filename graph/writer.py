@@ -335,6 +335,42 @@ class GraphWriter:
         if _batch is None:
             _log_link("RCA_ATTRIBUTED", anomaly_id, frame_id)
 
+    def write_rca_attributed_to_file(
+        self,
+        anomaly_id: str,
+        file_id: str,
+        run_id: str,
+        method: str,
+        confidence: float,
+        status: str,
+        evidence_ref: str,
+        created_at: str,
+        *,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Create RCA_ATTRIBUTED edge to File. Use with _batch for per-anomaly atomic transaction."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})
+        MATCH (f:File {file_id: $file_id})
+        CREATE (a)-[:RCA_ATTRIBUTED {
+            run_id: $run_id, method: $method, confidence: $confidence,
+            status: $status, evidence_ref: $evidence_ref, created_at: $created_at
+        }]->(f)
+        """
+        params = {
+            "anomaly_id": anomaly_id,
+            "file_id": file_id,
+            "run_id": run_id,
+            "method": method,
+            "confidence": confidence,
+            "status": status,
+            "evidence_ref": evidence_ref,
+            "created_at": created_at,
+        }
+        self._run_or_batch((q, params), _batch)
+        if _batch is None:
+            _log_link("RCA_ATTRIBUTED", anomaly_id, file_id)
+
     def supersede_prior_attributions(
         self,
         anomaly_id: str,

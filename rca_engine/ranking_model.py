@@ -1,28 +1,33 @@
 """
 Weighted scoring model for RCA candidates.
 
-Uses default weights from RCA spec. Supports missing-signal weight redistribution.
+Weighted sum scoring with default weights from RCA spec.
+Handles missing signals via weight redistribution.
+Caps confidence when trace_completeness < 0.5.
+Returns top N_candidates = 3.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
-from rca_engine.signal_computation import SignalScores
+# Default weights from RCA spec (deterministic_rca_v1.md). Sum = 1.0.
+N_CANDIDATES = 3
+TRACE_COMPLETENESS_CAP_THRESHOLD = 0.5
+MAX_CONFIDENCE_WHEN_PARTIAL = 0.7
 
-# Default weights (sum = 1.0) per deterministic_rca_v1.md
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "top_frame": 0.15,
-    "frame_depth": 0.10,
+    "top_frame_presence": 0.15,
+    "frame_depth_penalty": 0.10,
     "last_touch_recency": 0.12,
     "deploy_proximity": 0.10,
     "deploy_recency_rank": 0.08,
     "historical_recurrence": 0.10,
+    "resolution_quality": 0.10,
+    "spike_correlation_strength": 0.08,
     "trace_completeness": 0.10,
-    "path_exclusion": 0.05,
-    "deployment_timing_valid": 0.10,
-    "file_frame_count": 0.10,
+    "file_touch_sparsity": 0.07,
 }
 
 # Signals considered "unavailable" when 0 due to missing data (weight redistributed)
@@ -30,7 +35,7 @@ UNAVAILABLE_WHEN_ZERO = (
     "last_touch_recency",
     "deploy_proximity",
     "deploy_recency_rank",
-    "deployment_timing_valid",
+    "spike_correlation_strength",
 )
 
 
@@ -48,18 +53,11 @@ class RankedCandidate:
     weights_used: dict[str, float]
 
 
-def _get_signal_values(s: SignalScores) -> dict[str, float]:
-    return s.to_dict()
-
-
 def _redistribute_weights(
     signal_values: dict[str, float],
     nominal_weights: dict[str, float],
 ) -> dict[str, float]:
-    """
-    Redistribute weight from unavailable signals to available ones.
-    Unavailable = in UNAVAILABLE_WHEN_ZERO and value is 0.
-    """
+    """Redistribute weight from unavailable signals to available ones."""
     unavailable = [
         k for k in UNAVAILABLE_WHEN_ZERO
         if k in nominal_weights and signal_values.get(k, 0) == 0
@@ -84,91 +82,81 @@ def _redistribute_weights(
     return out
 
 
-def compute_score(
-    signals: SignalScores,
-    *,
-    weights: Optional[dict[str, float]] = None,
-    trace_completeness_cap_threshold: float = 0.8,
-    max_confidence_when_partial: float = 0.7,
-) -> RankedCandidate:
-    """
-    Compute weighted score with optional redistribution and confidence cap.
-
-    Returns a placeholder RankedCandidate (file_id/frame_id set by caller).
-    """
-    weights = weights or DEFAULT_WEIGHTS
-    vals = _get_signal_values(signals)
-    w = _redistribute_weights(vals, weights)
-
-    raw = sum(vals.get(k, 0) * w.get(k, 0) for k in w)
-    trace_comp = vals.get("trace_completeness", 0)
-    capped = raw
-    if trace_comp < trace_completeness_cap_threshold:
-        capped = min(raw, trace_comp * max_confidence_when_partial)
-
-    return RankedCandidate(
-        file_id="",
-        frame_id="",
-        frame_order=0,
-        path="",
-        score=raw,
-        capped_score=capped,
-        signal_scores=vals,
-        weights_used=w,
-    )
+def _effective_value(signal_name: str, value: float) -> float:
+    """frame_depth_penalty is inverted: higher penalty = lower score."""
+    if signal_name == "frame_depth_penalty":
+        return 1.0 - value
+    return value
 
 
 def rank_candidates(
-    candidates: list,
-    signal_scores: list[SignalScores],
+    candidate_signals: dict[str, dict[str, float]],
     *,
+    candidates: Optional[list[Any]] = None,
     min_confidence: float = 0.25,
-    top_n: int = 3,
     weights: Optional[dict[str, float]] = None,
-    trace_completeness_cap_threshold: float = 0.8,
-    max_confidence_when_partial: float = 0.7,
 ) -> list[RankedCandidate]:
     """
-    Score and rank candidates. Returns top N with score >= min_confidence.
+    Rank candidates by weighted sum scoring.
 
-    Tie-breaker: frame_order asc, last_touch_recency desc, historical_recurrence desc, path asc.
+    Args:
+        candidate_signals: {file_id: {signal_name: score}} from compute_signals.
+        candidates: Optional list of Candidate for metadata (frame_id, path, frame_order).
+                    If omitted, uses empty defaults for tie-breaking.
+
+    Returns:
+        Top N_candidates=3, sorted by capped score desc, then tie-breakers.
+        Cap applied when trace_completeness < 0.5.
     """
-    if len(candidates) != len(signal_scores):
-        return []
+    weights = weights or DEFAULT_WEIGHTS
+    cand_by_file = {c.file_id: c for c in (candidates or [])}
 
-    ranked: list[RankedCandidate] = []
-    for c, sig in zip(candidates, signal_scores):
-        r = compute_score(
-            sig,
-            weights=weights,
-            trace_completeness_cap_threshold=trace_completeness_cap_threshold,
-            max_confidence_when_partial=max_confidence_when_partial,
+    scored: list[tuple] = []
+    for fid, sig in candidate_signals.items():
+        w = _redistribute_weights(sig, weights)
+        raw = sum(
+            _effective_value(k, sig.get(k, 0)) * w.get(k, 0)
+            for k in w
         )
-        score = r.capped_score if r.capped_score is not None else r.score
-        if score < min_confidence:
+        trace_comp = sig.get("trace_completeness", 0)
+        capped = raw
+        if trace_comp < TRACE_COMPLETENESS_CAP_THRESHOLD:
+            capped = min(raw, trace_comp * MAX_CONFIDENCE_WHEN_PARTIAL)
+
+        if capped < min_confidence:
             continue
-        ranked.append(
-            RankedCandidate(
-                file_id=c.file_id,
-                frame_id=c.representative_frame_id,
-                frame_order=c.representative_frame_order,
-                path=c.path,
-                score=r.score,
-                capped_score=r.capped_score,
-                signal_scores=r.signal_scores,
-                weights_used=r.weights_used,
-            )
-        )
+
+        c = cand_by_file.get(fid)
+        frame_id = c.representative_frame_id if c else ""
+        frame_order = c.representative_frame_order if c else 999
+        path = c.path if c else ""
+
+        scored.append((fid, raw, capped, sig, w, frame_id, frame_order, path))
 
     # Sort: score desc, frame_order asc, last_touch_recency desc, historical_recurrence desc, path asc
-    def key(r: RankedCandidate) -> tuple:
+    def key(item: tuple) -> tuple:
+        _, _, capped, sig, _, _, frame_order, path = item
         return (
-            -r.capped_score if r.capped_score is not None else -r.score,
-            r.frame_order,
-            -r.signal_scores.get("last_touch_recency", 0),
-            -r.signal_scores.get("historical_recurrence", 0),
-            r.path or "",
+            -capped,
+            frame_order,
+            -sig.get("last_touch_recency", 0),
+            -sig.get("historical_recurrence", 0),
+            path or "",
         )
 
-    ranked.sort(key=key)
-    return ranked[:top_n]
+    scored.sort(key=key)
+    top = scored[:N_CANDIDATES]
+
+    return [
+        RankedCandidate(
+            file_id=fid,
+            frame_id=frame_id,
+            frame_order=frame_order,
+            path=path,
+            score=raw,
+            capped_score=capped,
+            signal_scores=sig,
+            weights_used=w,
+        )
+        for fid, raw, capped, sig, w, frame_id, frame_order, path in top
+    ]
