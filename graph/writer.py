@@ -371,6 +371,146 @@ class GraphWriter:
         if _batch is None:
             _log_link("RCA_ATTRIBUTED", anomaly_id, file_id)
 
+    def update_rca_attributed_status(
+        self,
+        anomaly_id: str,
+        file_id: str,
+        run_id: str,
+        new_status: str,
+        *,
+        actor_id: Optional[str] = None,
+        timestamp: Optional[str] = None,
+        reason: Optional[str] = None,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Update RCA_ATTRIBUTED status for (anomaly_id, file_id, run_id). Optional audit fields."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->(f:File {file_id: $file_id})
+        WHERE r.run_id = $run_id
+        SET r.status = $new_status
+        """
+        params: dict[str, Any] = {
+            "anomaly_id": anomaly_id,
+            "file_id": file_id,
+            "run_id": run_id,
+            "new_status": new_status,
+        }
+        if actor_id is not None:
+            q += ", r.feedback_actor_id = $actor_id, r.feedback_at = $timestamp, r.feedback_reason = $reason"
+            params["actor_id"] = actor_id
+            params["timestamp"] = timestamp or ""
+            params["reason"] = reason or ""
+        self._run_or_batch((q, params), _batch)
+
+    def reject_other_candidates_for_anomaly(
+        self,
+        anomaly_id: str,
+        except_file_id: str,
+        except_run_id: str,
+        *,
+        actor_id: str,
+        timestamp: str,
+        reason: str,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Reject all candidate/accepted for anomaly except (except_file_id, except_run_id)."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->(f:File)
+        WHERE r.status IN ['candidate', 'accepted']
+          AND NOT (f.file_id = $except_file_id AND r.run_id = $except_run_id)
+        SET r.status = 'rejected', r.feedback_actor_id = $actor_id,
+            r.feedback_at = $timestamp, r.feedback_reason = $reason
+        """
+        params = {
+            "anomaly_id": anomaly_id,
+            "except_file_id": except_file_id,
+            "except_run_id": except_run_id,
+            "actor_id": actor_id,
+            "timestamp": timestamp,
+            "reason": reason,
+        }
+        self._run_or_batch((q, params), _batch)
+
+    def reject_all_candidates_for_anomaly(
+        self,
+        anomaly_id: str,
+        *,
+        actor_id: str,
+        timestamp: str,
+        reason: str,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Reject all candidate/accepted for anomaly."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
+        WHERE r.status IN ['candidate', 'accepted']
+        SET r.status = 'rejected', r.feedback_actor_id = $actor_id,
+            r.feedback_at = $timestamp, r.feedback_reason = $reason
+        """
+        params = {
+            "anomaly_id": anomaly_id,
+            "actor_id": actor_id,
+            "timestamp": timestamp,
+            "reason": reason,
+        }
+        self._run_or_batch((q, params), _batch)
+
+    def rollback_accepted_to_rejected(
+        self,
+        anomaly_id: str,
+        *,
+        actor_id: str,
+        timestamp: str,
+        reason: str,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Set all accepted RCA_ATTRIBUTED to rejected (rollback)."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
+        WHERE r.status = 'accepted'
+        SET r.status = 'rejected', r.feedback_actor_id = $actor_id,
+            r.feedback_at = $timestamp, r.feedback_reason = $reason
+        """
+        params = {
+            "anomaly_id": anomaly_id,
+            "actor_id": actor_id,
+            "timestamp": timestamp,
+            "reason": reason,
+        }
+        self._run_or_batch((q, params), _batch)
+
+    def update_rca_attributed_status_for_run(
+        self,
+        anomaly_id: str,
+        run_id: str,
+        new_status: str,
+        *,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Update all RCA_ATTRIBUTED in run to new_status."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
+        WHERE r.run_id = $run_id AND r.status IN ['candidate', 'accepted']
+        SET r.status = $new_status
+        """
+        params = {"anomaly_id": anomaly_id, "run_id": run_id, "new_status": new_status}
+        self._run_or_batch((q, params), _batch)
+
+    def rollback_accepted_to_candidate(
+        self,
+        anomaly_id: str,
+        *,
+        _batch: Optional[List[_Op]] = None,
+    ) -> None:
+        """Set all accepted RCA_ATTRIBUTED back to candidate."""
+        q = """
+        MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
+        WHERE r.status = 'accepted'
+        SET r.status = 'candidate'
+        """
+        params = {"anomaly_id": anomaly_id}
+        self._run_or_batch((q, params), _batch)
+
     def supersede_prior_attributions(
         self,
         anomaly_id: str,
