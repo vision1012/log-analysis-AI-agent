@@ -11,11 +11,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.middleware.observability import ObservabilityMiddleware
-from api.routers import feedback_routes, health, jobs, rca_routes
+from api.routers import feedback_routes, health, rca_routes
 
 app = FastAPI(
     title="Log Analysis AI Agent API",
-    description="REST API for submitting and querying log analysis jobs",
+    description="REST API for graph-based RCA operations",
     version="1.0.0",
 )
 
@@ -37,7 +37,6 @@ app.add_middleware(
 
 # Register routers
 app.include_router(health.router, tags=["health"])
-app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 app.include_router(rca_routes.router, prefix="/api/v1", tags=["rca"])
 app.include_router(feedback_routes.router, prefix="/api/v1", tags=["feedback"])
 
