@@ -131,7 +131,7 @@ def main() -> None:
 
         candidates = view["candidate_root_causes"]
         if not candidates:
-            print("   No candidates to confirm. .")
+            print("   No candidates to confirm. Aborting.")
             sys.exit(1)
 
         # 4. Confirm one candidate
