@@ -231,9 +231,9 @@ def _fetch_file_data(
     )
     frame_counts = {r["file_id"]: r["frame_count"] for r in frame_rows}
 
-    # Historical recurrence
+    # Historical recurrence (locked: RCA_ATTRIBUTED -> File)
     q_recur = """
-    MATCH (a2:Anomaly)-[r:RCA_ATTRIBUTED]->(s:StackFrame)-[:IN_FILE]->(f:File)
+    MATCH (a2:Anomaly)-[r:RCA_ATTRIBUTED]->(f:File)
     WHERE f.file_id IN $file_ids
       AND r.status IN ['accepted', 'candidate']
       AND ($service_ref IS NULL OR a2.service_ref = $service_ref)

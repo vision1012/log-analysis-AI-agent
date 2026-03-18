@@ -46,7 +46,7 @@ def _latest_run_id(client, anomaly_id: str) -> str:
     q = """
     MATCH (:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
     WHERE r.status IN ['candidate', 'accepted']
-    RETURN r.run_id AS run_id, coalesce(r.attributed_at, r.created_at, '') AS ts
+    RETURN r.run_id AS run_id, coalesce(r.created_at, '') AS ts
     ORDER BY ts DESC
     LIMIT 1
     """
@@ -54,8 +54,7 @@ def _latest_run_id(client, anomaly_id: str) -> str:
     return (rows[0].get("run_id") if rows else "") or ""
 
 
-def _seed_and_run_deterministic(anomaly_id: str, client) -> str:
-    from artifacts.evidence_store import LocalFileEvidenceStore
+def _seed_and_run_deterministic(anomaly_id: str, client, evidence_store) -> str:
     from graph.writer import GraphWriter, _compute_file_id
     from rca_engine import run_deterministic_rca
 
@@ -95,8 +94,6 @@ def _seed_and_run_deterministic(anomaly_id: str, client) -> str:
     writer.link_touched(commit_sha, repo_ref, bar_id)
     writer.link_deployed_commit(deploy_id, commit_sha, repo_ref)
 
-    evidence_dir = tempfile.mkdtemp(prefix="smoke_graphrag_evidence_")
-    store = LocalFileEvidenceStore(evidence_dir)
     run_id = f"graphrag-smoke-run-{int(datetime.now(timezone.utc).timestamp())}"
 
     result = run_deterministic_rca(
@@ -104,7 +101,7 @@ def _seed_and_run_deterministic(anomaly_id: str, client) -> str:
         "manual",
         graph_client=client,
         graph_writer=writer,
-        evidence_store=store,
+        evidence_store=evidence_store,
         run_id=run_id,
     )
     if result is None:
@@ -130,20 +127,20 @@ def main() -> None:
     client = Neo4jClient(uri, user, password)
     client.connect()
 
+    evidence_base = os.environ.get("EVIDENCE_STORE_DIR") or tempfile.gettempdir()
+    store = LocalFileEvidenceStore(os.path.join(evidence_base, "evidence_bundles"))
+
     try:
         if _has_candidates(client, anomaly_id):
             run_id = _latest_run_id(client, anomaly_id)
             print(f"[reuse] using existing anomaly={anomaly_id} run_id={run_id or 'latest'}")
         else:
-            run_id = _seed_and_run_deterministic(anomaly_id, client)
+            run_id = _seed_and_run_deterministic(anomaly_id, client, store)
             print(f"[seeded] anomaly={anomaly_id} run_id={run_id}")
 
         # For smoke/local usage, default to stub unless env overrides provider.
         llm_cfg = LLMConfig.from_env()
         llm = GraphRAGLLMClient(llm_cfg)
-
-        evidence_base = os.environ.get("EVIDENCE_STORE_DIR") or tempfile.gettempdir()
-        store = LocalFileEvidenceStore(os.path.join(evidence_base, "evidence_bundles"))
 
         explanation = generate_explanation(
             anomaly_id,
@@ -154,8 +151,13 @@ def main() -> None:
         )
 
         print("\n=== GraphRAG Explanation ===")
+        print(f"anomaly_id: {explanation.get('anomaly_id')}")
         primary = explanation.get("primary_candidate") or {}
         print(f"primary candidate: {primary.get('path') or primary.get('file_id')}")
+        print("ranked hypotheses:")
+        for h in (explanation.get("ranked_hypotheses") or []):
+            if isinstance(h, dict):
+                print(f" - rank {h.get('rank')}: {h.get('path') or h.get('file_id')} (conf={h.get('confidence')})")
         print(f"explanation summary: {explanation.get('explanation_summary')}")
         print("evidence highlights:")
         for item in (explanation.get("evidence_highlights") or []):
@@ -176,7 +178,7 @@ def main() -> None:
                 print(f" - {e}")
             sys.exit(2)
 
-        print("\nsmoke_test_graphrag: OK")
+        print("\nGRAPHRAG_SLICE4_COMPLETE")
     finally:
         client.close()
 

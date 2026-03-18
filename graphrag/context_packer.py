@@ -67,7 +67,7 @@ def _select_run_id(client: Neo4jClient, anomaly_id: str, run_id: Optional[str]) 
     q = """
     MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
     WHERE r.status IN ['candidate', 'accepted']
-    RETURN r.run_id AS run_id, coalesce(r.attributed_at, r.created_at, '') AS ts
+    RETURN r.run_id AS run_id, coalesce(r.created_at, '') AS ts
     ORDER BY ts DESC
     LIMIT 1
     """
@@ -80,8 +80,8 @@ def _fetch_candidates_for_run(
     anomaly_id: str,
     run_id: str,
 ) -> list[dict[str, Any]]:
-    # Primary shape: RCA_ATTRIBUTED -> File.
-    q_file = """
+    # Locked architecture: RCA_ATTRIBUTED -> File only.
+    q = """
     MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->(f:File)
     WHERE r.status IN ['candidate', 'accepted'] AND r.run_id = $run_id
     RETURN r.run_id AS run_id,
@@ -89,28 +89,10 @@ def _fetch_candidates_for_run(
            r.confidence AS confidence,
            r.evidence_ref AS evidence_ref,
            f.file_id AS file_id,
-           f.path AS path,
-           null AS frame_order
+           f.path AS path
     """
-    rows = client.execute_read(q_file, {"anomaly_id": anomaly_id, "run_id": run_id})
-    if rows:
-        return [dict(r) for r in rows]
-
-    # Fallback shape: RCA_ATTRIBUTED -> StackFrame -> IN_FILE -> File.
-    q_frame = """
-    MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->(s:StackFrame)
-    OPTIONAL MATCH (s)-[:IN_FILE]->(f:File)
-    OPTIONAL MATCH (a)-[hf:HAS_FRAME]->(s)
-    WHERE r.status IN ['candidate', 'accepted'] AND r.run_id = $run_id
-    RETURN r.run_id AS run_id,
-           r.status AS status,
-           r.confidence AS confidence,
-           r.evidence_ref AS evidence_ref,
-           coalesce(f.file_id, s.id) AS file_id,
-           coalesce(f.path, '') AS path,
-           hf.frame_order AS frame_order
-    """
-    return [dict(r) for r in client.execute_read(q_frame, {"anomaly_id": anomaly_id, "run_id": run_id})]
+    rows = client.execute_read(q, {"anomaly_id": anomaly_id, "run_id": run_id})
+    return [dict(r) for r in rows]
 
 
 def _get_bundle_cached(

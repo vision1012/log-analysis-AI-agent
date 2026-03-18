@@ -3,7 +3,7 @@
 from graphrag.context_packer import pack_context
 from graphrag.evidence_summarizer import summarize_evidence
 from graphrag.explanation_generator import generate_explanation
-from graphrag.output_validator import validate_output
+from graphrag.output_validator import validate_output, validate_or_repair_output
 from graphrag.prompt_builder import build_prompt
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "pack_context",
     "summarize_evidence",
     "validate_output",
+    "validate_or_repair_output",
 ]

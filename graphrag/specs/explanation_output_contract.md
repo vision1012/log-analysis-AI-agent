@@ -73,7 +73,7 @@ Optional: a short human-readable rendering may be generated downstream from this
   - May be empty string if no safe patch direction is inferable from evidence.
   - Must remain high-level (no proprietary code dump).
 
-- `limitations`:
+- `limitations` (alias: `limitations_or_uncertainty`):
   - Required uncertainty/limitation note as a single string.
   - Must mention missing/weak evidence when applicable.
 
