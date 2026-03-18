@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel
 
 from api.services.rca_service import (
+    get_rca_explanation,
     get_rca_result_view,
     get_rca_results,
     get_rca_run_status,
@@ -85,3 +86,11 @@ async def get_run_status(
 ):
     """Get current lock/run state for an anomaly."""
     return get_rca_run_status(anomaly_id)
+
+
+@router.get("/rca/explanation/{anomaly_id}")
+async def get_explanation(
+    anomaly_id: str = Path(..., description="Anomaly ID"),
+):
+    """Generate GraphRAG explanation from latest deterministic RCA candidates."""
+    return get_rca_explanation(anomaly_id)

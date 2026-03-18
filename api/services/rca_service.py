@@ -10,6 +10,8 @@ from typing import Any, Optional
 from artifacts.evidence_store import EvidenceStore
 from graph.neo4j_client import Neo4jClient
 from graph.writer import GraphWriter
+from graphrag.explanation_generator import generate_explanation
+from graphrag.llm_client import GraphRAGLLMClient
 
 from jobs.job_locking import acquire_lock, is_locked, release_lock
 from rca_engine import run_deterministic_rca
@@ -356,6 +358,42 @@ def get_rca_result_view(
             "evidence_refs": evidence_refs,
             "last_updated_at": last_updated_at,
         }
+    finally:
+        if own_client and getattr(client, "_driver", None):
+            client.close()
+
+
+def get_rca_explanation(
+    anomaly_id: str,
+    *,
+    run_id: Optional[str] = None,
+    graph_client: Optional[Neo4jClient] = None,
+    evidence_store: Optional[EvidenceStore] = None,
+    llm_client: Optional[GraphRAGLLMClient] = None,
+) -> dict[str, Any]:
+    """
+    Build RCA explanation for latest deterministic run (or provided run_id).
+
+    Keeps deterministic RCA and explanation layer separate:
+    - deterministic RCA results remain source of truth
+    - GraphRAG only explains those results
+    """
+    client = graph_client or _get_neo4j_client()
+    own_client = graph_client is None
+    if not getattr(client, "_driver", None):
+        client.connect()
+
+    store = evidence_store or _get_evidence_store()
+    explainer = llm_client or GraphRAGLLMClient()
+
+    try:
+        return generate_explanation(
+            anomaly_id,
+            graph_client=client,
+            evidence_store=store,
+            llm_client=explainer,
+            run_id=run_id,
+        )
     finally:
         if own_client and getattr(client, "_driver", None):
             client.close()
