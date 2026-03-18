@@ -1,91 +1,269 @@
-"""Pack RCA graph outputs into a compact LLM context payload."""
+"""Pack graph-derived RCA explanation context for the LLM layer."""
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from artifacts.evidence_store import EvidenceStore
+from graph.neo4j_client import Neo4jClient
+from rca_engine.ranking_model import DEFAULT_WEIGHTS
+from rca_engine.signal_computation import MAX_RECURRENCE_CAP
+
+SCHEMA_VERSION = "1.0.0"
 
 
-def _truncate_text(value: Any, max_len: int = 240) -> str:
+def _truncate_text(value: Any, max_len: int = 220) -> str:
     s = str(value or "")
     if len(s) <= max_len:
         return s
     return s[: max_len - 3] + "..."
 
 
-def _pack_candidates(
-    candidates: list[Mapping[str, Any]],
-    *,
-    max_candidates: int,
-    max_signal_entries: int,
+def _to_float(v: Any, default: float = 0.0) -> float:
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_int(v: Any, default: int = 0) -> int:
+    if isinstance(v, int):
+        return v
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _ensure_connected(client: Neo4jClient) -> None:
+    if not getattr(client, "_driver", None):
+        client.connect()
+
+
+def _fetch_anomaly_metadata(client: Neo4jClient, anomaly_id: str) -> dict[str, Any]:
+    q = """
+    MATCH (a:Anomaly {id: $anomaly_id})
+    RETURN a.id AS anomaly_id,
+           a.trace_ref AS trace_ref,
+           a.service_ref AS service_ref
+    """
+    rows = client.execute_read(q, {"anomaly_id": anomaly_id})
+    if not rows:
+        return {"anomaly_id": anomaly_id, "trace_ref": "", "service_ref": ""}
+    r = rows[0]
+    return {
+        "anomaly_id": r.get("anomaly_id") or anomaly_id,
+        "trace_ref": r.get("trace_ref") or "",
+        "service_ref": r.get("service_ref") or "",
+    }
+
+
+def _select_run_id(client: Neo4jClient, anomaly_id: str, run_id: Optional[str]) -> str:
+    if run_id:
+        return run_id
+    q = """
+    MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->()
+    WHERE r.status IN ['candidate', 'accepted']
+    RETURN r.run_id AS run_id, coalesce(r.attributed_at, r.created_at, '') AS ts
+    ORDER BY ts DESC
+    LIMIT 1
+    """
+    rows = client.execute_read(q, {"anomaly_id": anomaly_id})
+    return (rows[0].get("run_id") if rows else "") or ""
+
+
+def _fetch_candidates_for_run(
+    client: Neo4jClient,
+    anomaly_id: str,
+    run_id: str,
 ) -> list[dict[str, Any]]:
-    packed: list[dict[str, Any]] = []
-    for c in candidates[:max_candidates]:
-        signal_scores = c.get("signal_scores") or {}
-        signal_items = sorted(
-            signal_scores.items(),
-            key=lambda kv: float(kv[1]) if isinstance(kv[1], (int, float)) else 0.0,
-            reverse=True,
-        )[:max_signal_entries]
-        packed.append(
-            {
-                "file_id": c.get("file_id"),
-                "path": _truncate_text(c.get("path")),
-                "run_id": c.get("run_id"),
-                "confidence": c.get("confidence"),
-                "evidence_ref": c.get("evidence_ref"),
-                "top_signals": [{"name": k, "score": v} for k, v in signal_items],
-            }
-        )
-    return packed
+    # Primary shape: RCA_ATTRIBUTED -> File.
+    q_file = """
+    MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->(f:File)
+    WHERE r.status IN ['candidate', 'accepted'] AND r.run_id = $run_id
+    RETURN r.run_id AS run_id,
+           r.status AS status,
+           r.confidence AS confidence,
+           r.evidence_ref AS evidence_ref,
+           f.file_id AS file_id,
+           f.path AS path,
+           null AS frame_order
+    """
+    rows = client.execute_read(q_file, {"anomaly_id": anomaly_id, "run_id": run_id})
+    if rows:
+        return [dict(r) for r in rows]
+
+    # Fallback shape: RCA_ATTRIBUTED -> StackFrame -> IN_FILE -> File.
+    q_frame = """
+    MATCH (a:Anomaly {id: $anomaly_id})-[r:RCA_ATTRIBUTED]->(s:StackFrame)
+    OPTIONAL MATCH (s)-[:IN_FILE]->(f:File)
+    OPTIONAL MATCH (a)-[hf:HAS_FRAME]->(s)
+    WHERE r.status IN ['candidate', 'accepted'] AND r.run_id = $run_id
+    RETURN r.run_id AS run_id,
+           r.status AS status,
+           r.confidence AS confidence,
+           r.evidence_ref AS evidence_ref,
+           coalesce(f.file_id, s.id) AS file_id,
+           coalesce(f.path, '') AS path,
+           hf.frame_order AS frame_order
+    """
+    return [dict(r) for r in client.execute_read(q_frame, {"anomaly_id": anomaly_id, "run_id": run_id})]
+
+
+def _get_bundle_cached(
+    evidence_store: EvidenceStore,
+    evidence_ref: str,
+    cache: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    if not evidence_ref:
+        return {}
+    if evidence_ref in cache:
+        return cache[evidence_ref]
+    b = evidence_store.get_bundle(evidence_ref) or {}
+    cache[evidence_ref] = b
+    return b
+
+
+def _signal_summary_from_bundle(bundle: dict[str, Any], max_signal_entries: int) -> list[dict[str, float | str]]:
+    scores = bundle.get("signal_scores") or {}
+    weights = bundle.get("weights_used") or DEFAULT_WEIGHTS
+    if not isinstance(scores, dict):
+        return []
+    items = sorted(
+        (
+            (str(k), _to_float(v), _to_float(weights.get(k, 0.0)))
+            for k, v in scores.items()
+        ),
+        key=lambda x: (-x[1], x[0]),
+    )[:max_signal_entries]
+    return [{"name": n, "score": s, "weight_used": w} for n, s, w in items]
+
+
+def _candidate_sort_key(c: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        -_to_float(c.get("capped_score"), _to_float(c.get("confidence"))),
+        _to_int(c.get("frame_order"), 10_000),
+        -_to_float(c.get("last_touch_recency"), 0.0),
+        -_to_float(c.get("historical_recurrence"), 0.0),
+        str(c.get("path") or ""),
+    )
 
 
 def pack_context(
     anomaly_id: str,
     *,
-    result_view: Mapping[str, Any],
-    run_summary: Optional[Mapping[str, Any]] = None,
-    evidence_bundles: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    graph_client: Neo4jClient,
+    evidence_store: EvidenceStore,
+    run_id: Optional[str] = None,
     max_candidates: int = 3,
     max_signal_entries: int = 6,
 ) -> dict[str, Any]:
     """
-    Build a compact, model-ready context object from RCA outputs.
+    Build explanation context from graph RCA candidates and evidence bundles.
 
-    Inputs are intentionally generic mappings so callers can pass API/service outputs
-    without tight coupling to a single module.
+    Guarantees:
+    - deterministic ordering
+    - compact payload
+    - no duplicate evidence refs
+    - candidate cap at top 3 by default
+    - excludes raw logs/full code blobs
     """
-    candidates = result_view.get("candidate_root_causes") or []
-    accepted = result_view.get("accepted_root_cause")
-    packed_candidates = _pack_candidates(
-        candidates,
-        max_candidates=max_candidates,
-        max_signal_entries=max_signal_entries,
-    )
+    _ensure_connected(graph_client)
+    meta = _fetch_anomaly_metadata(graph_client, anomaly_id)
+    selected_run_id = _select_run_id(graph_client, anomaly_id, run_id)
+    rows = _fetch_candidates_for_run(graph_client, anomaly_id, selected_run_id)
 
-    bundle_map = evidence_bundles or {}
-    bundle_brief: list[dict[str, Any]] = []
-    for c in packed_candidates:
-        ref = c.get("evidence_ref")
-        b = bundle_map.get(ref or "", {})
-        if not b:
+    bundle_cache: dict[str, dict[str, Any]] = {}
+    by_file: dict[str, dict[str, Any]] = {}
+
+    for r in rows:
+        file_id = str(r.get("file_id") or "")
+        if not file_id:
             continue
-        bundle_brief.append(
+        ref = str(r.get("evidence_ref") or "")
+        bundle = _get_bundle_cached(evidence_store, ref, bundle_cache)
+        signal_scores = bundle.get("signal_scores") or {}
+
+        confidence = _to_float(r.get("confidence"), 0.0)
+        raw_score = _to_float(bundle.get("raw_score"), confidence)
+        capped_score = _to_float(bundle.get("capped_score"), confidence)
+        frame_order = bundle.get("frame_order")
+        last_touch_recency = _to_float(signal_scores.get("last_touch_recency"), 0.0) if isinstance(signal_scores, dict) else 0.0
+        historical_recurrence = _to_float(signal_scores.get("historical_recurrence"), 0.0) if isinstance(signal_scores, dict) else 0.0
+
+        candidate = {
+            "file_id": file_id,
+            "path": _truncate_text(r.get("path") or bundle.get("path") or ""),
+            "confidence": confidence,
+            "raw_score": raw_score,
+            "capped_score": capped_score,
+            "evidence_ref": ref,
+            "frame_order": frame_order,
+            "last_touch_recency": last_touch_recency,
+            "historical_recurrence": historical_recurrence,
+            "signal_summary": _signal_summary_from_bundle(bundle, max_signal_entries),
+            "commit_deployment_evidence": {
+                "last_touch_commit_sha": str(bundle.get("last_touch_commit_sha") or ""),
+                "deployment_id": str(bundle.get("deployment_id") or ""),
+                "deployment_timing_valid": _to_float(
+                    signal_scores.get("deployment_timing_valid"), 0.0
+                ) > 0.0 if isinstance(signal_scores, dict) else False,
+                "is_most_recent_deployment": _to_float(
+                    signal_scores.get("deploy_recency_rank"), 0.0
+                ) > 0.0 if isinstance(signal_scores, dict) else False,
+            },
+            "historical_recurrence_evidence": {
+                "prior_count": _to_int(
+                    bundle.get("prior_count"),
+                    int(round(historical_recurrence * MAX_RECURRENCE_CAP)),
+                ),
+                "normalized_score": historical_recurrence,
+                "service_scope": str(meta.get("service_ref") or ""),
+            },
+        }
+        existing = by_file.get(file_id)
+        if not existing or _candidate_sort_key(candidate) < _candidate_sort_key(existing):
+            by_file[file_id] = candidate
+
+    ordered_all = sorted(by_file.values(), key=_candidate_sort_key)
+    ordered: list[dict[str, Any]] = []
+    seen_refs: set[str] = set()
+    for c in ordered_all:
+        ref = str(c.get("evidence_ref") or "")
+        # Keep payload compact and avoid duplicate evidence entries.
+        if ref and ref in seen_refs:
+            continue
+        if ref:
+            seen_refs.add(ref)
+        ordered.append(c)
+        if len(ordered) >= max_candidates:
+            break
+
+    candidates: list[dict[str, Any]] = []
+    for i, c in enumerate(ordered, start=1):
+        candidates.append(
             {
-                "bundle_id": ref,
-                "attributed_file_id": b.get("attributed_file_id"),
-                "attributed_frame_id": b.get("attributed_frame_id"),
-                "deployment_id": b.get("deployment_id"),
-                "last_touch_commit_sha": b.get("last_touch_commit_sha"),
+                "rank": i,
+                "file_id": c["file_id"],
+                "path": c["path"],
+                "confidence": c["confidence"],
+                "raw_score": c["raw_score"],
+                "capped_score": c["capped_score"],
+                "evidence_ref": c["evidence_ref"],
+                "signal_summary": c["signal_summary"],
+                "commit_deployment_evidence": c["commit_deployment_evidence"],
+                "historical_recurrence_evidence": c["historical_recurrence_evidence"],
             }
         )
 
     return {
-        "anomaly_id": anomaly_id,
-        "current_status": result_view.get("current_status"),
-        "latest_run_id": result_view.get("latest_run_id"),
-        "last_updated_at": result_view.get("last_updated_at"),
-        "accepted_root_cause": accepted,
-        "candidate_root_causes": packed_candidates,
-        "run_summary": dict(run_summary or {}),
-        "evidence_bundle_brief": bundle_brief,
+        "schema_version": SCHEMA_VERSION,
+        "anomaly_id": meta.get("anomaly_id") or anomaly_id,
+        "trace_ref": meta.get("trace_ref") or "",
+        "run_id": selected_run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "candidates": candidates,
     }
