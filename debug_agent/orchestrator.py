@@ -38,8 +38,8 @@ def run_debug_session(
     """
     Run a full debug session for an anomaly.
 
-    Planner-driven execution (Wave 2 capable):
-    triage -> rca -> evidence -> memory -> explanation
+    Planner-driven execution (full 7-agent pipeline):
+    triage -> rca -> evidence -> memory -> explanation -> remediation -> reporting
     """
     context = DebugContext(anomaly_id=anomaly_id, run_id=run_id)
     planned_steps = plan_steps(context, user_hint=user_hint)
@@ -192,14 +192,15 @@ def run_debug_session(
         if remediation_result.get("confidence_note") and not report.confidence_summary:
             report.confidence_summary = str(remediation_result.get("confidence_note") or "")
 
-    # If reporting agent succeeded, prefer its final formatted report while preserving RCA source-of-truth status.
+    # Prefer reporting stage output when present (including reporting fallback payloads),
+    # but always preserve deterministic RCA source-of-truth candidate ordering/identity.
     reporting_result = by_kind.get(StepKind.REPORTING.value)
     final_report_dict = report.to_dict()
-    if reporting_result and reporting_result.success and isinstance(reporting_result.output, dict):
+    if reporting_result and isinstance(reporting_result.output, dict):
         rr = reporting_result.output
         out_report = rr.get("investigation_report")
         if isinstance(out_report, dict):
-            # Prevent reporting stage from overriding deterministic RCA candidate ordering/identity.
+            # Never allow reporting stage to override deterministic RCA conclusions.
             out_report["root_cause_candidates"] = report.to_dict().get("root_cause_candidates", [])
             out_report["primary_candidate"] = report.to_dict().get("primary_candidate")
             out_report["confidence_summary"] = out_report.get("confidence_summary") or report.to_dict().get("confidence_summary", "")
@@ -208,12 +209,25 @@ def run_debug_session(
         if rr.get("final_report_summary"):
             final_report_dict["final_report_summary"] = str(rr.get("final_report_summary"))
 
+    # Ensure required final output fields are always present even if downstream stages fail.
+    final_report_dict.setdefault("triage_summary", report.triage_summary)
+    final_report_dict.setdefault("root_cause_candidates", report.to_dict().get("root_cause_candidates", []))
+    final_report_dict.setdefault("primary_candidate", report.to_dict().get("primary_candidate"))
+    final_report_dict.setdefault("evidence_highlights", report.evidence_highlights)
+    final_report_dict.setdefault("similar_incidents", report.similar_incidents)
+    final_report_dict.setdefault("explanation_summary", report.explanation_summary)
+    final_report_dict.setdefault("remediation_steps", report.remediation_steps)
+    final_report_dict.setdefault("final_report_summary", report.final_report_summary)
+
     logger.info(
-        "debug_agent.orchestrator.done anomaly_id=%s run_id=%s status=%s steps=%s",
+        "debug_agent.orchestrator.done anomaly_id=%s run_id=%s status=%s steps=%s explanation_ok=%s remediation_ok=%s reporting_ok=%s",
         anomaly_id,
         report.run_id,
         report.status.value,
         len(results),
+        bool(by_kind.get(StepKind.EXPLANATION.value) and by_kind.get(StepKind.EXPLANATION.value).success),
+        bool(by_kind.get(StepKind.REMEDIATION.value) and by_kind.get(StepKind.REMEDIATION.value).success),
+        bool(by_kind.get(StepKind.REPORTING.value) and by_kind.get(StepKind.REPORTING.value).success),
     )
 
     return {
@@ -221,6 +235,15 @@ def run_debug_session(
         "run_id": report.run_id,
         "status": report.status.value,
         "investigation_report": final_report_dict,
+        # Convenience top-level mirrors for required final output fields.
+        "triage_summary": final_report_dict.get("triage_summary", ""),
+        "root_cause_candidates": final_report_dict.get("root_cause_candidates", []),
+        "primary_candidate": final_report_dict.get("primary_candidate"),
+        "evidence_highlights": final_report_dict.get("evidence_highlights", []),
+        "similar_incidents": final_report_dict.get("similar_incidents", []),
+        "explanation_summary": final_report_dict.get("explanation_summary", ""),
+        "remediation_steps": final_report_dict.get("remediation_steps", []),
+        "final_report_summary": final_report_dict.get("final_report_summary", ""),
         "steps": [
             {
                 "kind": r.step_kind.value,

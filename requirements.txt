@@ -5,11 +5,16 @@
 pydantic>=2.6.0              # Schema validation for ToolResult contract
 pydantic-settings>=2.0.0     # Settings management for Pydantic v2 (optional, fallback available)
 python-dateutil>=2.8.0        # Flexible date/time parsing for log timestamps
+langchain>=0.3.0             # Lightweight prompt + invocation utilities for LLM-assisted agents
+langchain-core>=0.3.0        # Core prompt/message/output parser primitives
 
 # RAG Dependencies (optional - install as needed)
 # sentence-transformers>=2.2.0  # For local embeddings (no API required)
 # chromadb>=0.4.0              # For local vector store
 # openai>=1.0.0                # For OpenAI embeddings (alternative to sentence-transformers)
+
+# Optional provider integration for LangChain LLM invocation (OpenAI provider path)
+langchain-openai>=0.2.0      # Used when GRAPHRAG_LLM_PROVIDER=openai
 
 # Optional: For future AI agent integration (uncomment when needed)
 # openai>=1.0.0                # OpenAI API client
