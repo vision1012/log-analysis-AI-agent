@@ -48,6 +48,11 @@ class RootCauseCandidate:
 @dataclass
 class TriageResult:
     """Output from triage agent."""
+    anomaly_id: str = ""
+    severity: str = ""
+    service_ref: Optional[str] = None
+    error_type: Optional[str] = None
+    confidence_score: float = 0.0
     priority: str = ""
     summary: str = ""
     classification: str = ""
@@ -79,6 +84,9 @@ class MemoryPackage:
     """Output from memory agent (session/historical context)."""
     anomaly_id: str = ""
     similar_incidents: list[dict[str, Any]] = field(default_factory=list)
+    recurrence_score: float = 0.0
+    historical_patterns_summary: str = ""
+    prior_root_causes: list[dict[str, Any]] = field(default_factory=list)
     prior_attributions: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -130,6 +138,8 @@ class InvestigationReport:
     confidence_summary: str = ""
     evidence_highlights: list[str] = field(default_factory=list)
     similar_incidents: list[dict[str, Any]] = field(default_factory=list)
+    historical_patterns_summary: str = ""
+    recurrence_signals: dict[str, Any] = field(default_factory=dict)
     explanation_summary: str = ""
     remediation_steps: list[str] = field(default_factory=list)
     optional_patch_direction: str = ""
@@ -166,6 +176,8 @@ class InvestigationReport:
             "confidence_summary": self.confidence_summary,
             "evidence_highlights": self.evidence_highlights,
             "similar_incidents": self.similar_incidents,
+            "historical_patterns_summary": self.historical_patterns_summary,
+            "recurrence_signals": self.recurrence_signals,
             "explanation_summary": self.explanation_summary,
             "remediation_steps": self.remediation_steps,
             "optional_patch_direction": self.optional_patch_direction,
