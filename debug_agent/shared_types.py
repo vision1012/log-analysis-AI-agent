@@ -108,6 +108,7 @@ class RemediationPackage:
     anomaly_id: str = ""
     steps: list[str] = field(default_factory=list)
     optional_patch_direction: str = ""
+    confidence_note: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -115,6 +116,9 @@ class RemediationPackage:
 class ReportingPackage:
     """Output from reporting agent."""
     anomaly_id: str = ""
+    final_report_summary: str = ""
+    investigation_report: dict[str, Any] = field(default_factory=dict)
+    executive_summary: str = ""
     final_summary: str = ""
     status: ReportStatus = ReportStatus.COMPLETED
     metadata: dict[str, Any] = field(default_factory=dict)
