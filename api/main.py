@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api import debug_agent_routes
 from api.middleware.observability import ObservabilityMiddleware
 from api.routers import feedback_routes, health, rca_routes
 
@@ -39,6 +40,7 @@ app.add_middleware(
 app.include_router(health.router, tags=["health"])
 app.include_router(rca_routes.router, prefix="/api/v1", tags=["rca"])
 app.include_router(feedback_routes.router, prefix="/api/v1", tags=["feedback"])
+app.include_router(debug_agent_routes.router, tags=["debug-agent"])
 
 
 @app.get("/")

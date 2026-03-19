@@ -18,6 +18,16 @@ from debug_agent.shared_types import (
 
 logger = logging.getLogger(__name__)
 
+_FULL_FLOW = [
+    StepKind.TRIAGE.value,
+    StepKind.RCA.value,
+    StepKind.EVIDENCE.value,
+    StepKind.MEMORY.value,
+    StepKind.EXPLANATION.value,
+    StepKind.REMEDIATION.value,
+    StepKind.REPORTING.value,
+]
+
 
 def run_debug_session(
     anomaly_id: str,
@@ -32,7 +42,8 @@ def run_debug_session(
     triage -> rca -> evidence -> memory -> explanation
     """
     context = DebugContext(anomaly_id=anomaly_id, run_id=run_id)
-    steps = plan_steps(context, user_hint=user_hint)
+    planned_steps = plan_steps(context, user_hint=user_hint)
+    steps = _ensure_full_pipeline_steps(planned_steps)
     results: list[StepResult] = []
     by_kind: dict[str, StepResult] = {}
 
@@ -114,6 +125,41 @@ def run_debug_session(
                 params.setdefault("evidence_result", evidence.output)
             if memory and memory.output:
                 params.setdefault("memory_result", memory.output)
+        elif kind == StepKind.REMEDIATION.value:
+            triage = by_kind.get(StepKind.TRIAGE.value)
+            rca = by_kind.get(StepKind.RCA.value)
+            evidence = by_kind.get(StepKind.EVIDENCE.value)
+            memory = by_kind.get(StepKind.MEMORY.value)
+            explanation = by_kind.get(StepKind.EXPLANATION.value)
+            if triage and triage.output:
+                params.setdefault("triage_result", triage.output)
+            if rca and rca.output:
+                params.setdefault("rca_result", rca.output)
+            if evidence and evidence.output:
+                params.setdefault("evidence_result", evidence.output)
+            if memory and memory.output:
+                params.setdefault("memory_result", memory.output)
+            if explanation and explanation.output:
+                params.setdefault("explanation_result", explanation.output)
+        elif kind == StepKind.REPORTING.value:
+            triage = by_kind.get(StepKind.TRIAGE.value)
+            rca = by_kind.get(StepKind.RCA.value)
+            evidence = by_kind.get(StepKind.EVIDENCE.value)
+            memory = by_kind.get(StepKind.MEMORY.value)
+            explanation = by_kind.get(StepKind.EXPLANATION.value)
+            remediation = by_kind.get(StepKind.REMEDIATION.value)
+            if triage and triage.output:
+                params.setdefault("triage_result", triage.output)
+            if rca and rca.output:
+                params.setdefault("rca_result", rca.output)
+            if evidence and evidence.output:
+                params.setdefault("evidence_result", evidence.output)
+            if memory and memory.output:
+                params.setdefault("memory_result", memory.output)
+            if explanation and explanation.output:
+                params.setdefault("explanation_result", explanation.output)
+            if remediation and remediation.output:
+                params.setdefault("remediation_result", remediation.output)
 
         result = _execute_step(kind, context, params)
         results.append(result)
@@ -136,6 +182,31 @@ def run_debug_session(
         explanation_result=(by_kind.get(StepKind.EXPLANATION.value).output if by_kind.get(StepKind.EXPLANATION.value) else {}),
         step_results=results,
     )
+    # Include remediation in deterministic aggregate.
+    remediation_result = by_kind.get(StepKind.REMEDIATION.value).output if by_kind.get(StepKind.REMEDIATION.value) else {}
+    if isinstance(remediation_result, dict):
+        if remediation_result.get("steps"):
+            report.remediation_steps = [s for s in remediation_result.get("steps", []) if isinstance(s, str)]
+        if remediation_result.get("optional_patch_direction"):
+            report.optional_patch_direction = str(remediation_result.get("optional_patch_direction") or "")
+        if remediation_result.get("confidence_note") and not report.confidence_summary:
+            report.confidence_summary = str(remediation_result.get("confidence_note") or "")
+
+    # If reporting agent succeeded, prefer its final formatted report while preserving RCA source-of-truth status.
+    reporting_result = by_kind.get(StepKind.REPORTING.value)
+    final_report_dict = report.to_dict()
+    if reporting_result and reporting_result.success and isinstance(reporting_result.output, dict):
+        rr = reporting_result.output
+        out_report = rr.get("investigation_report")
+        if isinstance(out_report, dict):
+            # Prevent reporting stage from overriding deterministic RCA candidate ordering/identity.
+            out_report["root_cause_candidates"] = report.to_dict().get("root_cause_candidates", [])
+            out_report["primary_candidate"] = report.to_dict().get("primary_candidate")
+            out_report["confidence_summary"] = out_report.get("confidence_summary") or report.to_dict().get("confidence_summary", "")
+            out_report["status"] = report.status.value
+            final_report_dict = out_report
+        if rr.get("final_report_summary"):
+            final_report_dict["final_report_summary"] = str(rr.get("final_report_summary"))
 
     logger.info(
         "debug_agent.orchestrator.done anomaly_id=%s run_id=%s status=%s steps=%s",
@@ -149,7 +220,7 @@ def run_debug_session(
         "anomaly_id": anomaly_id,
         "run_id": report.run_id,
         "status": report.status.value,
-        "investigation_report": report.to_dict(),
+        "investigation_report": final_report_dict,
         "steps": [
             {
                 "kind": r.step_kind.value,
@@ -160,6 +231,82 @@ def run_debug_session(
             for r in results
         ],
     }
+
+
+def _ensure_full_pipeline_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Ensure full pipeline presence and stable ordering:
+      triage -> rca -> evidence -> memory -> explanation -> remediation -> reporting
+    Planner remains source for existing dependency/optional metadata; missing steps are
+    injected with conservative defaults.
+    """
+    by_kind: dict[str, dict[str, Any]] = {}
+    for s in steps:
+        kind = str(s.get("kind") or "")
+        if kind:
+            by_kind[kind] = dict(s)
+
+    defaults: dict[str, dict[str, Any]] = {
+        StepKind.TRIAGE.value: {
+            "step_name": "triage_agent",
+            "kind": StepKind.TRIAGE.value,
+            "params": {},
+            "depends_on": [],
+            "optional": True,
+        },
+        StepKind.RCA.value: {
+            "step_name": "rca_agent",
+            "kind": StepKind.RCA.value,
+            "params": {},
+            "depends_on": [StepKind.TRIAGE.value],
+            "optional": False,
+        },
+        StepKind.EVIDENCE.value: {
+            "step_name": "evidence_agent",
+            "kind": StepKind.EVIDENCE.value,
+            "params": {},
+            "depends_on": [StepKind.RCA.value],
+            "optional": True,
+        },
+        StepKind.MEMORY.value: {
+            "step_name": "memory_agent",
+            "kind": StepKind.MEMORY.value,
+            "params": {},
+            "depends_on": [StepKind.EVIDENCE.value],
+            "optional": True,
+        },
+        StepKind.EXPLANATION.value: {
+            "step_name": "explanation_agent",
+            "kind": StepKind.EXPLANATION.value,
+            "params": {},
+            "depends_on": [StepKind.EVIDENCE.value, StepKind.MEMORY.value],
+            "optional": True,  # explanation optional
+        },
+        StepKind.REMEDIATION.value: {
+            "step_name": "remediation_agent",
+            "kind": StepKind.REMEDIATION.value,
+            "params": {},
+            "depends_on": [StepKind.RCA.value, StepKind.EVIDENCE.value],
+            "optional": True,  # remediation optional
+        },
+        StepKind.REPORTING.value: {
+            "step_name": "reporting_agent",
+            "kind": StepKind.REPORTING.value,
+            "params": {},
+            "depends_on": [],
+            "optional": False,
+        },
+    }
+
+    ordered: list[dict[str, Any]] = []
+    for kind in _FULL_FLOW:
+        base = dict(defaults[kind])
+        existing = by_kind.get(kind)
+        if existing:
+            # keep planner-provided values, but ensure all keys exist
+            base.update(existing)
+        ordered.append(base)
+    return ordered
 
 
 def _safe_step_kind(kind: str) -> StepKind:
