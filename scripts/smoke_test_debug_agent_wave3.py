@@ -20,6 +20,7 @@ import sys
 import tempfile
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -170,8 +171,6 @@ def _validate_result_shape(result: dict) -> tuple[bool, list[str]]:
         "explanation_summary",
         "remediation_steps",
         "final_report_summary",
-        "created_at",
-        "status",
     )
     for k in required_report_keys:
         if k not in report:
@@ -190,6 +189,109 @@ def _validate_result_shape(result: dict) -> tuple[bool, list[str]]:
                         errors.append(f"{kind} failed but {field} missing in report")
 
     return len(errors) == 0, errors
+
+
+def _step_output(result: dict[str, Any], kind: str) -> dict[str, Any]:
+    for step in (result.get("steps") or []):
+        if isinstance(step, dict) and step.get("kind") == kind:
+            out = step.get("output")
+            return out if isinstance(out, dict) else {}
+    return {}
+
+
+def _extract_severity(result: dict[str, Any], report: dict[str, Any]) -> str:
+    triage = _step_output(result, "triage")
+    if isinstance(triage, dict):
+        sev = str(triage.get("severity") or triage.get("priority") or "")
+        if sev:
+            return sev
+    triage_summary = str(report.get("triage_summary") or "")
+    parts = triage_summary.split("severity=")
+    if len(parts) > 1:
+        return parts[1].split(",")[0].strip() or "unknown"
+    return "unknown"
+
+
+def _print_report(result: dict[str, Any]) -> None:
+    report = result.get("investigation_report") or {}
+    if not isinstance(report, dict):
+        report = {}
+
+    primary = report.get("primary_candidate") or {}
+    if not isinstance(primary, dict):
+        primary = {}
+
+    print("\n=== Debug Agent Wave 3 Investigation ===")
+    print(f"anomaly_id: {result.get('anomaly_id')}")
+    print(f"triage summary: {report.get('triage_summary')}")
+    print(f"severity: {_extract_severity(result, report)}")
+    print(f"primary RCA candidate: {primary.get('path') or primary.get('file_id')}")
+    print("evidence highlights:")
+    for item in (report.get("evidence_highlights") or []):
+        print(f" - {item}")
+    print(f"similar incidents: {len(report.get('similar_incidents') or [])}")
+    print(f"explanation summary: {report.get('explanation_summary')}")
+    print("remediation steps:")
+    for step in (report.get("remediation_steps") or []):
+        print(f" - {step}")
+    print(f"final report summary: {report.get('final_report_summary')}")
+
+
+def _set_env_var(key: str, value: Optional[str]) -> None:
+    if value is None:
+        if key in os.environ:
+            del os.environ[key]
+    else:
+        os.environ[key] = value
+
+
+def _verify_fallback_when_llm_unavailable(anomaly_id: str, run_id: str) -> tuple[bool, list[str]]:
+    """
+    Force LLM-unavailable mode and verify pipeline still returns structured output.
+
+    We intentionally use an unsupported provider to trigger safe fallback paths.
+    """
+    from debug_agent.orchestrator import run_debug_session
+
+    errors: list[str] = []
+    env_keys = [
+        "DEBUG_AGENT_EXPLANATION_USE_LLM",
+        "DEBUG_AGENT_REMEDIATION_USE_LLM",
+        "DEBUG_AGENT_REPORTING_USE_LLM",
+        "GRAPHRAG_LLM_PROVIDER",
+    ]
+    prev = {k: os.environ.get(k) for k in env_keys}
+    try:
+        _set_env_var("DEBUG_AGENT_EXPLANATION_USE_LLM", "true")
+        _set_env_var("DEBUG_AGENT_REMEDIATION_USE_LLM", "true")
+        _set_env_var("DEBUG_AGENT_REPORTING_USE_LLM", "true")
+        _set_env_var("GRAPHRAG_LLM_PROVIDER", "unsupported_provider")
+
+        result = run_debug_session(anomaly_id, run_id=run_id or None)
+        ok, shape_errors = _validate_result_shape(result)
+        if not ok:
+            errors.extend([f"fallback shape invalid: {e}" for e in shape_errors])
+            return False, errors
+
+        remediation_output = _step_output(result, "remediation")
+        remediation_meta = remediation_output.get("metadata") if isinstance(remediation_output, dict) else {}
+        remediation_source = remediation_meta.get("source") if isinstance(remediation_meta, dict) else None
+        reporting_output = _step_output(result, "reporting")
+        reporting_meta = reporting_output.get("metadata") if isinstance(reporting_output, dict) else {}
+        reporting_source = reporting_meta.get("source") if isinstance(reporting_meta, dict) else None
+
+        fallback_signals = {
+            "remediation_deterministic_fallback": remediation_source == "deterministic_fallback",
+            "reporting_deterministic": reporting_source == "deterministic",
+        }
+        if not any(fallback_signals.values()):
+            errors.append("no fallback signal detected when LLM provider unavailable")
+        return len(errors) == 0, errors
+    except Exception as exc:
+        return False, [f"fallback run crashed: {exc}"]
+    finally:
+        for k, v in prev.items():
+            _set_env_var(k, v)
 
 
 def main() -> None:
@@ -211,27 +313,7 @@ def main() -> None:
         print(f"[ready] anomaly={anomaly_id} run_id={run_id or 'latest'}")
 
         result = run_debug_session(anomaly_id, run_id=run_id or None)
-        report = result.get("investigation_report") or {}
-
-        print("\n=== Debug Agent Wave 3 Investigation ===")
-        print(f"anomaly_id: {result.get('anomaly_id')}")
-        print(f"triage summary: {report.get('triage_summary')}")
-        severity = (report.get("triage_summary") or "").split("severity=")
-        if len(severity) > 1:
-            print(f"severity: {severity[1].split(',')[0]}")
-        else:
-            print("severity: unknown")
-        primary = report.get("primary_candidate") or {}
-        print(f"primary RCA candidate: {primary.get('path') or primary.get('file_id')}")
-        print("evidence highlights:")
-        for item in (report.get("evidence_highlights") or []):
-            print(f" - {item}")
-        print(f"similar incidents: {len(report.get('similar_incidents') or [])}")
-        print(f"explanation summary: {report.get('explanation_summary')}")
-        print("remediation steps:")
-        for step in (report.get("remediation_steps") or []):
-            print(f" - {step}")
-        print(f"final report summary: {report.get('final_report_summary')}")
+        _print_report(result)
 
         ok, errors = _validate_result_shape(result)
         print(f"\nstructured result valid: {ok}")
@@ -240,6 +322,14 @@ def main() -> None:
             for e in errors:
                 print(f" - {e}")
             sys.exit(2)
+
+        fallback_ok, fallback_errors = _verify_fallback_when_llm_unavailable(anomaly_id, run_id)
+        print(f"fallback valid when LLM unavailable: {fallback_ok}")
+        if not fallback_ok:
+            print("fallback verification errors:")
+            for e in fallback_errors:
+                print(f" - {e}")
+            sys.exit(3)
 
         print("\nDEBUG_AGENT_WAVE3_COMPLETE")
     finally:

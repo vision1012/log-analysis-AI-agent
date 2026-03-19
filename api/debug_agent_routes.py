@@ -48,16 +48,23 @@ async def run_debug_agent(body: DebugAgentRunRequest):
 
     try:
         result = run_debug_session(anomaly_id)
+        if not isinstance(result, dict) or not isinstance(result.get("investigation_report"), dict):
+            raise RuntimeError("debug agent returned invalid structured output")
         run_status = str(result.get("status") or "unknown")
+        report = result.get("investigation_report") or {}
         _LATEST_STATUS[anomaly_id] = {
             "anomaly_id": anomaly_id,
             "status": run_status,
+            "run_id": result.get("run_id"),
+            "final_report_summary": report.get("final_report_summary"),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         logger.info(
-            "api.debug_agent.run.done anomaly_id=%s status=%s",
+            "api.debug_agent.run.done anomaly_id=%s status=%s run_id=%s report_keys=%s",
             anomaly_id,
             run_status,
+            result.get("run_id"),
+            len(report.keys()) if isinstance(report, dict) else 0,
         )
         return result
     except HTTPException:
@@ -84,6 +91,7 @@ async def get_debug_agent_status(
 
     Returns lightweight in-process status if present.
     """
+    logger.info("api.debug_agent.status.get anomaly_id=%s", anomaly_id)
     state = _LATEST_STATUS.get(anomaly_id)
     if state:
         return state
