@@ -28,3 +28,20 @@ Legacy log-agent/RAG/job-pipeline documentation has been archived in:
 - `old_log_arch_v1/docs/`
 
 Those archived docs are retained for historical context and are not the active architecture.
+
+---
+
+## Files in this directory (`docs/`)
+
+| File | Purpose |
+|------|---------|
+| `architecture_overview.md` | High-level RCA v2 architecture. |
+| `FILE_STRUCTURE.md` | Repository layout (active vs archived areas). |
+| `AUDIT_7_TASKS.md` | Audit / task tracking history. |
+| `ai_agent_implementation_roadmap.md` | Roadmap for AI agent features. |
+| `run_functions_api.md` | API surface for `run_*` style functions and endpoints. |
+| `desktop_ui_workflow.md` | Desktop UI workflow (product). |
+| `desktop_ui_mockups.html` | Static HTML mockups. |
+| `desktop_app_tech_stack_recommendations.md` | Tech stack notes for a desktop client. |
+| `mobile_ui_design.md` | Mobile UI design notes. |
+| `mobile_ui_mockups.html` | Static HTML mockups. |

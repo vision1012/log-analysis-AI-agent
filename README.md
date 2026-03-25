@@ -22,6 +22,10 @@ Primary active modules:
 
 `machine_learning/` remains in-repo and is retained as requested.
 
+## Per-folder documentation
+
+Each major package has a **`README.md`** describing purpose and files (high level): e.g. `db/README.md`, `api/README.md`, `rca_engine/README.md`, `graphrag/README.md`, `debug_agent/README.md`, `scripts/README.md`, and subfolders such as `db/postgres/`, `db/neo4j/`, `api/routers/`, `machine_learning/features/`, etc.
+
 ## API Endpoints (Current)
 
 Active endpoints:
