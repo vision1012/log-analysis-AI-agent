@@ -4,6 +4,10 @@ PostgreSQL connection: engine and session factory from ``POSTGRES_URL``.
 Works with any standard PostgreSQL connection string (including Supabase).
 """
 
+# NOTE:
+# Database schema is managed via SQL files (schema.sql)
+# SQLAlchemy is used only for querying
+
 from __future__ import annotations
 
 import os

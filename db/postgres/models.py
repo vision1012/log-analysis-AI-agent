@@ -1,18 +1,16 @@
-"""SQLAlchemy ORM models for PostgreSQL."""
+"""SQLAlchemy ORM models for PostgreSQL — maps to tables defined in schema.sql (no DDL)."""
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
-    """Declarative base for PostgreSQL models."""
+    """Declarative base for ORM mapping only (no Base.metadata.create_all)."""
 
     pass
 
@@ -22,17 +20,13 @@ class User(Base):
 
     __tablename__ = "users"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
-    role: Mapped[str] = mapped_column(String(128), nullable=False)
-    team: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    role: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    team: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
+        DateTime(timezone=False),
+        server_default=func.current_timestamp(),
         nullable=False,
     )

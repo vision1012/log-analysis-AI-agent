@@ -3,7 +3,7 @@
 Seed sample users into PostgreSQL (Supabase-compatible).
 
 Requires ``POSTGRES_URL`` (same as the app). Logical labels ``user_001`` / ``user_002``
-map to stable UUIDs because the ``users.user_id`` column is UUID-typed.
+map to stable UUID strings in the ``users.user_id`` (TEXT) column.
 
 Usage (from repo root)::
 
@@ -58,7 +58,7 @@ def main() -> int:
         return 1
 
     print("Seeding users (PostgreSQL).")
-    print("  Note: user_id column is UUID; logical labels map to stable UUIDs below.\n")
+    print("  Note: user_id is TEXT; seeds use stable UUID strings below.\n")
 
     with get_db_session() as session:
         for row in SAMPLE_USERS:

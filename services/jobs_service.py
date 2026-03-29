@@ -122,10 +122,10 @@ def get_job_detail(job_id: str) -> JobDetailResponse:
         if user is None:
             raise UserNotFoundError(user_uuid)
         summary = JobUserSummary(
-            user_id=user.user_id,
+            user_id=UUID(str(user.user_id)),
             name=user.name,
             email=user.email,
-            role=user.role,
+            role=user.role or "",
             team=user.team,
         )
     return JobDetailResponse(job=job, user=summary)
