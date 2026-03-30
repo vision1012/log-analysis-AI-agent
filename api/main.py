@@ -7,6 +7,9 @@ Run with:
 
 from __future__ import annotations
 
+import os
+import sys
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +17,14 @@ from api import debug_agent_routes
 from api.middleware.observability import ObservabilityMiddleware
 from api.routes import jobs as jobs_routes
 from api.routers import feedback_routes, health, rca_routes
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Startup: confirm PYTHONPATH and import roots (Docker: ENV PYTHONPATH=/app)
+print("[startup] PYTHONPATH env:", os.environ.get("PYTHONPATH"))
+print("[startup] sys.path:", sys.path)
+
 
 app = FastAPI(
     title="Log Analysis AI Agent API",

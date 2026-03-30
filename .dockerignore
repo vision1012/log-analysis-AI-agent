@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment (VERY IMPORTANT)
+.venv/
+venv/
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env
+
+# Logs
+*.log
+
+# Data / artifacts (your project-specific heavy folders)
+data/
+runs/
+output/
+# Keep artifacts/ — Python package (evidence_store) required at import time; runtime bundle data uses EVIDENCE_STORE_DIR / temp
+machine_learning/
+
+# Old architecture (not needed in container)
+old_log_arch_v1/
+
+# OS files
+.DS_Store
+
+# Docker (optional)
+docker-compose.yml
+Dockerfile
+
+# IDE
+.vscode/
+.idea/
