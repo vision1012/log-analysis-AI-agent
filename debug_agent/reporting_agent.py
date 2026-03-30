@@ -4,15 +4,42 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import asdict
 from typing import Any, Optional
 
 from debug_agent.langchain_schemas import parse_reporting_llm_output
-from debug_agent.langchain_utils import invoke_llm, invoke_with_safe_fallback, json_payload, render_prompt
+from debug_agent.langchain_utils import json_payload
 from debug_agent.shared_types import DebugContext, ReportStatus, ReportingPackage, StepKind, StepResult
 from graphrag.llm_client import GraphRAGLLMClient, LLMConfig
 
 logger = logging.getLogger(__name__)
+
+_PATH_TOKEN_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+")
+
+MINIMAL_REPORTING_SYSTEM_PROMPT = (
+    "You are a technical incident reporter. You ONLY rephrase and polish wording using the provided "
+    "deterministic_investigation JSON. You do NOT determine root cause, change candidate ordering, "
+    "add incidents, files, commits, deployments, or evidence that are not already implied by the input. "
+    "Do not contradict the primary candidate or confidence. "
+    "Output strict JSON with exactly these keys: final_report_summary, executive_summary, investigation_narrative. "
+    "final_report_summary: 2–4 sentences. executive_summary: 2–3 short lines. "
+    "investigation_narrative: one concise paragraph linking triage → evidence → remediation. "
+    "When a primary file path or file_id is present in the input, all three fields must mention it verbatim."
+)
+
+
+def _reporting_llm_enabled() -> bool:
+    """Ollama-backed reporting when enabled; off via REPORTING_USE_OLLAMA=false."""
+    explicit_off = os.getenv("REPORTING_USE_OLLAMA", "").strip().lower() in {"0", "false", "no"}
+    if explicit_off:
+        return False
+    explicit_on = os.getenv("REPORTING_USE_OLLAMA", "").strip().lower() in {"1", "true", "yes"}
+    if explicit_on:
+        return True
+    if os.getenv("DEBUG_AGENT_REPORTING_USE_LLM", "").strip().lower() in {"1", "true", "yes"}:
+        return True
+    return bool(os.getenv("OLLAMA_HOST", "").strip())
 
 
 def _to_float(v: Any, default: float = 0.0) -> float:
@@ -52,6 +79,141 @@ def _deterministic_summary(report: dict[str, Any]) -> tuple[str, str]:
     if explanation and explanation not in final:
         final += f" Explanation: {explanation}"
     return final.strip(), executive.strip()
+
+
+def _deterministic_narrative(report: dict[str, Any]) -> str:
+    """Short neutral narrative when LLM formatting is unavailable."""
+    anomaly_id = str(report.get("anomaly_id") or "")
+    primary = report.get("primary_candidate") or {}
+    path = primary.get("path") or primary.get("file_id") or "unknown"
+    triage = str(report.get("triage_summary") or "")[:200]
+    return (
+        f"Investigation for {anomaly_id}: triage noted {triage!r}. "
+        f"Deterministic RCA highlights {path} as the leading candidate; "
+        f"follow remediation steps and validate in staging."
+    ).strip()
+
+
+def _build_minimal_ollama_reporting_payload(report: dict[str, Any]) -> dict[str, Any]:
+    """
+    Grounding payload for Ollama — only fields that upstream agents produced.
+
+    Excludes extra memory-derived narrative fields to reduce invention surface; formatting-only task.
+    """
+    primary = report.get("primary_candidate") if isinstance(report.get("primary_candidate"), dict) else {}
+    candidates = report.get("root_cause_candidates") if isinstance(report.get("root_cause_candidates"), list) else []
+    return {
+        "anomaly_id": report.get("anomaly_id"),
+        "triage_summary": str(report.get("triage_summary") or "")[:4000],
+        "root_cause_candidates": [c for c in candidates[:8] if isinstance(c, dict)],
+        "primary_candidate": primary,
+        "confidence_summary": str(report.get("confidence_summary") or "")[:4000],
+        "evidence_highlights": [str(x) for x in (report.get("evidence_highlights") or [])[:12] if isinstance(x, str)],
+        "similar_incidents": (report.get("similar_incidents") or [])[:8],
+        "explanation_summary": str(report.get("explanation_summary") or "")[:4000],
+        "remediation_steps": [str(x) for x in (report.get("remediation_steps") or [])[:12] if isinstance(x, str)],
+    }
+
+
+def _build_reporting_llm_payload(report: dict[str, Any]) -> dict[str, Any]:
+    """Backward-compatible alias: minimal deterministic payload for the reporting LLM."""
+    return _build_minimal_ollama_reporting_payload(report)
+
+
+def _extract_path_like_tokens(text: str) -> list[str]:
+    if not isinstance(text, str) or not text.strip():
+        return []
+    out: list[str] = []
+    for raw in _PATH_TOKEN_RE.findall(text):
+        token = raw.strip("`'\"()[]{}.,:;")
+        if token and token not in out:
+            out.append(token)
+    return out
+
+
+def _allowed_path_tokens_from_report(report: dict[str, Any]) -> tuple[set[str], set[str]]:
+    """Paths and file_ids that may appear in polished text (deterministic RCA + grounded evidence)."""
+    paths: set[str] = set()
+    fids: set[str] = set()
+    for c in report.get("root_cause_candidates") or []:
+        if not isinstance(c, dict):
+            continue
+        p = str(c.get("path") or "").strip()
+        fid = str(c.get("file_id") or "").strip()
+        if p:
+            paths.add(p)
+        if fid:
+            fids.add(fid)
+    prim = report.get("primary_candidate") if isinstance(report.get("primary_candidate"), dict) else {}
+    pp = str(prim.get("path") or "").strip()
+    pf = str(prim.get("file_id") or "").strip()
+    if pp:
+        paths.add(pp)
+    if pf:
+        fids.add(pf)
+    for line in report.get("evidence_highlights") or []:
+        if isinstance(line, str):
+            for t in _extract_path_like_tokens(line):
+                paths.add(t)
+    return paths, fids
+
+
+def _output_paths_grounded(report: dict[str, Any], parsed: Any) -> bool:
+    """Reject outputs that introduce path-like tokens not present in deterministic context."""
+    allowed_paths, allowed_fids = _allowed_path_tokens_from_report(report)
+    if not allowed_paths and not allowed_fids:
+        return True
+    blob = " ".join(
+        [
+            str(getattr(parsed, "final_report_summary", "") or ""),
+            str(getattr(parsed, "executive_summary", "") or ""),
+            str(getattr(parsed, "investigation_narrative", "") or ""),
+        ]
+    )
+    for token in _extract_path_like_tokens(blob):
+        if token in allowed_paths or token in allowed_fids:
+            continue
+        # Allow token to appear as substring of a longer allowed path (prefix match).
+        if any(token in ap or ap in token for ap in allowed_paths if ap):
+            continue
+        if any(token in af or af in token for af in allowed_fids if af):
+            continue
+        logger.warning(
+            "debug_agent.reporting_agent.grounding_failed unknown_path_token=%s",
+            token[:120],
+        )
+        return False
+    return True
+
+
+def _grounding_valid(report: dict[str, Any], parsed: Any) -> bool:
+    """Reject LLM output that omits the deterministic primary path/id (anti-hallucination)."""
+    primary = report.get("primary_candidate") if isinstance(report.get("primary_candidate"), dict) else {}
+    path = str(primary.get("path") or "").strip()
+    fid = str(primary.get("file_id") or "").strip()
+    if not path and not fid:
+        return True
+    blob = " ".join(
+        [
+            str(getattr(parsed, "final_report_summary", "") or ""),
+            str(getattr(parsed, "executive_summary", "") or ""),
+            str(getattr(parsed, "investigation_narrative", "") or ""),
+        ]
+    ).lower()
+    if path and path.lower() in blob:
+        if not _output_paths_grounded(report, parsed):
+            return False
+        return True
+    if fid and fid.lower() in blob:
+        if not _output_paths_grounded(report, parsed):
+            return False
+        return True
+    logger.warning(
+        "debug_agent.reporting_agent.grounding_failed primary_path=%s primary_file_id=%s",
+        path[:80],
+        fid[:16],
+    )
+    return False
 
 
 def _grounded_evidence_highlights(
@@ -132,49 +294,91 @@ def _deterministic_report(
     return report
 
 
+def _looks_like_reporting_llm_failure(raw: dict[str, Any]) -> bool:
+    """GraphRAGLLMClient may return explanation-shaped JSON when chat/parse fails."""
+    lim = str(raw.get("limitations") or "")
+    if "Provider failure" in lim:
+        return True
+    if "LLM response unavailable" in str(raw.get("explanation_summary") or ""):
+        return True
+    if ("primary_candidate" in raw or "ranked_hypotheses" in raw) and (
+        "final_report_summary" not in raw or "executive_summary" not in raw
+    ):
+        return True
+    return False
+
+
 def _try_llm_formatting(
     *,
     report: dict[str, Any],
-) -> Optional[tuple[str, str]]:
-    """Optional LLM formatting for readability; never changes structured conclusions."""
-    enabled = os.getenv("DEBUG_AGENT_REPORTING_USE_LLM", "false").strip().lower() in {"1", "true", "yes"}
-    if not enabled:
+) -> Optional[tuple[str, str, str]]:
+    """
+    Ollama-backed polish (via GraphRAGLLMClient) — summarize/format only.
+
+    On any failure or failed validation, returns None; caller uses deterministic text.
+    """
+    if not _reporting_llm_enabled():
+        logger.info("debug_agent.reporting_agent.llm_skipped reason=reporting_llm_disabled")
         return None
 
-    system_prompt = (
-        "You format incident reports. Use only provided structured report data. "
-        "Do not alter RCA conclusions, candidate order, or confidence values. "
-        "Return strict JSON: {\"final_report_summary\": string, \"executive_summary\": string}."
+    cfg = LLMConfig.from_env()
+    logger.info(
+        "debug_agent.reporting_agent.provider_selected provider=%s model=%s",
+        cfg.provider,
+        cfg.model,
     )
+    if cfg.provider == "stub":
+        logger.info("debug_agent.reporting_agent.llm_skipped reason=llm_provider_stub")
+        return None
+
     user_payload = {
-        "report": report,
+        "deterministic_investigation": _build_minimal_ollama_reporting_payload(report),
         "rules": {
             "must_not_change_root_cause": True,
-            "must_not_change_ranking": True,
-            "must_not_change_confidence": True,
-            "executive_summary_lines": "2-3",
+            "must_not_reorder_candidates": True,
+            "must_not_invent_entities": True,
+            "use_only_provided_fields": True,
         },
     }
-    user_prompt = render_prompt("{payload_json}", payload_json=json_payload(user_payload))
-    cfg = LLMConfig.from_env()
-    llm = GraphRAGLLMClient(cfg)
-    raw = invoke_with_safe_fallback(
-        primary_call=lambda: invoke_llm(system_prompt=system_prompt, user_prompt=user_prompt, config=cfg),
-        fallback_call=lambda: llm.generate(system_prompt=system_prompt, user_prompt=user_prompt),
-        context="reporting_agent",
+    user_prompt = json_payload(user_payload)
+
+    logger.info(
+        "debug_agent.reporting_agent.request_attempt provider=%s model=%s",
+        cfg.provider,
+        cfg.model,
     )
+    llm = GraphRAGLLMClient(cfg)
+    raw = llm.generate(system_prompt=MINIMAL_REPORTING_SYSTEM_PROMPT, user_prompt=user_prompt)
+
     if not isinstance(raw, dict):
+        logger.warning("debug_agent.reporting_agent.llm_fallback reason=non_dict_response")
         return None
+    if _looks_like_reporting_llm_failure(raw):
+        logger.warning("debug_agent.reporting_agent.llm_fallback reason=provider_or_explanation_shaped_response")
+        return None
+    if "final_report_summary" not in raw or "executive_summary" not in raw:
+        logger.warning("debug_agent.reporting_agent.llm_fallback reason=missing_reporting_keys")
+        return None
+
     parsed = parse_reporting_llm_output(raw)
     if parsed is None:
+        logger.warning("debug_agent.reporting_agent.llm_fallback reason=schema_validation_failed")
         return None
-    final = parsed.final_report_summary
-    executive = parsed.executive_summary
-    if not final.strip():
+
+    final = (parsed.final_report_summary or "").strip()
+    executive = (parsed.executive_summary or "").strip()
+    narrative = (parsed.investigation_narrative or "").strip()
+    if not final or not executive:
+        logger.warning("debug_agent.reporting_agent.llm_fallback reason=empty_summary_fields")
         return None
-    if not executive.strip():
+    if not _grounding_valid(report, parsed):
+        logger.warning("debug_agent.reporting_agent.llm_fallback reason=grounding_validation_failed")
         return None
-    return final.strip(), executive.strip()
+    if not narrative:
+        narrative = _deterministic_narrative(report)
+
+    logger.info("debug_agent.reporting_agent.llm_success provider=%s", cfg.provider)
+    return final, executive, narrative
 
 
 def run(
@@ -222,11 +426,13 @@ def run(
         )
 
         final_summary, executive_summary = _deterministic_summary(report)
+        investigation_narrative = _deterministic_narrative(report)
         llm_fmt = _try_llm_formatting(report=report)
         source = "deterministic"
         if llm_fmt:
-            final_summary, executive_summary = llm_fmt
-            source = "llm_assisted"
+            final_summary, executive_summary, investigation_narrative = llm_fmt
+            source = "ollama_assisted"
+        report["investigation_narrative"] = investigation_narrative
         logger.info(
             "debug_agent.reporting_agent.format anomaly_id=%s source=%s candidates=%s evidence=%s",
             anomaly_id,
@@ -248,6 +454,7 @@ def run(
             final_report_summary=final_summary,
             investigation_report=report,
             executive_summary=executive_summary,
+            investigation_narrative=investigation_narrative,
             final_summary=final_summary,  # compatibility alias
             status=status,
             metadata={"source": source},
@@ -263,11 +470,14 @@ def run(
         logger.exception("debug_agent.reporting_agent.error anomaly_id=%s error=%s", anomaly_id, str(exc))
         fallback_report = {"anomaly_id": anomaly_id, "status": "partial", "triage_summary": "Reporting fallback used."}
         final_summary, executive_summary = _deterministic_summary(fallback_report)
+        fb_narr = _deterministic_narrative(fallback_report)
+        fallback_report["investigation_narrative"] = fb_narr
         fallback = ReportingPackage(
             anomaly_id=anomaly_id,
             final_report_summary=final_summary,
             investigation_report=fallback_report,
             executive_summary=executive_summary,
+            investigation_narrative=fb_narr,
             final_summary=final_summary,
             status=ReportStatus.PARTIAL,
             metadata={"source": "fallback"},

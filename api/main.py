@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import os
 import sys
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import debug_agent_routes
+from api.llm_provider_status import log_llm_runtime_snapshot
 from api.middleware.observability import ObservabilityMiddleware
 from api.routes import jobs as jobs_routes
 from api.routers import feedback_routes, health, rca_routes
@@ -26,10 +28,32 @@ print("[startup] PYTHONPATH env:", os.environ.get("PYTHONPATH"))
 print("[startup] sys.path:", sys.path)
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    log_llm_runtime_snapshot()
+    yield
+
+
+def _cors_allow_origins() -> list[str]:
+    """
+    Origins allowed for browser clients (e.g. Vite on :5173).
+    Wildcard is not used with allow_credentials=True (browser CORS rules).
+    Override with comma-separated CORS_ORIGINS for deployment or extra dev ports.
+    """
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+
 app = FastAPI(
     title="Log Analysis AI Agent API",
     description="REST API for graph-based RCA operations",
     version="1.0.0",
+    lifespan=_lifespan,
 )
 
 # Observability middleware (add first to track all requests)
@@ -39,10 +63,10 @@ app.add_middleware(
     exclude_paths=["/health", "/docs", "/openapi.json", "/redoc"],
 )
 
-# CORS middleware for web/mobile clients
+# CORS for separate frontend (Vite default :5173); set CORS_ORIGINS for more origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

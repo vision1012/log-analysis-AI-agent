@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from artifacts.evidence_store import EvidenceStore
@@ -9,7 +10,9 @@ from graph.neo4j_client import Neo4jClient
 from graphrag.context_packer import pack_context
 from graphrag.evidence_summarizer import summarize_evidence
 from graphrag.output_validator import validate_or_repair_output
-from graphrag.prompt_builder import build_prompt
+from graphrag.prompt_builder import build_minimal_deterministic_prompt
+
+logger = logging.getLogger(__name__)
 
 
 def _string_bullets(summarized_evidence: list[dict[str, Any]]) -> list[str]:
@@ -66,6 +69,73 @@ def _fallback_output(
         "confidence_alignment_note": "Deterministic ranking and confidence remain the source of truth.",
         "optional_patch_direction": "",
         "limitations": "; ".join(errors[:4]) if errors else "LLM output validation failed.",
+    }
+
+
+def _allowed_evidence_strings(summarized_evidence: list[dict[str, Any]]) -> list[str]:
+    out: list[str] = []
+    for b in summarized_evidence:
+        t = b.get("text") if isinstance(b, dict) else None
+        if isinstance(t, str) and t.strip() and t not in out:
+            out.append(t)
+    return out
+
+
+def _ground_evidence_highlights(
+    proposed: Any,
+    summarized_evidence: list[dict[str, Any]],
+) -> list[str]:
+    """Keep only highlights that match deterministic evidence strings (anti-hallucination)."""
+    allowed = _allowed_evidence_strings(summarized_evidence)
+    allowed_set = set(allowed)
+    if not isinstance(proposed, list):
+        return allowed[:8]
+    grounded = [x for x in proposed if isinstance(x, str) and x in allowed_set]
+    if grounded:
+        return grounded[:8]
+    return allowed[:8]
+
+
+def _merge_llm_text_into_deterministic_contract(
+    raw: dict[str, Any],
+    *,
+    context_pack: dict[str, Any],
+    summarized_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Combine partial LLM JSON (text fields only) with deterministic primary + ranked hypotheses.
+
+    Ignores any primary_candidate / ranked_hypotheses from the model so ranking cannot be overridden.
+    """
+    deterministic = _deterministic_ranked_hypotheses(context_pack, top_n=3)
+    primary_row = deterministic[0] if deterministic else {}
+    primary_obj = {
+        "rank": int(primary_row.get("rank") or 1),
+        "file_id": str(primary_row.get("file_id") or ""),
+        "path": str(primary_row.get("path") or ""),
+        "confidence": float(primary_row.get("confidence") or 0.0),
+        "evidence_ref": str(primary_row.get("evidence_ref") or ""),
+    }
+    highlights = _ground_evidence_highlights(
+        raw.get("evidence_highlights"),
+        summarized_evidence,
+    )
+    aid = str(context_pack.get("anomaly_id") or "")
+    if raw.get("anomaly_id") is not None and str(raw.get("anomaly_id")) != aid:
+        logger.warning(
+            "graphrag.explanation_generator merge anomaly_id mismatch llm=%s deterministic=%s",
+            raw.get("anomaly_id"),
+            aid,
+        )
+    return {
+        "anomaly_id": aid,
+        "primary_candidate": primary_obj,
+        "ranked_hypotheses": deterministic,
+        "explanation_summary": str(raw.get("explanation_summary") or ""),
+        "evidence_highlights": highlights,
+        "confidence_alignment_note": str(raw.get("confidence_alignment_note") or ""),
+        "optional_patch_direction": str(raw.get("optional_patch_direction") or ""),
+        "limitations": str(raw.get("limitations") or ""),
     }
 
 
@@ -135,10 +205,13 @@ def generate_explanation(
     Pipeline:
       1) pack context
       2) summarize evidence
-      3) build prompt
-      4) call LLM
-      5) validate output
+      3) build minimal deterministic-only prompt (Ollama / local LLM)
+      4) call LLM (HTTP via GraphRAGLLMClient when provider=ollama)
+      5) merge assistive text with deterministic candidates (ranking never overridden)
+      6) validate / repair / safe fallback
     """
+    _ = user_instruction  # API compatibility; minimal prompt uses deterministic context only
+
     context_pack = pack_context(
         anomaly_id,
         graph_client=graph_client,
@@ -147,22 +220,61 @@ def generate_explanation(
         max_candidates=3,
     )
     summarized_evidence = summarize_evidence(context_pack)
-    prompts = build_prompt(
-        context_pack,
-        summarized_evidence,
-        user_instruction=user_instruction,
-        max_hypotheses=3,
+
+    cfg = getattr(llm_client, "config", None)
+    provider = getattr(cfg, "provider", None) or "unknown"
+    model = getattr(cfg, "model", None) or "unknown"
+    logger.info(
+        "graphrag.explanation_generator provider_selected=%s model=%s anomaly_id=%s",
+        provider,
+        model,
+        anomaly_id,
     )
 
+    candidates = context_pack.get("candidates") or []
+    if not isinstance(candidates, list) or not candidates:
+        logger.warning(
+            "graphrag.explanation_generator fallback reason=no_deterministic_candidates anomaly_id=%s",
+            anomaly_id,
+        )
+        return _fallback_output(context_pack, summarized_evidence, ["No deterministic RCA candidates for explanation"])
+
+    prompts = build_minimal_deterministic_prompt(context_pack, summarized_evidence)
+
+    logger.info(
+        "graphrag.explanation_generator request_attempt anomaly_id=%s provider=%s",
+        anomaly_id,
+        provider,
+    )
     raw = llm_client.generate(
         system_prompt=prompts["system"],
         user_prompt=prompts["user"],
     )
     if not isinstance(raw, dict):
+        logger.warning(
+            "graphrag.explanation_generator fallback reason=non_object_llm_response anomaly_id=%s",
+            anomaly_id,
+        )
         return _fallback_output(context_pack, summarized_evidence, ["LLM returned non-object response"])
 
-    repaired = validate_or_repair_output(
+    lim = str(raw.get("limitations") or "")
+    summary = str(raw.get("explanation_summary") or "")
+    if "Provider failure" in lim or "LLM response unavailable" in summary:
+        logger.warning(
+            "graphrag.explanation_generator fallback reason=provider_or_transport anomaly_id=%s detail=%s",
+            anomaly_id,
+            lim[:200],
+        )
+        return _fallback_output(context_pack, summarized_evidence, [lim or "LLM provider unavailable"])
+
+    merged = _merge_llm_text_into_deterministic_contract(
         raw,
+        context_pack=context_pack,
+        summarized_evidence=summarized_evidence,
+    )
+
+    repaired = validate_or_repair_output(
+        merged,
         context_pack=context_pack,
         summarized_evidence=summarized_evidence,
     )

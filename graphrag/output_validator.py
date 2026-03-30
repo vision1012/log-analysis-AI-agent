@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping, Optional
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_KEYS = (
     "anomaly_id",
@@ -141,6 +144,12 @@ def validate_output(
         if isinstance(primary, Mapping):
             if primary.get("file_id") not in allowed_file_ids:
                 errors.append("primary_candidate.file_id is not in allowed deterministic candidates")
+            top_det = deterministic[0] if deterministic else None
+            if isinstance(top_det, Mapping):
+                det_path = str(top_det.get("path") or "").strip()
+                out_path = str(primary.get("path") or "").strip()
+                if det_path and out_path and out_path != det_path:
+                    errors.append("primary_candidate.path does not match deterministic RCA top candidate")
 
         out_ranks: list[Any] = []
         for h in ranked:
@@ -237,6 +246,7 @@ def validate_or_repair_output(
     ok, errors = validate_output(out, context_pack=context_pack)
     if ok:
         return out
+    logger.warning("graphrag.validate_or_repair_output fallback_triggered errors=%s", errors)
     return _safe_fallback(
         context_pack=context_pack,
         errors=errors,

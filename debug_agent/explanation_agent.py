@@ -188,11 +188,15 @@ def _try_llm_assist(
     user_prompt = render_prompt("{payload_json}", payload_json=json_payload(payload))
     cfg = LLMConfig.from_env()
     llm = GraphRAGLLMClient(cfg)
-    raw = invoke_with_safe_fallback(
-        primary_call=lambda: invoke_llm(system_prompt=system_prompt, user_prompt=user_prompt, config=cfg),
-        fallback_call=lambda: llm.generate(system_prompt=system_prompt, user_prompt=user_prompt),
-        context="explanation_agent",
-    )
+    # LangChain path is OpenAI-only; Ollama/stub use GraphRAGLLMClient directly (no spurious primary_failed logs).
+    if (cfg.provider or "").strip().lower() == "openai":
+        raw = invoke_with_safe_fallback(
+            primary_call=lambda: invoke_llm(system_prompt=system_prompt, user_prompt=user_prompt, config=cfg),
+            fallback_call=lambda: llm.generate(system_prompt=system_prompt, user_prompt=user_prompt),
+            context="explanation_agent",
+        )
+    else:
+        raw = llm.generate(system_prompt=system_prompt, user_prompt=user_prompt)
     if not isinstance(raw, dict):
         return None
     parsed = parse_explanation_llm_output(raw)

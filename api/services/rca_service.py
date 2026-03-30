@@ -4,8 +4,11 @@ RCA orchestration logic. Called by API and jobs.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from artifacts.evidence_store import EvidenceStore
 from graph.neo4j_client import Neo4jClient
@@ -387,13 +390,36 @@ def get_rca_explanation(
     explainer = llm_client or GraphRAGLLMClient()
 
     try:
-        return generate_explanation(
-            anomaly_id,
-            graph_client=client,
-            evidence_store=store,
-            llm_client=explainer,
-            run_id=run_id,
-        )
+        try:
+            return generate_explanation(
+                anomaly_id,
+                graph_client=client,
+                evidence_store=store,
+                llm_client=explainer,
+                run_id=run_id,
+            )
+        except Exception as exc:
+            logger.exception(
+                "rca.get_rca_explanation failed anomaly_id=%s run_id=%s",
+                anomaly_id,
+                run_id,
+            )
+            return {
+                "anomaly_id": anomaly_id,
+                "primary_candidate": {
+                    "rank": 1,
+                    "file_id": "",
+                    "path": "",
+                    "confidence": 0.0,
+                    "evidence_ref": "",
+                },
+                "ranked_hypotheses": [],
+                "explanation_summary": "Explanation unavailable due to an internal error; deterministic RCA results are unchanged.",
+                "evidence_highlights": [],
+                "confidence_alignment_note": "Deterministic ranking remains source of truth.",
+                "optional_patch_direction": "",
+                "limitations": f"Explanation pipeline error: {exc!s}",
+            }
     finally:
         if own_client and getattr(client, "_driver", None):
             client.close()

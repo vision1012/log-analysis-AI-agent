@@ -105,4 +105,4 @@ def invoke_with_safe_fallback(
 
 def json_payload(payload: dict[str, Any]) -> str:
     """Stable JSON encoding helper for user prompt payloads."""
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"), default=str)

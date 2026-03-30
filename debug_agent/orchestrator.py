@@ -187,6 +187,12 @@ def run_debug_session(
     if isinstance(remediation_result, dict):
         if remediation_result.get("steps"):
             report.remediation_steps = [s for s in remediation_result.get("steps", []) if isinstance(s, str)]
+        rm = remediation_result.get("reversible_mitigation_suggestions")
+        if isinstance(rm, list):
+            report.reversible_mitigation_suggestions = [s for s in rm if isinstance(s, str)]
+        vs = remediation_result.get("validation_suggestions")
+        if isinstance(vs, list):
+            report.validation_suggestions = [s for s in vs if isinstance(s, str)]
         if remediation_result.get("optional_patch_direction"):
             report.optional_patch_direction = str(remediation_result.get("optional_patch_direction") or "")
         if remediation_result.get("confidence_note") and not report.confidence_summary:
@@ -208,6 +214,10 @@ def run_debug_session(
             final_report_dict = out_report
         if rr.get("final_report_summary"):
             final_report_dict["final_report_summary"] = str(rr.get("final_report_summary"))
+        if rr.get("executive_summary"):
+            final_report_dict["executive_summary"] = str(rr.get("executive_summary"))
+        if rr.get("investigation_narrative"):
+            final_report_dict["investigation_narrative"] = str(rr.get("investigation_narrative"))
 
     # Ensure required final output fields are always present even if downstream stages fail.
     final_report_dict.setdefault("triage_summary", report.triage_summary)
@@ -217,7 +227,11 @@ def run_debug_session(
     final_report_dict.setdefault("similar_incidents", report.similar_incidents)
     final_report_dict.setdefault("explanation_summary", report.explanation_summary)
     final_report_dict.setdefault("remediation_steps", report.remediation_steps)
+    final_report_dict.setdefault("reversible_mitigation_suggestions", report.reversible_mitigation_suggestions)
+    final_report_dict.setdefault("validation_suggestions", report.validation_suggestions)
     final_report_dict.setdefault("final_report_summary", report.final_report_summary)
+    final_report_dict.setdefault("executive_summary", "")
+    final_report_dict.setdefault("investigation_narrative", "")
 
     logger.info(
         "debug_agent.orchestrator.done anomaly_id=%s run_id=%s status=%s steps=%s explanation_ok=%s remediation_ok=%s reporting_ok=%s",
@@ -243,7 +257,11 @@ def run_debug_session(
         "similar_incidents": final_report_dict.get("similar_incidents", []),
         "explanation_summary": final_report_dict.get("explanation_summary", ""),
         "remediation_steps": final_report_dict.get("remediation_steps", []),
+        "reversible_mitigation_suggestions": final_report_dict.get("reversible_mitigation_suggestions", []),
+        "validation_suggestions": final_report_dict.get("validation_suggestions", []),
         "final_report_summary": final_report_dict.get("final_report_summary", ""),
+        "executive_summary": final_report_dict.get("executive_summary", ""),
+        "investigation_narrative": final_report_dict.get("investigation_narrative", ""),
         "steps": [
             {
                 "kind": r.step_kind.value,

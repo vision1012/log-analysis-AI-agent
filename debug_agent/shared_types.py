@@ -107,6 +107,8 @@ class RemediationPackage:
     """Output from remediation agent."""
     anomaly_id: str = ""
     steps: list[str] = field(default_factory=list)
+    reversible_mitigation_suggestions: list[str] = field(default_factory=list)
+    validation_suggestions: list[str] = field(default_factory=list)
     optional_patch_direction: str = ""
     confidence_note: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -119,6 +121,7 @@ class ReportingPackage:
     final_report_summary: str = ""
     investigation_report: dict[str, Any] = field(default_factory=dict)
     executive_summary: str = ""
+    investigation_narrative: str = ""
     final_summary: str = ""
     status: ReportStatus = ReportStatus.COMPLETED
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -146,8 +149,11 @@ class InvestigationReport:
     recurrence_signals: dict[str, Any] = field(default_factory=dict)
     explanation_summary: str = ""
     remediation_steps: list[str] = field(default_factory=list)
+    reversible_mitigation_suggestions: list[str] = field(default_factory=list)
+    validation_suggestions: list[str] = field(default_factory=list)
     optional_patch_direction: str = ""
     final_report_summary: str = ""
+    investigation_narrative: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to JSON-serializable dict."""
@@ -184,8 +190,11 @@ class InvestigationReport:
             "recurrence_signals": self.recurrence_signals,
             "explanation_summary": self.explanation_summary,
             "remediation_steps": self.remediation_steps,
+            "reversible_mitigation_suggestions": self.reversible_mitigation_suggestions,
+            "validation_suggestions": self.validation_suggestions,
             "optional_patch_direction": self.optional_patch_direction,
             "final_report_summary": self.final_report_summary,
+            "investigation_narrative": self.investigation_narrative,
         }
 
 

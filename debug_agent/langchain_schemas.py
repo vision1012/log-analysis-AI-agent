@@ -41,6 +41,8 @@ class RemediationLLMOutputSchema(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     remediation_steps: list[str] = Field(default_factory=list)
+    reversible_mitigation_suggestions: list[str] = Field(default_factory=list)
+    validation_suggestions: list[str] = Field(default_factory=list)
     optional_patch_direction: str = ""
     confidence_note: str = ""
 
@@ -52,12 +54,23 @@ class ReportingLLMOutputSchema(BaseModel):
 
     final_report_summary: str
     executive_summary: str
+    investigation_narrative: str = ""
 
 
 def parse_explanation_llm_output(raw: dict[str, Any]) -> Optional[ExplanationLLMOutputSchema]:
     """Validate explanation LLM output and return typed schema, else None."""
     try:
-        return ExplanationLLMOutputSchema.model_validate(raw)
+        cleaned = dict(raw)
+        for key in (
+            "anomaly_id",
+            "explanation_summary",
+            "confidence_alignment_note",
+            "optional_patch_direction",
+            "limitations",
+        ):
+            if cleaned.get(key) is None:
+                cleaned[key] = ""
+        return ExplanationLLMOutputSchema.model_validate(cleaned)
     except ValidationError:
         return None
 
@@ -65,7 +78,14 @@ def parse_explanation_llm_output(raw: dict[str, Any]) -> Optional[ExplanationLLM
 def parse_remediation_llm_output(raw: dict[str, Any]) -> Optional[RemediationLLMOutputSchema]:
     """Validate remediation LLM output and return typed schema, else None."""
     try:
-        return RemediationLLMOutputSchema.model_validate(raw)
+        cleaned = dict(raw)
+        for key in (
+            "optional_patch_direction",
+            "confidence_note",
+        ):
+            if cleaned.get(key) is None:
+                cleaned[key] = ""
+        return RemediationLLMOutputSchema.model_validate(cleaned)
     except ValidationError:
         return None
 
@@ -73,6 +93,10 @@ def parse_remediation_llm_output(raw: dict[str, Any]) -> Optional[RemediationLLM
 def parse_reporting_llm_output(raw: dict[str, Any]) -> Optional[ReportingLLMOutputSchema]:
     """Validate reporting LLM output and return typed schema, else None."""
     try:
-        return ReportingLLMOutputSchema.model_validate(raw)
+        cleaned = dict(raw)
+        for key in ("final_report_summary", "executive_summary", "investigation_narrative"):
+            if cleaned.get(key) is None:
+                cleaned[key] = ""
+        return ReportingLLMOutputSchema.model_validate(cleaned)
     except ValidationError:
         return None

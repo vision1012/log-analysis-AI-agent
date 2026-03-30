@@ -35,7 +35,12 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
-        provider = os.getenv("GRAPHRAG_LLM_PROVIDER", "stub").strip().lower()
+        # Explicit GRAPHRAG_LLM_PROVIDER wins; else use Ollama when OLLAMA_HOST is set (local dev).
+        raw_provider = os.getenv("GRAPHRAG_LLM_PROVIDER", "").strip().lower()
+        if raw_provider:
+            provider = raw_provider
+        else:
+            provider = "ollama" if os.getenv("OLLAMA_HOST", "").strip() else "stub"
         model = os.getenv("GRAPHRAG_LLM_MODEL", os.getenv("OLLAMA_MODEL", "llama3"))
         timeout_raw = os.getenv("GRAPHRAG_LLM_TIMEOUT_SEC", os.getenv("OLLAMA_TIMEOUT_SEC", "30"))
         base_url = os.getenv("GRAPHRAG_LLM_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434"))
@@ -44,6 +49,8 @@ class LLMConfig:
             timeout = float(timeout_raw)
         except ValueError:
             timeout = 30.0
+        # Avoid zero/negative timeouts; cap to keep callers from hanging unbounded.
+        timeout = max(1.0, min(600.0, timeout))
         return cls(
             provider=provider,
             model=model,
@@ -53,13 +60,26 @@ class LLMConfig:
         )
 
 
+def _strip_json_fence(text: str) -> str:
+    """Remove optional ``` / ```json fences from model output."""
+    t = text.strip()
+    if not t.startswith("`"):
+        return t
+    lines = t.split("\n")
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
 def _parse_json_object(raw: Any) -> dict[str, Any]:
     """Parse provider output into a JSON object."""
     if isinstance(raw, dict):
         return raw
     if not isinstance(raw, str):
         raise ValueError("LLM response must be dict or JSON string")
-    text = raw.strip()
+    text = _strip_json_fence(raw).strip()
     parsed = json.loads(text)
     if not isinstance(parsed, dict):
         raise ValueError("LLM response JSON must be an object")
@@ -159,8 +179,16 @@ class GraphRAGLLMClient:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Ollama request failed: {exc}") from exc
 
-        top = json.loads(body)
-        content = ((top.get("message") or {}).get("content") or "").strip()
+        try:
+            top = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Ollama response is not valid JSON: {exc}") from exc
+        if not isinstance(top, dict):
+            raise RuntimeError("Ollama top-level response must be a JSON object")
+        content = ((top.get("message") or {}) or {}).get("content") or ""
+        if not isinstance(content, str):
+            content = str(content) if content is not None else ""
+        content = content.strip()
         if not content:
             raise RuntimeError("Ollama response missing message.content")
         return _parse_json_object(content)
