@@ -11,10 +11,25 @@ env/
 ENV/
 .venv
 
-# Environment (secrets — keep .env.example in repo)
+# Environment (secrets — do not commit)
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+.env.staging
+.env.test
+.env.backup
+.envrc
+
+# Keys and credential files (common locations / extensions)
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*credentials*.json
+secrets.json
 
 # IDE
 .vscode/
