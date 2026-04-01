@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Mapping, Optional, Sequence, Union
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -56,7 +56,8 @@ def get_user_by_id(session: Session, user_id: Union[str, uuid.UUID]) -> Optional
 
 
 def get_user_by_email(session: Session, email: str) -> Optional[User]:
-    stmt = select(User).where(User.email == email.strip()).limit(1)
+    normalized = email.strip().lower()
+    stmt = select(User).where(func.lower(User.email) == normalized).limit(1)
     return session.scalars(stmt).first()
 
 
@@ -68,3 +69,9 @@ def list_users(session: Session, limit: int = 50, offset: int = 0) -> Sequence[U
         .offset(offset)
     )
     return session.scalars(stmt).all()
+
+
+def count_users(session: Session) -> int:
+    """Return total row count in ``users`` (for pagination metadata)."""
+    n = session.scalar(select(func.count()).select_from(User))
+    return int(n or 0)
