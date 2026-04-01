@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from db.postgres.models import User
 
-_USER_FIELDS = frozenset({"user_id", "name", "email", "role", "team"})
+_USER_FIELDS = frozenset({"user_id", "name", "email", "password_hash", "role", "team"})
 
 
 class DuplicateUserEmailError(Exception):

@@ -25,6 +25,10 @@ if _REPO_ROOT not in sys.path:
 
 from db.postgres.connection import get_db_session
 from db.postgres.repository import create_user, get_user_by_email, get_user_by_id
+from security.passwords import hash_password
+
+# Dev-only password for seeded accounts (change in production).
+_SEED_PASSWORD = "seeddev123"
 
 # Stable UUIDs for dev seeds (logical ids user_001 / user_002)
 _NS = uuid.NAMESPACE_URL
@@ -80,6 +84,7 @@ def main() -> int:
                     "user_id": uid,
                     "name": row["name"],
                     "email": email,
+                    "password_hash": hash_password(_SEED_PASSWORD),
                     "role": row["role"],
                     "team": row["team"],
                 },

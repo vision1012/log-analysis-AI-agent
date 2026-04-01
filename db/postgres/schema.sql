@@ -5,7 +5,6 @@
 
 
 
-
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -16,5 +15,14 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+UPDATE users
+SET password_hash = 'LEGACY_NO_PASSWORD'
+WHERE password_hash IS NULL;
+
+ALTER TABLE users
+ALTER COLUMN password_hash SET NOT NULL;
 
 

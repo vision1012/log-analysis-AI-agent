@@ -1,4 +1,4 @@
-"""User CRUD backed by PostgreSQL ``users`` table (no auth layer)."""
+"""User CRUD and password login backed by PostgreSQL ``users`` table (no JWT)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ from db.postgres.repository import (
     get_user_by_id,
     list_users as list_users_repo,
 )
+from schemas.auth import LoginRequest
 from schemas.users import UserCreate, UserListResponse, UserResponse
+from security.passwords import hash_password, verify_password
 
 
 class UserNotFoundError(Exception):
@@ -39,11 +41,19 @@ class InvalidEmailError(Exception):
         super().__init__("invalid email format")
 
 
+class InvalidCredentialsError(Exception):
+    """Password did not match stored hash."""
+
+    def __init__(self) -> None:
+        super().__init__("invalid email or password")
+
+
 def create_user_svc(body: UserCreate) -> UserResponse:
     """Insert user; raises DuplicateUserEmailError on unique email violation."""
     payload = {
         "name": body.name.strip(),
         "email": body.email,
+        "password_hash": hash_password(body.password),
         "role": body.role,
         "team": body.team.strip() if body.team else None,
     }
@@ -52,6 +62,17 @@ def create_user_svc(body: UserCreate) -> UserResponse:
 
     with get_db_session() as session:
         row = create_user(session, payload)
+        return UserResponse.model_validate(row)
+
+
+def login_svc(body: LoginRequest) -> UserResponse:
+    """Resolve user by email and verify password; returns safe user fields only."""
+    with get_db_session_readonly() as session:
+        row = get_user_by_email(session, body.email)
+        if row is None:
+            raise UserNotFoundError(email=body.email)
+        if not verify_password(body.password, row.password_hash):
+            raise InvalidCredentialsError()
         return UserResponse.model_validate(row)
 
 

@@ -1,5 +1,6 @@
 """
-User management API: create and read users from PostgreSQL (no JWT auth in this phase).
+User management API: create and read users from PostgreSQL.
+Passwords are stored hashed; use ``POST /api/v1/auth/login`` for password login (no JWT in this phase).
 """
 
 from __future__ import annotations

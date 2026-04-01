@@ -38,6 +38,12 @@ class UserCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=512)
     email: str = Field(..., min_length=3, max_length=320)
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=256,
+        description="Plain password; stored only as bcrypt hash server-side",
+    )
     role: str = Field(
         ...,
         description="One of: developer, support_engineer, tester, sre, viewer",
@@ -75,9 +81,9 @@ class UserCreate(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """Single user row."""
+    """Single user row (no password fields)."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     user_id: str
     name: str
