@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from security.validation import normalize_and_validate_email, validate_signup_password
+
 # Public roles accepted on create (no admin; unknown roles rejected).
 ALLOWED_PUBLIC_ROLES: frozenset[str] = frozenset(
     {
@@ -40,9 +42,8 @@ class UserCreate(BaseModel):
     email: str = Field(..., min_length=3, max_length=320)
     password: str = Field(
         ...,
-        min_length=8,
         max_length=256,
-        description="Plain password; stored only as bcrypt hash server-side",
+        description="Plain password; strength rules enforced in validator; stored as bcrypt hash only",
     )
     role: str = Field(
         ...,
@@ -57,10 +58,13 @@ class UserCreate(BaseModel):
     @field_validator("email")
     @classmethod
     def normalize_email(cls, v: str) -> str:
-        s = v.strip().lower()
-        if "@" not in s:
-            raise ValueError("invalid email format")
-        return s
+        return normalize_and_validate_email(v)
+
+    @field_validator("password")
+    @classmethod
+    def signup_password_strength(cls, v: str) -> str:
+        validate_signup_password(v)
+        return v
 
     @field_validator("role")
     @classmethod

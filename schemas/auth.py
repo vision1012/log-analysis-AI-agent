@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from security.validation import normalize_and_validate_email
+
 
 class LoginRequest(BaseModel):
     """Body for ``POST /api/v1/auth/login``."""
@@ -14,7 +16,4 @@ class LoginRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def normalize_email(cls, v: str) -> str:
-        s = v.strip().lower()
-        if "@" not in s:
-            raise ValueError("invalid email format")
-        return s
+        return normalize_and_validate_email(v)
