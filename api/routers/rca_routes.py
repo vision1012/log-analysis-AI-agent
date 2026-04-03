@@ -4,7 +4,9 @@ RCA API endpoints: run, rerun, results, run-status.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
+
+from api.rate_limit.deps import rate_limit
 from pydantic import BaseModel
 
 from api.services.rca_service import (
@@ -63,7 +65,10 @@ async def rerun_rca(
     return result
 
 
-@router.get("/rca/results/{anomaly_id}")
+@router.get(
+    "/rca/results/{anomaly_id}",
+    dependencies=[Depends(rate_limit("rca_results"))],
+)
 async def get_results(
     anomaly_id: str = Path(..., description="Anomaly ID"),
 ):
@@ -88,7 +93,10 @@ async def get_run_status(
     return get_rca_run_status(anomaly_id)
 
 
-@router.get("/rca/explanation/{anomaly_id}")
+@router.get(
+    "/rca/explanation/{anomaly_id}",
+    dependencies=[Depends(rate_limit("rca_explanation"))],
+)
 async def get_explanation(
     anomaly_id: str = Path(..., description="Anomaly ID"),
 ):

@@ -7,6 +7,7 @@ Run with:
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -17,11 +18,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from api import debug_agent_routes
 from api.llm_provider_status import log_llm_runtime_snapshot
 from api.middleware.observability import ObservabilityMiddleware
+from api.middleware.rate_limit_context import RateLimitContextMiddleware
+from api.rate_limit.config import load_rate_limit_settings
+from api.rate_limit.redis_window import set_redis_client
 from api.routes import jobs as jobs_routes
 from api.routers import auth_routes, feedback_routes, health, rca_routes, users_routes
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("api.main")
 
 # Startup: confirm PYTHONPATH and import roots (Docker: ENV PYTHONPATH=/app)
 print("[startup] PYTHONPATH env:", os.environ.get("PYTHONPATH"))
@@ -31,7 +37,34 @@ print("[startup] sys.path:", sys.path)
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     log_llm_runtime_snapshot()
-    yield
+    settings = load_rate_limit_settings()
+    client = None
+    if settings.enabled:
+        try:
+            import redis.asyncio as redis
+
+            # Redis client for ``fastapi_limiter`` + :class:`api.rate_limit.redis_pyrate_adapter.RedisFixedWindowLimiter`
+            client = redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+            await client.ping()
+            set_redis_client(client)
+            logger.info("rate_limit redis connected url=%s", settings.redis_url.split("@")[-1])
+        except Exception as exc:
+            if settings.fail_open:
+                logger.warning("rate_limit redis unavailable (fail_open): %s", exc)
+                if client is not None:
+                    await client.aclose()
+                set_redis_client(None)
+            else:
+                raise
+    try:
+        yield
+    finally:
+        from api.rate_limit.redis_window import get_redis_client
+
+        c = get_redis_client()
+        if c is not None:
+            await c.aclose()
+            set_redis_client(None)
 
 
 def _cors_allow_origins() -> list[str]:
@@ -71,6 +104,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Parse job-create JSON for per-user rate limit keys (innermost before routes)
+app.add_middleware(RateLimitContextMiddleware)
 
 # Register routers
 app.include_router(health.router, tags=["health"])

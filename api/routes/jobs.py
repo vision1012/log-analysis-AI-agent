@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
+from api.rate_limit.deps import rate_limit
 from schemas.jobs import CreateJobRequest, JobDetailResponse, JobResponse
 from services.jobs_service import (
     InvalidTriggeringUserIdError,
@@ -24,6 +25,7 @@ router = APIRouter()
     "/jobs",
     response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("jobs_post"))],
 )
 async def create_job(body: CreateJobRequest) -> JobResponse:
     """

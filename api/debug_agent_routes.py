@@ -8,9 +8,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel
 
+from api.rate_limit.deps import rate_limit
 from debug_agent.orchestrator import run_debug_session
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ class DebugAgentRunRequest(BaseModel):
     anomaly_id: str
 
 
-@router.post("/debug-agent/run")
+@router.post("/debug-agent/run", dependencies=[Depends(rate_limit("debug_agent_run"))])
 async def run_debug_agent(body: DebugAgentRunRequest):
     """
     Run full debug-agent pipeline for one anomaly.

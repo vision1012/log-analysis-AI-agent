@@ -85,6 +85,7 @@ def main() -> int:
                     "name": row["name"],
                     "email": email,
                     "password_hash": hash_password(_SEED_PASSWORD),
+                    "is_email_verified": True,
                     "role": row["role"],
                     "team": row["team"],
                 },

@@ -11,7 +11,21 @@ from sqlalchemy.orm import Session
 
 from db.postgres.models import User
 
-_USER_FIELDS = frozenset({"user_id", "name", "email", "password_hash", "role", "team"})
+_USER_FIELDS = frozenset(
+    {
+        "user_id",
+        "name",
+        "email",
+        "password_hash",
+        "is_email_verified",
+        "email_verification_token_hash",
+        "email_verification_expires_at",
+        "password_reset_token_hash",
+        "password_reset_expires_at",
+        "role",
+        "team",
+    }
+)
 
 
 class DuplicateUserEmailError(Exception):
@@ -58,6 +72,20 @@ def get_user_by_id(session: Session, user_id: Union[str, uuid.UUID]) -> Optional
 def get_user_by_email(session: Session, email: str) -> Optional[User]:
     normalized = email.strip().lower()
     stmt = select(User).where(func.lower(User.email) == normalized).limit(1)
+    return session.scalars(stmt).first()
+
+
+def get_user_by_email_verification_token_hash(session: Session, token_hash: str) -> Optional[User]:
+    if not token_hash:
+        return None
+    stmt = select(User).where(User.email_verification_token_hash == token_hash).limit(1)
+    return session.scalars(stmt).first()
+
+
+def get_user_by_password_reset_token_hash(session: Session, token_hash: str) -> Optional[User]:
+    if not token_hash:
+        return None
+    stmt = select(User).where(User.password_reset_token_hash == token_hash).limit(1)
     return session.scalars(stmt).first()
 
 

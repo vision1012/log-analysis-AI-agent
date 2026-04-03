@@ -31,6 +31,9 @@ sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
 bcrypt>=4.0.0
 email-validator>=2.0.0
+redis>=5.0.0
+fastapi-limiter>=0.2.0
+pyrate-limiter>=3.0.0
 
 # Neo4j (job data, graph layer)
 neo4j>=5.0.0

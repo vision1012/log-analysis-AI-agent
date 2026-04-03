@@ -9,14 +9,14 @@ from db.postgres.connection import get_db_session, get_db_session_readonly
 from db.postgres.repository import (
     DuplicateUserEmailError,
     count_users,
-    create_user,
     get_user_by_email,
     get_user_by_id,
     list_users as list_users_repo,
 )
+from api.services.auth_lifecycle import create_user_with_verification
 from schemas.auth import LoginRequest
 from schemas.users import UserCreate, UserListResponse, UserResponse
-from security.passwords import hash_password, verify_password
+from security.passwords import verify_password
 
 
 class UserNotFoundError(Exception):
@@ -48,21 +48,17 @@ class InvalidCredentialsError(Exception):
         super().__init__("invalid email or password")
 
 
-def create_user_svc(body: UserCreate) -> UserResponse:
-    """Insert user; raises DuplicateUserEmailError on unique email violation."""
-    payload = {
-        "name": body.name.strip(),
-        "email": body.email,
-        "password_hash": hash_password(body.password),
-        "role": body.role,
-        "team": body.team.strip() if body.team else None,
-    }
-    if body.user_id is not None:
-        payload["user_id"] = body.user_id
+class EmailNotVerifiedError(Exception):
+    """Login rejected until email is verified."""
 
-    with get_db_session() as session:
-        row = create_user(session, payload)
-        return UserResponse.model_validate(row)
+    def __init__(self, *, email: str) -> None:
+        self.email = email
+        super().__init__("email not verified")
+
+
+def create_user_svc(body: UserCreate) -> UserResponse:
+    """Insert user, send verification email; raises DuplicateUserEmailError on unique email violation."""
+    return create_user_with_verification(body)
 
 
 def login_svc(body: LoginRequest) -> UserResponse:
@@ -73,6 +69,8 @@ def login_svc(body: LoginRequest) -> UserResponse:
             raise UserNotFoundError(email=body.email)
         if not verify_password(body.password, row.password_hash):
             raise InvalidCredentialsError()
+        if not row.is_email_verified:
+            raise EmailNotVerifiedError(email=body.email)
         return UserResponse.model_validate(row)
 
 

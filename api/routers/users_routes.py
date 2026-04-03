@@ -5,8 +5,9 @@ Passwords are stored hashed; use ``POST /api/v1/auth/login`` for password login 
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
+from api.rate_limit.deps import rate_limit
 from api.services.users_service import (
     DuplicateUserEmailError,
     InvalidEmailError,
@@ -25,6 +26,7 @@ router = APIRouter()
     "/users",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("users_post"))],
 )
 async def create_user_endpoint(body: UserCreate) -> UserResponse:
     """Create a user with a public role; rejects duplicate email."""
@@ -50,7 +52,11 @@ async def list_users_endpoint(
     return list_users_svc(limit=limit, offset=offset)
 
 
-@router.get("/users/by-email/{email}", response_model=UserResponse)
+@router.get(
+    "/users/by-email/{email}",
+    response_model=UserResponse,
+    dependencies=[Depends(rate_limit("users_by_email"))],
+)
 async def get_user_by_email_endpoint(
     email: str = Path(..., min_length=3, max_length=320, description="Email address (URL-encoded if needed)"),
 ) -> UserResponse:

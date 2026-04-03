@@ -8,11 +8,24 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Local Compose: Redis hostname is service name `redis` (override in untracked .env)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     # Allow API container to reach Ollama on the host (Linux Docker; Desktop includes this by default).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       - neo4j
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: logiq-redis
+    ports:
+      - "6379:6379"
+    # Dev-friendly: no AOF/RDB persistence (no volumes)
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
 
   neo4j:
     image: neo4j:latest
@@ -21,7 +34,6 @@ services:
       - "7474:7474"
       - "7687:7687"
     environment:
-      # Interpolated from project .env at `docker compose` time (not stored in git)
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
     volumes:
       - neo4j_data:/data

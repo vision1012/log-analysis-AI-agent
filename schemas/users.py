@@ -92,6 +92,7 @@ class UserResponse(BaseModel):
     user_id: str
     name: str
     email: str
+    is_email_verified: bool = False
     role: Optional[str] = None
     team: Optional[str] = None
     created_at: datetime
