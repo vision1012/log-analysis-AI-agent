@@ -108,15 +108,29 @@ async def verify_email_post(body: VerifyEmailBody) -> UserResponse:
         ) from e
 
 
+async def _resend_verification_handler(body: ResendVerificationBody) -> GenericAuthMessageResponse:
+    """Resend verification email (same generic response whether or not the user exists)."""
+    await asyncio.to_thread(resend_verification_email, body.email)
+    return _GENERIC_OK
+
+
 @router.post(
     "/auth/verify-email/resend",
     response_model=GenericAuthMessageResponse,
     dependencies=[Depends(rate_limit("auth_resend_verification"))],
 )
 async def resend_verification_endpoint(body: ResendVerificationBody) -> GenericAuthMessageResponse:
-    """Resend verification email (same generic response whether or not the user exists)."""
-    await asyncio.to_thread(resend_verification_email, body.email)
-    return _GENERIC_OK
+    return await _resend_verification_handler(body)
+
+
+@router.post(
+    "/auth/resend-verification",
+    response_model=GenericAuthMessageResponse,
+    dependencies=[Depends(rate_limit("auth_resend_verification"))],
+)
+async def resend_verification_endpoint_alias(body: ResendVerificationBody) -> GenericAuthMessageResponse:
+    """Alias for ``/auth/verify-email/resend``."""
+    return await _resend_verification_handler(body)
 
 
 @router.post(
@@ -138,7 +152,7 @@ async def forgot_password_endpoint(body: ForgotPasswordBody) -> GenericAuthMessa
 async def reset_password_endpoint(body: ResetPasswordBody) -> UserResponse:
     """Set a new password using the reset token from email."""
     try:
-        return reset_password_with_token(body.token, body.password)
+        return reset_password_with_token(body.token, body.new_password)
     except AuthTokenError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

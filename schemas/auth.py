@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from security.validation import normalize_and_validate_email, validate_signup_password
 
@@ -26,7 +26,7 @@ class VerifyEmailBody(BaseModel):
 
 
 class ResendVerificationBody(BaseModel):
-    """Body for ``POST /api/v1/auth/verify-email/resend``."""
+    """Body for resend verification (``/auth/resend-verification`` or ``/auth/verify-email/resend``)."""
 
     email: str = Field(..., min_length=3, max_length=320)
 
@@ -51,9 +51,14 @@ class ResetPasswordBody(BaseModel):
     """Body for ``POST /api/v1/auth/reset-password``."""
 
     token: str = Field(..., min_length=1, max_length=512)
-    password: str = Field(..., max_length=256)
+    new_password: str = Field(
+        ...,
+        max_length=256,
+        description="New password (same strength rules as signup)",
+        validation_alias=AliasChoices("new_password", "password"),
+    )
 
-    @field_validator("password")
+    @field_validator("new_password")
     @classmethod
     def password_strength(cls, v: str) -> str:
         validate_signup_password(v)

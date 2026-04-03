@@ -17,7 +17,7 @@ from db.postgres.models import User
 from api.email.sender import send_plain_text_email
 from api.email.settings import load_email_settings
 from schemas.users import UserCreate, UserResponse
-from security.passwords import hash_password, verify_password
+from security.passwords import hash_password
 from security.tokens import generate_url_safe_token, hash_token
 from security.validation import normalize_and_validate_email, validate_signup_password
 
