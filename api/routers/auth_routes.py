@@ -45,7 +45,10 @@ _GENERIC_OK = GenericAuthMessageResponse(
     dependencies=[Depends(rate_limit("auth_login"))],
 )
 async def login_endpoint(body: LoginRequest) -> UserResponse:
-    """Authenticate by email and password; returns the same safe user shape as other user endpoints."""
+    """Authenticate by email and password.
+
+    Unverified users receive **403** with ``detail.code == "email_not_verified"`` (no session).
+    """
     try:
         return login_svc(body)
     except UserNotFoundError as e:
@@ -70,7 +73,7 @@ async def login_endpoint(body: LoginRequest) -> UserResponse:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "email_not_verified",
-                "message": "verify your email before signing in",
+                "message": "verify your email before logging in",
                 "email": e.email,
             },
         ) from e

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -35,38 +36,72 @@ def _utcnow_naive() -> datetime:
 
 
 def _verification_link(raw_token: str) -> str:
-    base = load_email_settings().app_base_url.rstrip("/")
-    return f"{base}/api/v1/auth/verify-email?token={raw_token}"
+    """Link to the frontend verification page; frontend should call the API to confirm the token."""
+    s = load_email_settings()
+    base = s.app_base_url.rstrip("/")
+    return f"{base}{s.email_verification_path}?token={raw_token}"
 
 
 def _reset_link(raw_token: str) -> str:
-    base = load_email_settings().app_base_url.rstrip("/")
-    return f"{base}/reset-password?token={raw_token}"
+    s = load_email_settings()
+    base = s.app_base_url.rstrip("/")
+    return f"{base}{s.password_reset_path}?token={raw_token}"
 
 
-def send_verification_email(to_email: str, raw_token: str) -> None:
+def send_verification_email(
+    to_email: str,
+    raw_token: str,
+    *,
+    source: str = "verification",
+) -> None:
+    """Send verification email. ``raw_token`` is URL-safe; DB stores ``hash_token(raw_token)`` only."""
     settings = load_email_settings()
     link = _verification_link(raw_token)
+    stored_hash = hash_token(raw_token)
     body = (
-        f"Verify your email for Log Analysis AI Agent by opening this link:\n\n{link}\n\n"
+        f"Verify your email for Log Analysis AI Agent.\n\n"
+        f"Open this link in your browser:\n{link}\n\n"
         f"This link expires in {settings.email_verification_ttl_hours} hours.\n"
     )
-    send_plain_text_email(to_email, "Verify your email", body)
+    # EMAIL_PROVIDER=log: stdout block for docker/uvicorn; includes dev-only raw token (never in smtp/prod logs).
+    if settings.email_provider == "log":
+        block = (
+            "\n=== VERIFICATION EMAIL ===\n"
+            f"Source: {source}\n"
+            f"To: {to_email}\n"
+            f"Raw token (log mode only): {raw_token}\n"
+            f"Stored hash prefix (SHA-256): {stored_hash[:16]}...\n"
+            f"Verification Link: {link}\n"
+        )
+        print(block, file=sys.stdout, flush=True)
+    send_plain_text_email(to_email, "Verify your email — Log Analysis AI Agent", body)
 
 
 def send_password_reset_email(to_email: str, raw_token: str) -> None:
     settings = load_email_settings()
     link = _reset_link(raw_token)
     body = (
-        f"Reset your password using this link:\n\n{link}\n\n"
+        f"Reset your password for Log Analysis AI Agent.\n\n"
+        f"Open this link in your browser:\n{link}\n\n"
         f"This link expires in {settings.password_reset_ttl_hours} hours.\n"
         "If you did not request a reset, ignore this email.\n"
     )
-    send_plain_text_email(to_email, "Password reset", body)
+    if settings.email_provider == "log":
+        block = (
+            "\n=== PASSWORD RESET EMAIL ===\n"
+            f"To: {to_email}\n"
+            f"Reset Link: {link}\n"
+        )
+        print(block, file=sys.stdout, flush=True)
+    send_plain_text_email(to_email, "Reset your password — Log Analysis AI Agent", body)
 
 
 def attach_email_verification_to_new_user(user: User) -> str:
-    """Set verification fields on an already-persisted user; return raw token for email."""
+    """Set verification fields on an already-persisted user; return raw token for email.
+
+    Persists ``email_verification_token_hash`` (SHA-256 of raw token) and
+    ``email_verification_expires_at``; raw token is never stored in the DB.
+    """
     settings = load_email_settings()
     raw = generate_url_safe_token()
     user.is_email_verified = False
@@ -95,9 +130,14 @@ def create_user_with_verification(body: UserCreate) -> UserResponse:
         raw_token = attach_email_verification_to_new_user(row)
         session.flush()
         try:
-            send_verification_email(row.email, raw_token)
+            send_verification_email(row.email, raw_token, source="signup")
         except Exception as exc:
-            logger.warning("verification email send failed email=%s err=%s", row.email, exc)
+            # Do not log full exception text (may chain provider details); type is enough for ops.
+            logger.warning(
+                "verification email send failed email=%s err_type=%s",
+                row.email,
+                type(exc).__name__,
+            )
         return UserResponse.model_validate(row)
 
 
@@ -122,7 +162,11 @@ def verify_email_token(raw_token: str) -> UserResponse:
 
 
 def resend_verification_email(raw_email: str) -> None:
-    """Send another verification email if user exists and is unverified."""
+    """Send another verification email if user exists and is unverified.
+
+    Generates a **new** raw token, replaces ``email_verification_token_hash`` and
+    ``email_verification_expires_at``, commits, then emails the new raw token in the link.
+    """
     email = normalize_and_validate_email(raw_email)
     with get_db_session() as session:
         user = get_user_by_email(session, email)
@@ -135,9 +179,13 @@ def resend_verification_email(raw_email: str) -> None:
         )
         session.flush()
         try:
-            send_verification_email(user.email, raw)
+            send_verification_email(user.email, raw, source="resend")
         except Exception as exc:
-            logger.warning("resend verification email failed email=%s err=%s", user.email, exc)
+            logger.warning(
+                "resend verification email failed email=%s err_type=%s",
+                user.email,
+                type(exc).__name__,
+            )
 
 
 def forgot_password_request(raw_email: str) -> None:
@@ -156,7 +204,11 @@ def forgot_password_request(raw_email: str) -> None:
         try:
             send_password_reset_email(user.email, raw)
         except Exception as exc:
-            logger.warning("password reset email failed email=%s err=%s", user.email, exc)
+            logger.warning(
+                "password reset email failed email=%s err_type=%s",
+                user.email,
+                type(exc).__name__,
+            )
 
 
 def reset_password_with_token(raw_token: str, new_password: str) -> UserResponse:

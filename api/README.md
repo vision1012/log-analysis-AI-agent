@@ -16,3 +16,5 @@ REST entrypoint for RCA, feedback, debug-agent, and jobs. Run with e.g. `uvicorn
 | `utils/` | Package placeholder / shared utils. |
 
 **Note:** Cross-cutting job orchestration also lives in top-level `services/` and `schemas/` (see those READMEs).
+
+**Email (verification / password reset):** Configure `EMAIL_PROVIDER` (`log`, `smtp` e.g. Gmail, or `resend`), `SMTP_*` / `RESEND_*`, `APP_BASE_URL`, etc. in a root `.env` (see repository `.env.example`). Overview in the root `README.md` **Email** section; SMTP in `api/email/provider.py` (`SmtpEmailProvider`).

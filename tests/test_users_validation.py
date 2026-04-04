@@ -46,6 +46,24 @@ def test_user_create_rejects_short_password() -> None:
         )
 
 
+def test_user_create_rohit_sample_payload() -> None:
+    """Regression: common manual signup payload (matches curl examples)."""
+    u = UserCreate.model_validate(
+        {
+            "first_name": "Rohit",
+            "last_name": "Sharma",
+            "email": "Rohit.264@gmail.com",
+            "password": "Rohit@264",
+            "role": "developer",
+            "team": "aksjbrt",
+        }
+    )
+    assert u.first_name == "Rohit"
+    assert u.last_name == "Sharma"
+    assert u.email == "rohit.264@gmail.com"
+    assert u.role == "developer"
+
+
 def test_user_create_accepts_valid_payload() -> None:
     u = UserCreate(
         first_name="Ada",
@@ -57,6 +75,39 @@ def test_user_create_accepts_valid_payload() -> None:
     )
     assert u.email == "ada@example.com"
     assert u.role == "developer"
+    assert u.first_name == "Ada"
+    assert u.last_name == "Lovelace"
+
+
+def test_user_create_ignores_extra_fields() -> None:
+    """Unknown JSON keys must not cause 422 (frontend may add fields later)."""
+    u = UserCreate.model_validate(
+        {
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "email": "ada@example.com",
+            "password": "Securepw1!",
+            "role": "developer",
+            "team": "Core",
+            "name": "should be ignored",
+            "extra_field": 1,
+        }
+    )
+    assert u.first_name == "Ada"
+    assert u.last_name == "Lovelace"
+
+
+def test_user_create_null_last_name_becomes_empty() -> None:
+    u = UserCreate.model_validate(
+        {
+            "first_name": "Madonna",
+            "last_name": None,
+            "email": "m@example.com",
+            "password": "Securepw1!",
+            "role": "viewer",
+        }
+    )
+    assert u.last_name == ""
 
 
 def test_user_create_rejects_invalid_email() -> None:

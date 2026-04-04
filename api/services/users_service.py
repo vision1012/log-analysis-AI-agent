@@ -62,7 +62,13 @@ def create_user_svc(body: UserCreate) -> UserResponse:
 
 
 def login_svc(body: LoginRequest) -> UserResponse:
-    """Resolve user by email and verify password; returns safe user fields only."""
+    """Resolve user by email and verify password; returns safe user fields only.
+
+    **Verified-only login:** if ``is_email_verified`` is false, raises
+    :class:`EmailNotVerifiedError` (mapped to HTTP 403 by the auth router). There is no
+    bypass. Password is checked first so wrong credentials yield 401 without revealing
+    verification state.
+    """
     with get_db_session_readonly() as session:
         row = get_user_by_email(session, body.email)
         if row is None:

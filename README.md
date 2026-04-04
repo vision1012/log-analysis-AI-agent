@@ -41,6 +41,17 @@ Active endpoints:
 - `POST /api/v1/feedback/reject-all/{anomaly_id}`
 - `POST /api/v1/feedback/rollback/{anomaly_id}`
 
+## Email (account verification & password reset)
+
+The API can send verification and password-reset messages via **SMTP** (e.g. **Gmail**, `EMAIL_PROVIDER=smtp`), **Resend** (`EMAIL_PROVIDER=resend`), or **log-only** local debugging (`EMAIL_PROVIDER=log`).
+
+- **Where to put variables:** Copy `.env.example` to `.env` at the repository root and edit there. `api/main.py` loads `.env` with `python-dotenv`. For Docker, point `env_file` at `.env` or inject the same variables in the environment. **Do not commit `.env`, passwords, or API keys.**
+- **Gmail SMTP (no custom domain):** Set `EMAIL_PROVIDER=smtp`, `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USE_TLS=true`, `SMTP_USERNAME` (full Gmail address), `SMTP_PASSWORD` (Google **App Password**, not your normal login password), `SMTP_FROM_EMAIL` (usually the same address), and `APP_BASE_URL` (your frontend, e.g. `http://localhost:5173`). The server uses **STARTTLS** on port 587 (not implicit SSL on 465).
+- **Log vs real mail:** `EMAIL_PROVIDER=log` prints links to stdout/logs and sends nothing. Switch to `smtp` or `resend` for real delivery; see `.env.example`.
+- **Testing locally:** With Postgres and the API running, call `POST /api/v1/users` (signup) and check your inbox (`smtp`/`resend`) or server logs (`log`). Confirm with `GET /api/v1/auth/verify-email?token=…` or your SPA. For reset: `POST /api/v1/auth/forgot-password`, then `POST /api/v1/auth/reset-password` with the token from email or logs.
+
+Details: `api/email/settings.py`, `api/email/provider.py`, `api/services/auth_lifecycle.py`, `api/routers/auth_routes.py`.
+
 ## Quick Start
 
 ```bash

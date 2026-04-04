@@ -1,9 +1,11 @@
 -- PostgreSQL schema for application tables (apply manually or via migration tooling).
 -- Source of truth for DDL; SQLAlchemy maps to these tables only (no ORM create_all).
-
--- 
-
-
+--
+-- Final ``users`` shape (identity; no legacy single ``name`` column):
+--   user_id, first_name, last_name, email, password_hash,
+--   is_email_verified, email_verification_*, password_reset_*,
+--   role, team, created_at
+-- Upgrading from older DBs that had ``name``: see migrations/003_user_first_last_name.sql
 
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,

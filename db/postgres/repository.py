@@ -34,7 +34,7 @@ class DuplicateUserEmailError(Exception):
 
     def __init__(self, email: str) -> None:
         self.email = email
-        super().__init__(f"user email already exists: {email!r}")
+        super().__init__("email already exists")
 
 
 def _normalize_user_id(user_id: Union[str, uuid.UUID]) -> str:
@@ -58,8 +58,23 @@ def create_user(session: Session, user_data: Mapping[str, Any]) -> User:
     try:
         session.flush()
     except IntegrityError as e:
-        err = str(getattr(e, "orig", e) or e).lower()
-        if "email" in err or "users_email" in err:
+        orig = getattr(e, "orig", None)
+        err_txt = str(orig or e).lower()
+        # PostgreSQL: 23505 = unique_violation; constraint detail usually names email column.
+        pgcode = getattr(orig, "pgcode", None) if orig is not None else None
+        diag = getattr(orig, "diag", None) if orig is not None else None
+        cname = getattr(diag, "constraint_name", None) if diag is not None else None
+        is_email_unique = (
+            (pgcode == "23505" and cname and "email" in cname.lower())
+            or "(email)" in err_txt
+            or "users_email" in err_txt
+            or (
+                pgcode == "23505"
+                and "email" in err_txt
+                and ("unique" in err_txt or "duplicate" in err_txt)
+            )
+        )
+        if is_email_unique:
             raise DuplicateUserEmailError(data.get("email", "")) from e
         raise
     return user

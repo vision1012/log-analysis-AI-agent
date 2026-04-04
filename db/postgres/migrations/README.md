@@ -22,3 +22,9 @@ psql "$POSTGRES_URL" -f db/postgres/migrations/004_enable_rls_users.sql
 ```
 
 After migration, signup sends a verification email; login requires `is_email_verified` unless you use seeded/dev users with verification already set.
+
+## Troubleshooting: `POST /api/v1/users` returns 500 or 503 `database_schema_mismatch`
+
+The ORM expects the full `users` row shape in [`../schema.sql`](../schema.sql) (including `first_name`, `last_name`, `password_hash`, and **email verification / password reset** columns). If you see Postgres errors like `column "email_verification_token_hash" does not exist`, the database was created from an older DDL or migrations stopped early.
+
+**Fix:** run the migrations above in order (for existing DBs), or apply `schema.sql` to a fresh database. At minimum, **`002_user_email_verification_and_password_reset.sql`** must be applied before signup can insert users with the current SQLAlchemy model.

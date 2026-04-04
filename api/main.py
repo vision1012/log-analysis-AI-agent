@@ -36,6 +36,7 @@ print("[startup] sys.path:", sys.path)
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
+    _log_cors_startup()
     log_llm_runtime_snapshot()
     settings = load_rate_limit_settings()
     client = None
@@ -69,9 +70,13 @@ async def _lifespan(_app: FastAPI):
 
 def _cors_allow_origins() -> list[str]:
     """
-    Origins allowed for browser clients (e.g. Vite on :5173).
-    Wildcard is not used with allow_credentials=True (browser CORS rules).
-    Override with comma-separated CORS_ORIGINS for deployment or extra dev ports.
+    Exact ``Access-Control-Allow-Origin`` allowlist for browser clients.
+
+    Default (when ``CORS_ORIGINS`` is unset): ``http://localhost:5173``,
+    ``http://127.0.0.1:5173`` (Vite dev; ``localhost`` vs ``127.0.0.1`` are distinct origins).
+
+    Set ``CORS_ORIGINS`` to a comma-separated list to replace defaults (include every dev URL you need).
+    Wildcard is not used with ``allow_credentials=True``.
     """
     raw = os.environ.get("CORS_ORIGINS", "").strip()
     if raw:
@@ -82,6 +87,12 @@ def _cors_allow_origins() -> list[str]:
     ]
 
 
+def _log_cors_startup() -> None:
+    """Log allowed CORS origins at startup (no secrets)."""
+    origins = _cors_allow_origins()
+    logger.info("cors: allow_origins=%s (override with CORS_ORIGINS)", origins)
+
+
 app = FastAPI(
     title="Log Analysis AI Agent API",
     description="REST API for graph-based RCA operations",
@@ -89,24 +100,28 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
-# Observability middleware (add first to track all requests)
-# Adds X-Request-Id header and logs request/response details
+# Middleware order: last registered is outermost (runs first on incoming requests).
+# Put CORSMiddleware last so browsers get preflight (OPTIONS) + CORS headers before other layers.
+#
+# Observability (inner side of stack, closer to routes)
 app.add_middleware(
     ObservabilityMiddleware,
     exclude_paths=["/health", "/docs", "/openapi.json", "/redoc"],
 )
 
-# CORS for separate frontend (Vite default :5173); set CORS_ORIGINS for more origins
+# Parse job-create JSON for per-user rate limit keys
+app.add_middleware(RateLimitContextMiddleware)
+
+# CORS outermost — local Vite: http://localhost:5173 and http://127.0.0.1:5173 by default; set CORS_ORIGINS to extend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-Id"],
+    max_age=600,
 )
-
-# Parse job-create JSON for per-user rate limit keys (innermost before routes)
-app.add_middleware(RateLimitContextMiddleware)
 
 # Register routers
 app.include_router(health.router, tags=["health"])
