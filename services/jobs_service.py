@@ -123,7 +123,8 @@ def get_job_detail(job_id: str) -> JobDetailResponse:
             raise UserNotFoundError(user_uuid)
         summary = JobUserSummary(
             user_id=UUID(str(user.user_id)),
-            name=user.name,
+            first_name=user.first_name,
+            last_name=user.last_name,
             email=user.email,
             role=user.role or "",
             team=user.team,

@@ -38,7 +38,8 @@ def validate_public_role(role: str) -> str:
 class UserCreate(BaseModel):
     """Body for ``POST /api/v1/users``."""
 
-    name: str = Field(..., min_length=1, max_length=512)
+    first_name: str = Field(..., min_length=1, max_length=256)
+    last_name: str = Field(default="", max_length=256)
     email: str = Field(..., min_length=3, max_length=320)
     password: str = Field(
         ...,
@@ -54,6 +55,11 @@ class UserCreate(BaseModel):
         None,
         description="Optional UUID string; generated if omitted",
     )
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def strip_name_parts(cls, v: str) -> str:
+        return v.strip()
 
     @field_validator("email")
     @classmethod
@@ -90,7 +96,8 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     user_id: str
-    name: str
+    first_name: str
+    last_name: str
     email: str
     is_email_verified: bool = False
     role: Optional[str] = None

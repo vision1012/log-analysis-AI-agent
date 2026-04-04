@@ -26,17 +26,30 @@ def test_validate_public_role_rejects_unknown() -> None:
 
 def test_user_create_rejects_wrong_role() -> None:
     with pytest.raises(ValidationError):
-        UserCreate(name="A", email="a@b.co", password="Valid1!Pass", role="admin")
+        UserCreate(
+            first_name="A",
+            last_name="",
+            email="a@b.co",
+            password="Valid1!Pass",
+            role="admin",
+        )
 
 
 def test_user_create_rejects_short_password() -> None:
     with pytest.raises(ValidationError):
-        UserCreate(name="A", email="a@b.co", password="short", role="developer")
+        UserCreate(
+            first_name="A",
+            last_name="",
+            email="a@b.co",
+            password="short",
+            role="developer",
+        )
 
 
 def test_user_create_accepts_valid_payload() -> None:
     u = UserCreate(
-        name="Ada",
+        first_name="Ada",
+        last_name="Lovelace",
         email="Ada@Example.com",
         password="Securepw1!",
         role="developer",
@@ -49,7 +62,8 @@ def test_user_create_accepts_valid_payload() -> None:
 def test_user_create_rejects_invalid_email() -> None:
     with pytest.raises(ValidationError) as exc:
         UserCreate(
-            name="A",
+            first_name="A",
+            last_name="",
             email="not-an-email",
             password="Securepw1!",
             role="developer",
@@ -59,14 +73,21 @@ def test_user_create_rejects_invalid_email() -> None:
 
 def test_user_create_rejects_password_missing_character_types() -> None:
     with pytest.raises(ValidationError) as exc:
-        UserCreate(name="A", email="a@b.co", password="onlylowerletters", role="developer")
+        UserCreate(
+            first_name="A",
+            last_name="",
+            email="a@b.co",
+            password="onlylowerletters",
+            role="developer",
+        )
     msgs = " ".join(str(e.get("msg", "")) for e in exc.value.errors())
     assert "password missing required character types" in msgs.lower()
 
 
 def test_user_create_optional_user_id() -> None:
     u = UserCreate(
-        name="Ada",
+        first_name="Ada",
+        last_name="",
         email="ada@example.com",
         password="Securepw1!",
         role="viewer",
@@ -78,7 +99,8 @@ def test_user_create_optional_user_id() -> None:
 def test_user_create_invalid_uuid() -> None:
     with pytest.raises(ValidationError):
         UserCreate(
-            name="A",
+            first_name="A",
+            last_name="",
             email="a@b.co",
             password="Valid1!Pass",
             role="sre",

@@ -39,7 +39,8 @@ SAMPLE_USERS: list[dict[str, Any]] = [
     {
         "label": "user_001",
         "user_id": USER_001_ID,
-        "name": "Neel Bhesaniya",
+        "first_name": "Neel",
+        "last_name": "Bhesaniya",
         "email": "neel@example.com",
         "role": "admin",
         "team": "platform",
@@ -47,7 +48,8 @@ SAMPLE_USERS: list[dict[str, Any]] = [
     {
         "label": "user_002",
         "user_id": USER_002_ID,
-        "name": "Demo User",
+        "first_name": "Demo",
+        "last_name": "User",
         "email": "demo@example.com",
         "role": "engineer",
         "team": "debugging",
@@ -82,7 +84,8 @@ def main() -> int:
                 session,
                 {
                     "user_id": uid,
-                    "name": row["name"],
+                    "first_name": row["first_name"],
+                    "last_name": row["last_name"],
                     "email": email,
                     "password_hash": hash_password(_SEED_PASSWORD),
                     "is_email_verified": True,
@@ -91,7 +94,7 @@ def main() -> int:
                 },
             )
             print(
-                f"  [OK]   {label}  name={row['name']!r}  email={email!r}  "
+                f"  [OK]   {label}  name={row['first_name']!r} {row['last_name']!r}  email={email!r}  "
                 f"user_id={uid}  role={row['role']!r}  team={row['team']!r}"
             )
 

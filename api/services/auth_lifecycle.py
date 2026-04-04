@@ -80,7 +80,8 @@ def attach_email_verification_to_new_user(user: User) -> str:
 def create_user_with_verification(body: UserCreate) -> UserResponse:
     """Create user, attach verification token, send email."""
     payload = {
-        "name": body.name.strip(),
+        "first_name": body.first_name.strip(),
+        "last_name": body.last_name.strip(),
         "email": body.email,
         "password_hash": hash_password(body.password),
         "role": body.role,

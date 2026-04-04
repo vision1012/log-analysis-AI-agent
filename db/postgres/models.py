@@ -21,7 +21,8 @@ class User(Base):
     __tablename__ = "users"
 
     user_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    name: Mapped[str] = mapped_column(Text, nullable=False)
+    first_name: Mapped[str] = mapped_column(Text, nullable=False)
+    last_name: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     is_email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")

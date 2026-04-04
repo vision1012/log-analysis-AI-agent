@@ -14,7 +14,8 @@ from db.postgres.models import User
 _USER_FIELDS = frozenset(
     {
         "user_id",
-        "name",
+        "first_name",
+        "last_name",
         "email",
         "password_hash",
         "is_email_verified",

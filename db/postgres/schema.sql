@@ -7,7 +7,8 @@
 
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     role TEXT,
     team TEXT,
