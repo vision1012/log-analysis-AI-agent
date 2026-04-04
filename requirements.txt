@@ -1,5 +1,9 @@
 # Log Analysis AI Agent - Requirements
 # Python 3.8+ required
+#
+# Optional JS toolchain (frontend / tooling — not installed via pip; use nvm, fnm, or nodejs.org):
+#   node: >=20.18.0 (LTS)
+#   npm:  >=10.8.0  (ships with Node 20+)
 
 # Core Dependencies
 pydantic>=2.6.0              # Schema validation for ToolResult contract
