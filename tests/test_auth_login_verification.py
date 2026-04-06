@@ -21,6 +21,7 @@ def test_login_svc_raises_when_email_not_verified() -> None:
     with (
         patch("api.services.users_service.get_user_by_email", return_value=row),
         patch("api.services.users_service.verify_password", return_value=True),
+        patch("api.services.users_service.get_db_session_readonly", return_value=MagicMock()),
     ):
         with pytest.raises(EmailNotVerifiedError) as exc:
             login_svc(LoginRequest(email="user@example.com", password="correct"))
@@ -61,6 +62,7 @@ def test_login_svc_succeeds_when_verified() -> None:
     with (
         patch("api.services.users_service.get_user_by_email", return_value=row),
         patch("api.services.users_service.verify_password", return_value=True),
+        patch("api.services.users_service.get_db_session_readonly", return_value=MagicMock()),
     ):
         out = login_svc(LoginRequest(email="user@example.com", password="correct"))
     assert isinstance(out, UserResponse)
