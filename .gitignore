@@ -44,7 +44,9 @@ output/*.txt
 output/jobs/
 
 # Artifacts directory (job outputs)
-artifacts/
+artifacts/*
+!artifacts/*.py
+!artifacts/__init__.py
 
 # Data directory (HDFS logs, ML datasets — large files, do not push)
 data/
