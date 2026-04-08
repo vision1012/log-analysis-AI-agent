@@ -1,4 +1,16 @@
-"""JIRA-first RCA orchestration: ticket + logs -> deterministic RCA entry."""
+"""
+JIRA-first RCA orchestration: ticket + logs -> deterministic RCA entry.
+
+Flow (single POST ``/api/v1/jira/rca/run``):
+
+1. Resolve ticket via embedded ``ticket`` or fetch by ``ticket_key`` (``GET /api/v1/jira/tickets/{key}``).
+2. Parse uploaded ``log_content`` into ``LogSignals``; merge with ticket hints into ``DerivedSignalBundle``.
+3. Run existing deterministic RCA on ``anomaly_id`` (adapter: ``trigger_manual_rca``).
+4. Load RCA result view, build grounded ``explanation_payload`` (assistive; RCA remains authoritative),
+   ``relationship_bundle`` (graph-ready scaffold), and persist a minimal investigation JSON record.
+
+Evidence bundle references appear only under ``rca.evidence_summary`` in the API response.
+"""
 
 from __future__ import annotations
 
@@ -8,17 +20,20 @@ import os
 import re
 import tempfile
 from collections import Counter
+from typing import Literal
 
 from artifacts.investigation_store import LocalFileInvestigationStore
 from api.services.jira_service import fetch_ticket_context
-from api.services.rca_service import get_rca_result_view, trigger_manual_rca
+from api.services.rca_service import get_rca_explanation, get_rca_result_view, trigger_manual_rca
 from schemas.jira import JiraExtractedHints, JiraNormalizedTicket
 from schemas.jira_rca import (
     DerivedSignalBundle,
+    JiraRcaExplanationPayload,
     JiraRcaResult,
     JiraRcaRunRequest,
     JiraRcaRunResponse,
     LogSignals,
+    RelationshipReadyBundle,
 )
 
 _LEVEL_PATTERNS = {
@@ -119,6 +134,13 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         "evidence_refs": evidence_refs,
         "latest_run_id": rca_view.get("latest_run_id"),
     }
+    relationship_bundle = _build_relationship_bundle(
+        ticket=ticket,
+        anomaly_id=anomaly_id,
+        ticket_hints=ticket_hints,
+        log_signals=log_signals,
+        rca_view=rca_view,
+    )
     investigation_id = _persist_investigation_trace(
         ticket=ticket,
         anomaly_id=anomaly_id,
@@ -126,6 +148,7 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         run_status=run_status or "completed",
         bundle=bundle,
         rca_view=rca_view,
+        relationship_bundle=relationship_bundle,
     )
     evidence_summary["investigation_id"] = investigation_id
     logger.info(
@@ -134,7 +157,13 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         str(rca_run.get("run_id") or run_id),
         investigation_id,
     )
-
+    explanation_payload = _build_explanation_payload(
+        anomaly_id=anomaly_id,
+        ticket=ticket,
+        ticket_hints=ticket_hints,
+        log_signals=log_signals,
+        rca_view=rca_view,
+    )
     return JiraRcaRunResponse(
         ticket_summary={
             "ticket_key": ticket.ticket_key,
@@ -154,6 +183,8 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
             rca_result=rca_view,
             evidence_summary=evidence_summary,
         ),
+        explanation_payload=explanation_payload,
+        relationship_bundle=relationship_bundle,
     )
 
 
@@ -303,6 +334,7 @@ def _persist_investigation_trace(
     run_status: str,
     bundle: DerivedSignalBundle,
     rca_view: dict[str, object],
+    relationship_bundle: RelationshipReadyBundle,
 ) -> str:
     store = _get_investigation_store()
     payload: dict[str, object] = {
@@ -342,6 +374,7 @@ def _persist_investigation_trace(
             "files": bundle.merged.get("file_paths", [])[:20],
             "errors": bundle.merged.get("error_keywords", [])[:20],
         },
+        "relationship_ready_bundle": relationship_bundle.model_dump(),
     }
     investigation_id = store.create_record(payload)
     deleted = _cleanup_old_investigations(store)
@@ -352,6 +385,194 @@ def _persist_investigation_trace(
         deleted,
     )
     return investigation_id
+
+
+def _classify_assist_status(expl: dict[str, object]) -> Literal["ok", "partial", "unavailable"]:
+    """Whether GraphRAG assistive explanation succeeded (deterministic RCA still authoritative)."""
+    if not expl:
+        return "unavailable"
+    summary = str(expl.get("explanation_summary") or "")
+    limitations = str(expl.get("limitations") or "")
+    low_sum = summary.lower()
+    if "explanation unavailable" in low_sum or "internal error" in low_sum:
+        return "partial"
+    if limitations.strip():
+        return "partial"
+    if summary.strip():
+        return "ok"
+    return "partial"
+
+
+def _build_explanation_payload(
+    *,
+    anomaly_id: str,
+    ticket: JiraNormalizedTicket,
+    ticket_hints: JiraExtractedHints,
+    log_signals: LogSignals,
+    rca_view: dict[str, object],
+) -> JiraRcaExplanationPayload:
+    root = _select_root_cause(rca_view)
+    confidence = float(root.get("confidence") or 0.0)
+    expl = _safe_get_rca_explanation(anomaly_id)
+    assist_status = _classify_assist_status(expl)
+
+    base_explanation = str(expl.get("explanation_summary") or "").strip()
+    if not base_explanation:
+        base_explanation = (
+            "Deterministic RCA selected the top candidate from graph evidence. "
+            "Explanation detail is limited because assistive explanation text is unavailable."
+        )
+    confidence_note = str(expl.get("confidence_alignment_note") or "").strip()
+    if not confidence_note:
+        confidence_note = (
+            "Deterministic RCA ranking remains authoritative; contextual explanation is assistive only."
+        )
+    if confidence < 0.5:
+        confidence_note += " Confidence is moderate/low, so validate with additional checks before applying fixes."
+
+    remediation_suggestions = _build_remediation_suggestions(
+        root=root,
+        log_signals=log_signals,
+        expl=expl,
+        confidence=confidence,
+    )
+    explanation = _compose_grounded_explanation(
+        ticket=ticket,
+        root=root,
+        base_explanation=base_explanation,
+        confidence=confidence,
+    )
+    return JiraRcaExplanationPayload(
+        root_cause=root,
+        assist_status=assist_status,
+        ticket_context_summary={
+            "ticket_key": ticket.ticket_key,
+            "summary": ticket.summary,
+            "status": ticket.status,
+            "priority": ticket.priority,
+            "labels": ticket.labels,
+            "service_names": ticket_hints.service_names,
+            "environment_names": ticket_hints.environment_names,
+        },
+        log_signal_summary={
+            "severity_counts": dict(log_signals.severity_counts),
+            "error_keywords": log_signals.error_keywords,
+            "service_names": log_signals.service_names,
+            "repeated_error_lines_count": len(log_signals.repeated_error_lines),
+            "stack_trace_count": len(log_signals.stack_traces),
+            "time_window": log_signals.time_window,
+        },
+        explanation=explanation,
+        remediation_suggestions=remediation_suggestions,
+        confidence_note=confidence_note,
+    )
+
+
+def _safe_get_rca_explanation(anomaly_id: str) -> dict[str, object]:
+    try:
+        out = get_rca_explanation(anomaly_id)
+        if isinstance(out, dict):
+            return out
+    except Exception as exc:
+        logger.warning("jira_rca.explanation.fallback anomaly_id=%s error=%s", anomaly_id, str(exc))
+    return {}
+
+
+def _select_root_cause(rca_view: dict[str, object]) -> dict[str, object]:
+    accepted = rca_view.get("accepted_root_cause")
+    if isinstance(accepted, dict) and accepted:
+        return {
+            "source": "accepted_root_cause",
+            "file_id": accepted.get("file_id"),
+            "path": accepted.get("path"),
+            "confidence": float(accepted.get("confidence") or 0.0),
+            "run_id": accepted.get("run_id"),
+            "evidence_ref": accepted.get("evidence_ref"),
+        }
+    candidates = rca_view.get("candidate_root_causes")
+    if isinstance(candidates, list) and candidates:
+        top = candidates[0] if isinstance(candidates[0], dict) else {}
+        return {
+            "source": "top_ranked_candidate",
+            "file_id": top.get("file_id"),
+            "path": top.get("path"),
+            "confidence": float(top.get("confidence") or 0.0),
+            "run_id": top.get("run_id"),
+            "evidence_ref": top.get("evidence_ref"),
+        }
+    return {"source": "unavailable", "confidence": 0.0}
+
+
+def _compose_grounded_explanation(
+    *,
+    ticket: JiraNormalizedTicket,
+    root: dict[str, object],
+    base_explanation: str,
+    confidence: float,
+) -> str:
+    target = str(root.get("path") or root.get("file_id") or "unknown target")
+    return (
+        f"Ticket {ticket.ticket_key} context and uploaded log signals were processed, then deterministic RCA ranked "
+        f"{target} as the leading root-cause candidate (confidence {confidence:.2f}). {base_explanation}"
+    ).strip()
+
+
+def _build_remediation_suggestions(
+    *,
+    root: dict[str, object],
+    log_signals: LogSignals,
+    expl: dict[str, object],
+    confidence: float,
+) -> list[str]:
+    target = str(root.get("path") or root.get("file_id") or "top candidate file")
+    out = [
+        "Validate the candidate against latest deployment/change history before code changes.",
+        f"Inspect `{target}` around failing execution paths and compare with recent regressions.",
+        "Apply reversible mitigation first (feature flag, timeout guard, retry tuning), then monitor error rate.",
+    ]
+    if log_signals.time_window:
+        out.append(
+            "Correlate candidate behavior with the observed log time window to confirm temporal alignment."
+        )
+    patch_hint = str(expl.get("optional_patch_direction") or "").strip()
+    if patch_hint:
+        out.append(f"Advisory patch direction: {patch_hint}")
+    if confidence < 0.5:
+        out.append("Because confidence is not strong, treat this as a hypothesis and validate multiple candidates.")
+    return out[:6]
+
+
+def _build_relationship_bundle(
+    *,
+    ticket: JiraNormalizedTicket,
+    anomaly_id: str,
+    ticket_hints: JiraExtractedHints,
+    log_signals: LogSignals,
+    rca_view: dict[str, object],
+) -> RelationshipReadyBundle:
+    root = _select_root_cause(rca_view)
+    root_file = str(root.get("path") or root.get("file_id") or "")
+    services = _uniq(ticket_hints.service_names + log_signals.service_names)[:30]
+    errors = _uniq(ticket_hints.error_keywords + log_signals.error_keywords)[:40]
+    file_paths = _uniq(ticket_hints.file_paths + log_signals.file_paths)[:50]
+    if root_file and root_file not in file_paths:
+        file_paths = [root_file] + file_paths
+
+    return RelationshipReadyBundle(
+        ticket_key=ticket.ticket_key,
+        anomaly_id=anomaly_id,
+        rca_target_file=root_file or None,
+        candidate_services=services,
+        candidate_errors=errors,
+        candidate_file_paths=file_paths,
+        entity_refs={
+            "ticket": [ticket.ticket_key],
+            "anomaly": [anomaly_id],
+            "service": services,
+            "error": errors,
+            "file": file_paths,
+        },
+    )
 
 
 def _get_investigation_store() -> LocalFileInvestigationStore:

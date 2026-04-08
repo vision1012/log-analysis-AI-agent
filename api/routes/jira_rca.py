@@ -12,13 +12,8 @@ from api.services.jira_rca_orchestration_service import (
     RcaUnableToRankCandidateError,
     run_jira_rca,
 )
-from api.services.jira_service import (
-    JiraAuthError,
-    JiraConfigError,
-    JiraExternalApiError,
-    JiraInvalidTicketKeyError,
-    JiraNotFoundError,
-)
+from api.services.jira_service import JiraError
+from api.utils.jira_http import http_exception_for_jira_integration
 from schemas.jira_rca import JiraRcaRunRequest, JiraRcaRunResponse
 
 router = APIRouter()
@@ -49,31 +44,8 @@ async def run_jira_rca_endpoint(body: JiraRcaRunRequest) -> JiraRcaRunResponse:
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "rca_unable_to_rank_candidate", "message": str(exc)},
         ) from exc
-    except JiraInvalidTicketKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "invalid_ticket_key", "message": str(exc)},
-        ) from exc
-    except JiraConfigError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "jira_config_missing", "message": str(exc)},
-        ) from exc
-    except JiraAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "jira_auth_failed", "message": str(exc)},
-        ) from exc
-    except JiraNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "jira_ticket_not_found", "message": str(exc)},
-        ) from exc
-    except JiraExternalApiError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "jira_api_failure", "message": str(exc)},
-        ) from exc
+    except JiraError as exc:
+        raise http_exception_for_jira_integration(exc) from exc
     except JiraRcaOrchestrationError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

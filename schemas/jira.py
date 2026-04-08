@@ -39,3 +39,25 @@ class JiraTicketFetchResponse(BaseModel):
 
     ticket: JiraNormalizedTicket
     hints: JiraExtractedHints
+
+
+class JiraTicketSearchHit(BaseModel):
+    """Lightweight row for ticket search / picker UI."""
+
+    ticket_key: str
+    summary: str = ""
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    updated_at: Optional[str] = None
+    labels: List[str] = Field(default_factory=list)
+
+
+class JiraTicketSearchResponse(BaseModel):
+    """Response for GET /api/v1/jira/tickets/search."""
+
+    issues: List[JiraTicketSearchHit] = Field(default_factory=list)
+    total: int = 0
+    jql_used: str = Field(
+        "",
+        description="Effective JQL sent to JIRA (built from q or taken from jql).",
+    )

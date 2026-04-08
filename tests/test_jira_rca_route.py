@@ -69,6 +69,30 @@ def test_jira_rca_run_success() -> None:
                 "rca_result": {"candidate_root_causes": [{"file_id": "f1"}]},
                 "evidence_summary": {"bundle_count": 1, "evidence_refs": ["b1"]},
             },
+            "explanation_payload": {
+                "root_cause": {"source": "top_ranked_candidate", "file_id": "f1", "confidence": 0.7},
+                "assist_status": "ok",
+                "ticket_context_summary": {"ticket_key": "PROJ-1", "summary": "sample"},
+                "log_signal_summary": {"severity_counts": {"error": 1}},
+                "explanation": "Deterministic RCA ranked f1 from evidence.",
+                "remediation_suggestions": ["validate candidate", "apply reversible mitigation"],
+                "confidence_note": "Deterministic RCA is authoritative.",
+            },
+            "relationship_bundle": {
+                "ticket_key": "PROJ-1",
+                "anomaly_id": "an-1",
+                "rca_target_file": "services/payments.py",
+                "candidate_services": ["paymentservice"],
+                "candidate_errors": ["timeout", "error"],
+                "candidate_file_paths": ["services/payments.py"],
+                "entity_refs": {
+                    "ticket": ["PROJ-1"],
+                    "anomaly": ["an-1"],
+                    "service": ["paymentservice"],
+                    "error": ["timeout", "error"],
+                    "file": ["services/payments.py"],
+                },
+            },
         }
         client = TestClient(app)
         r = client.post(
@@ -81,6 +105,8 @@ def test_jira_rca_run_success() -> None:
         )
     assert r.status_code == 200
     assert r.json()["rca"]["run_status"] == "completed"
+    assert r.json()["explanation_payload"]["root_cause"]["source"] == "top_ranked_candidate"
+    assert r.json()["relationship_bundle"]["ticket_key"] == "PROJ-1"
 
 
 def test_jira_rca_run_maps_no_signal_error() -> None:

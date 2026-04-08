@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, Path, Query
 
-from api.services.jira_service import (
-    JiraAuthError,
-    JiraConfigError,
-    JiraExternalApiError,
-    JiraInvalidTicketKeyError,
-    JiraNotFoundError,
-    fetch_ticket_context,
-)
-from schemas.jira import JiraTicketFetchResponse
+from api.services.jira_service import JiraError, fetch_ticket_context, search_tickets
+from api.utils.jira_http import http_exception_for_jira_integration
+from schemas.jira import JiraTicketFetchResponse, JiraTicketSearchResponse
 
 router = APIRouter()
+
+
+@router.get("/jira/tickets/search", response_model=JiraTicketSearchResponse)
+async def search_jira_tickets(
+    q: str | None = Query(
+        None,
+        max_length=200,
+        description="Simple text search; mapped to JQL: text ~ \"...\" ORDER BY updated DESC",
+    ),
+    jql: str | None = Query(
+        None,
+        max_length=4000,
+        description="Raw JQL. If set, takes precedence over q.",
+    ),
+    max_results: int = Query(25, ge=1, le=50, description="Max issues to return (capped at 50)."),
+) -> JiraTicketSearchResponse:
+    """Search JIRA issues for ticket picker UIs. Uses the same JIRA env config as fetch-by-key."""
+    try:
+        return search_tickets(q=q, jql=jql, max_results=max_results)
+    except JiraError as exc:
+        raise http_exception_for_jira_integration(exc) from exc
 
 
 @router.get("/jira/tickets/{ticket_key}", response_model=JiraTicketFetchResponse)
@@ -24,28 +39,5 @@ async def get_jira_ticket_context(
     """Fetch and normalize a JIRA ticket into backend ticket context."""
     try:
         return fetch_ticket_context(ticket_key)
-    except JiraInvalidTicketKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "invalid_ticket_key", "message": str(exc)},
-        ) from exc
-    except JiraConfigError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "jira_config_missing", "message": str(exc)},
-        ) from exc
-    except JiraAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "jira_auth_failed", "message": str(exc)},
-        ) from exc
-    except JiraNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "jira_ticket_not_found", "message": str(exc)},
-        ) from exc
-    except JiraExternalApiError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "jira_api_failure", "message": str(exc)},
-        ) from exc
+    except JiraError as exc:
+        raise http_exception_for_jira_integration(exc) from exc

@@ -7,11 +7,18 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any
 from urllib import error as urlerror
 from urllib import parse, request
 
-from schemas.jira import JiraExtractedHints, JiraNormalizedTicket, JiraTicketFetchResponse
+from schemas.jira import (
+    JiraExtractedHints,
+    JiraNormalizedTicket,
+    JiraTicketFetchResponse,
+    JiraTicketSearchResponse,
+    JiraTicketSearchHit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +27,9 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _JIRA_MARKUP_RE = re.compile(r"\{[^{}]+\}")
 _WIKI_LINK_RE = re.compile(r"\[([^\]|]+)(?:\|[^\]]+)?\]")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_DEFAULT_TIMEOUT_SEC = 15
+_DEFAULT_MAX_RETRIES = 1
 
 
 class JiraError(Exception):
@@ -46,6 +56,14 @@ class JiraExternalApiError(JiraError):
     """Raised when JIRA API request fails unexpectedly."""
 
 
+class JiraInvalidSearchError(JiraError):
+    """Raised when search input is invalid or JIRA rejects the query."""
+
+
+_MAX_SEARCH_TEXT_LEN = 200
+_MAX_SEARCH_RESULTS = 50
+
+
 def fetch_ticket_context(ticket_key: str) -> JiraTicketFetchResponse:
     """Fetch JIRA issue by key and return normalized ticket context + hints."""
     normalized_key = _normalize_ticket_key(ticket_key)
@@ -62,9 +80,91 @@ def fetch_ticket_context(ticket_key: str) -> JiraTicketFetchResponse:
             len(ticket.labels),
         )
         return JiraTicketFetchResponse(ticket=ticket, hints=hints)
-    except JiraError:
-        logger.warning("jira.ticket_fetch.failure ticket_key=%s", normalized_key)
+    except JiraError as exc:
+        logger.warning(
+            "jira.ticket_fetch.failure ticket_key=%s error_type=%s",
+            normalized_key,
+            type(exc).__name__,
+        )
         raise
+
+
+def search_tickets(
+    *,
+    q: str | None = None,
+    jql: str | None = None,
+    max_results: int = 25,
+) -> JiraTicketSearchResponse:
+    """
+    Search JIRA issues via ``POST /rest/api/3/search``.
+
+    Pass **jql** for a raw JQL query, or **q** for a simple text search (mapped to
+    ``text ~ "..." ORDER BY updated DESC``). If both are set, **jql** wins.
+    """
+    cfg = _jira_config_from_env()
+    raw_jql = (jql or "").strip()
+    raw_q = (q or "").strip()
+
+    if raw_jql:
+        jql_used = raw_jql
+    elif raw_q:
+        if len(raw_q) > _MAX_SEARCH_TEXT_LEN:
+            raise JiraInvalidSearchError(
+                f"search text must be at most {_MAX_SEARCH_TEXT_LEN} characters",
+            )
+        escaped = _escape_jql_literal(raw_q)
+        jql_used = f'text ~ "{escaped}" ORDER BY updated DESC'
+    else:
+        raise JiraInvalidSearchError("provide query parameter q (text) or jql")
+
+    n = max(1, min(int(max_results), _MAX_SEARCH_RESULTS))
+
+    logger.info(
+        "jira.ticket_search.start mode=%s max_results=%d",
+        "jql" if raw_jql else "text",
+        n,
+    )
+    payload = _post_json_to_jira(
+        cfg,
+        "/rest/api/3/search",
+        {
+            "jql": jql_used,
+            "maxResults": n,
+            "fields": ["summary", "status", "priority", "labels", "updated"],
+        },
+    )
+    issues_raw = payload.get("issues") or []
+    hits: list[JiraTicketSearchHit] = []
+    for issue in issues_raw:
+        if isinstance(issue, dict):
+            hits.append(_issue_to_search_hit(issue))
+    total = int(payload.get("total") if payload.get("total") is not None else len(hits))
+    logger.info("jira.ticket_search.success returned=%d total=%d", len(hits), total)
+    return JiraTicketSearchResponse(issues=hits, total=total, jql_used=jql_used)
+
+
+def _escape_jql_literal(value: str) -> str:
+    """Escape a string for use inside JQL double-quoted literals."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _issue_to_search_hit(issue: dict[str, Any]) -> JiraTicketSearchHit:
+    fields = issue.get("fields") or {}
+    key = (issue.get("key") or "").strip()
+    summary = _clean_text(str(fields.get("summary") or ""))
+    status_name = _read_nested_str(fields, ["status", "name"])
+    priority_name = _read_nested_str(fields, ["priority", "name"])
+    labels_raw = fields.get("labels") or []
+    labels = [str(x).strip() for x in labels_raw if str(x).strip()]
+    updated = _none_if_empty(str(fields.get("updated", "")).strip())
+    return JiraTicketSearchHit(
+        ticket_key=key,
+        summary=summary,
+        status=status_name,
+        priority=priority_name,
+        updated_at=updated,
+        labels=labels,
+    )
 
 
 def _normalize_ticket_key(ticket_key: str) -> str:
@@ -80,6 +180,11 @@ def _jira_config_from_env() -> dict[str, str]:
     api_token = os.environ.get("JIRA_API_TOKEN", "").strip()
     if not base_url or not email or not api_token:
         raise JiraConfigError("JIRA config missing: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN")
+    parsed = parse.urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise JiraConfigError("JIRA_BASE_URL must be a valid http(s) URL")
+    if not _EMAIL_RE.fullmatch(email):
+        raise JiraConfigError("JIRA_EMAIL must be a valid email address")
     return {"base_url": base_url, "email": email, "api_token": api_token}
 
 
@@ -97,21 +202,83 @@ def _fetch_issue_from_jira(cfg: dict[str, str], ticket_key: str) -> dict[str, An
         },
         method="GET",
     )
-    try:
-        with request.urlopen(req, timeout=20) as resp:
-            payload = resp.read().decode("utf-8")
-            return json.loads(payload)
-    except urlerror.HTTPError as exc:
-        body = _safe_read_error_body(exc)
-        if exc.code in (401, 403):
-            raise JiraAuthError("JIRA authentication failed") from exc
-        if exc.code == 404:
-            raise JiraNotFoundError(f"ticket not found: {ticket_key}") from exc
-        raise JiraExternalApiError(f"JIRA API error ({exc.code}): {body}") from exc
-    except urlerror.URLError as exc:
-        raise JiraExternalApiError(f"JIRA API connection error: {exc.reason}") from exc
-    except json.JSONDecodeError as exc:
-        raise JiraExternalApiError("invalid JSON response from JIRA API") from exc
+    timeout_sec = _jira_timeout_sec()
+    max_retries = _jira_max_retries()
+    for attempt in range(max_retries + 1):
+        try:
+            with request.urlopen(req, timeout=timeout_sec) as resp:
+                payload = resp.read().decode("utf-8")
+                return json.loads(payload)
+        except urlerror.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise JiraAuthError("JIRA authentication failed") from exc
+            if exc.code == 404:
+                raise JiraNotFoundError(f"ticket not found: {ticket_key}") from exc
+            if exc.code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                _sleep_before_retry(attempt)
+                continue
+            raise JiraExternalApiError(f"JIRA API request failed (status={exc.code})") from exc
+        except urlerror.URLError as exc:
+            if attempt < max_retries:
+                _sleep_before_retry(attempt)
+                continue
+            raise JiraExternalApiError("JIRA API network failure") from exc
+        except TimeoutError as exc:
+            if attempt < max_retries:
+                _sleep_before_retry(attempt)
+                continue
+            raise JiraExternalApiError("JIRA API request timed out") from exc
+        except json.JSONDecodeError as exc:
+            raise JiraExternalApiError("invalid JSON response from JIRA API") from exc
+    raise JiraExternalApiError("JIRA API request failed after retries")
+
+
+def _post_json_to_jira(cfg: dict[str, str], path: str, body: dict[str, Any]) -> dict[str, Any]:
+    """POST JSON to JIRA REST API (e.g. search)."""
+    url = f"{cfg['base_url']}{path}"
+    data = json.dumps(body).encode("utf-8")
+    auth_raw = f"{cfg['email']}:{cfg['api_token']}".encode("utf-8")
+    auth_header = base64.b64encode(auth_raw).decode("ascii")
+
+    req = request.Request(
+        url,
+        data=data,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth_header}",
+        },
+        method="POST",
+    )
+    timeout_sec = _jira_timeout_sec()
+    max_retries = _jira_max_retries()
+    for attempt in range(max_retries + 1):
+        try:
+            with request.urlopen(req, timeout=timeout_sec) as resp:
+                payload = resp.read().decode("utf-8")
+                return json.loads(payload)
+        except urlerror.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise JiraAuthError("JIRA authentication failed") from exc
+            if exc.code == 400:
+                raise JiraInvalidSearchError("JIRA rejected the search (invalid JQL or query)") from exc
+            if exc.code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                _sleep_before_retry(attempt)
+                continue
+            raise JiraExternalApiError(f"JIRA API request failed (status={exc.code})") from exc
+        except urlerror.URLError as exc:
+            if attempt < max_retries:
+                _sleep_before_retry(attempt)
+                continue
+            raise JiraExternalApiError("JIRA API network failure") from exc
+        except TimeoutError as exc:
+            if attempt < max_retries:
+                _sleep_before_retry(attempt)
+                continue
+            raise JiraExternalApiError("JIRA API request timed out") from exc
+        except json.JSONDecodeError as exc:
+            raise JiraExternalApiError("invalid JSON response from JIRA API") from exc
+    raise JiraExternalApiError("JIRA API request failed after retries")
 
 
 def _safe_read_error_body(exc: urlerror.HTTPError) -> str:
@@ -119,6 +286,34 @@ def _safe_read_error_body(exc: urlerror.HTTPError) -> str:
         return exc.read().decode("utf-8")[:500]
     except Exception:
         return ""
+
+
+def _jira_timeout_sec() -> int:
+    raw = (os.environ.get("JIRA_TIMEOUT_SEC") or str(_DEFAULT_TIMEOUT_SEC)).strip()
+    try:
+        timeout = int(raw)
+    except ValueError:
+        raise JiraConfigError("JIRA_TIMEOUT_SEC must be an integer") from None
+    if timeout <= 0 or timeout > 120:
+        raise JiraConfigError("JIRA_TIMEOUT_SEC must be between 1 and 120 seconds")
+    return timeout
+
+
+def _jira_max_retries() -> int:
+    raw = (os.environ.get("JIRA_MAX_RETRIES") or str(_DEFAULT_MAX_RETRIES)).strip()
+    try:
+        retries = int(raw)
+    except ValueError:
+        raise JiraConfigError("JIRA_MAX_RETRIES must be an integer") from None
+    if retries < 0 or retries > 3:
+        raise JiraConfigError("JIRA_MAX_RETRIES must be between 0 and 3")
+    return retries
+
+
+def _sleep_before_retry(attempt: int) -> None:
+    # Minimal bounded backoff: 0.2s, 0.4s, 0.8s
+    delay = min(0.2 * (2**attempt), 0.8)
+    time.sleep(delay)
 
 
 def _normalize_issue(issue: dict[str, Any], jira_base_url: str) -> JiraNormalizedTicket:

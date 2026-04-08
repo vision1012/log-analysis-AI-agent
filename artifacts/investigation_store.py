@@ -70,6 +70,79 @@ class LocalFileInvestigationStore(InvestigationStore):
                 continue
         return deleted
 
+    def list_records_summary(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """
+        List investigation records newest-first (by ``created_at`` in JSON, else file mtime).
+
+        Each row is a small dict suitable for history APIs (no raw log content).
+        """
+        paths = list(self._base.glob("*.json"))
+        scored: list[tuple[datetime, Path]] = []
+        for path in paths:
+            scored.append((_record_time_sort_key(path), path))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        total = len(scored)
+        sliced = scored[offset : offset + max(0, limit)]
+        out: list[dict[str, Any]] = []
+        for _ts, path in sliced:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if not isinstance(data, dict):
+                continue
+            inv_id = str(data.get("investigation_id") or path.stem)
+            rel = data.get("relationship_ready_bundle")
+            target = ""
+            if isinstance(rel, dict):
+                target = str(rel.get("rca_target_file") or "")
+            out.append(
+                {
+                    "investigation_id": inv_id,
+                    "run_id": str(data.get("run_id") or ""),
+                    "ticket_key": str(data.get("ticket_key") or ""),
+                    "ticket_summary": str(data.get("ticket_summary") or ""),
+                    "anomaly_id": str(data.get("anomaly_id") or ""),
+                    "created_at": data.get("created_at"),
+                    "run_status": str(data.get("run_status") or ""),
+                    "rca_headline": _format_rca_headline(data, target),
+                }
+            )
+        return out, total
+
+
+def _record_time_sort_key(path: Path) -> datetime:
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            raw = str(data.get("created_at") or "")
+            dt = _parse_iso(raw)
+            if dt:
+                return dt
+    except Exception:
+        pass
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _format_rca_headline(data: dict[str, Any], rca_target_file: str) -> str:
+    status = str(data.get("run_status") or "")
+    refs = data.get("rca_result_ref") if isinstance(data.get("rca_result_ref"), dict) else {}
+    ev = refs.get("evidence_refs") if isinstance(refs, dict) else []
+    n = len(ev) if isinstance(ev, list) else 0
+    if rca_target_file:
+        return f"Candidate file: {rca_target_file}; status={status}; evidence_bundles={n}"
+    return f"status={status}; evidence_bundles={n}"
+
 
 def _parse_iso(raw: str) -> Optional[datetime]:
     if not raw:

@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from api.services.jira_rca_orchestration_service import (
-    MissingTicketContextError,
     _derive_log_signals,
     run_jira_rca,
 )
@@ -33,10 +33,9 @@ Exception: timeout
     assert signals.time_window is not None
 
 
-def test_run_jira_rca_requires_ticket_context() -> None:
-    body = JiraRcaRunRequest(anomaly_id="an-1", log_content="ERROR sample log")
-    with pytest.raises(MissingTicketContextError):
-        run_jira_rca(body)
+def test_jira_rca_run_request_requires_ticket_or_key() -> None:
+    with pytest.raises(ValidationError):
+        JiraRcaRunRequest(anomaly_id="an-1", log_content="ERROR sample log")
 
 
 def test_run_jira_rca_uses_existing_rca_engine_adapter() -> None:
@@ -80,8 +79,23 @@ def test_run_jira_rca_uses_existing_rca_engine_adapter() -> None:
                 "evidence_refs": ["bundle-1"],
             },
         ),
+        patch(
+            "api.services.jira_rca_orchestration_service.get_rca_explanation",
+            return_value={
+                "explanation_summary": "Evidence points to deterministic candidate.",
+                "confidence_alignment_note": "Deterministic ranking is source of truth.",
+                "optional_patch_direction": "consider defensive check in candidate path",
+            },
+        ),
     ):
         resp = run_jira_rca(body)
     assert resp.rca.run_status == "completed"
     assert resp.rca.evidence_summary.get("bundle_count") == 1
     assert resp.rca.evidence_summary.get("investigation_id")
+    assert resp.explanation_payload.root_cause.get("source") == "top_ranked_candidate"
+    assert resp.explanation_payload.assist_status == "ok"
+    assert resp.explanation_payload.explanation
+    assert resp.explanation_payload.remediation_suggestions
+    assert resp.relationship_bundle.ticket_key == "PROJ-123"
+    assert resp.relationship_bundle.anomaly_id == "an-1"
+    assert "paymentservice" in resp.relationship_bundle.candidate_services

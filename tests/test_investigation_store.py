@@ -22,3 +22,9 @@ def test_local_file_investigation_store_roundtrip(tmp_path) -> None:
     assert out is not None
     assert out["ticket_key"] == "PROJ-1"
     assert out["run_id"] == "run-1"
+
+    rows, total = store.list_records_summary(limit=10, offset=0)
+    assert total == 1
+    assert len(rows) == 1
+    assert rows[0]["investigation_id"] == record_id
+    assert rows[0]["ticket_key"] == "PROJ-1"
