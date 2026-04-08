@@ -235,7 +235,8 @@ def _derive_log_signals(log_content: str) -> LogSignals:
             severity_counts[level] = count
 
     err_lines = [ln for ln in lines if _LEVEL_PATTERNS["error"].search(ln) or _LEVEL_PATTERNS["critical"].search(ln)]
-    repeated_error_lines = [txt for txt, n in Counter(err_lines).items() if n > 1]
+    normalized_err_lines = [_normalize_error_line_for_repeat_detection(ln) for ln in err_lines]
+    repeated_error_lines = [txt for txt, n in Counter(normalized_err_lines).items() if n > 1]
 
     lower_blob = content.lower()
     keyword_bank = [
@@ -289,6 +290,13 @@ def _extract_stack_traces(lines: list[str]) -> list[str]:
     if current:
         traces.append("\n".join(current))
     return traces
+
+
+def _normalize_error_line_for_repeat_detection(line: str) -> str:
+    """Normalize volatile tokens (timestamps) to detect semantic repeats."""
+    out = _TS_RE.sub("<ts>", line or "")
+    out = re.sub(r"\s+", " ", out).strip()
+    return out
 
 
 def _extract_time_window(content: str) -> dict[str, str] | None:

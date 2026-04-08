@@ -101,7 +101,6 @@ def search_tickets(
     Pass **jql** for a raw JQL query, or **q** for a simple text search (mapped to
     ``text ~ "..." ORDER BY updated DESC``). If both are set, **jql** wins.
     """
-    cfg = _jira_config_from_env()
     raw_jql = (jql or "").strip()
     raw_q = (q or "").strip()
 
@@ -117,6 +116,7 @@ def search_tickets(
     else:
         raise JiraInvalidSearchError("provide query parameter q (text) or jql")
 
+    cfg = _jira_config_from_env()
     n = max(1, min(int(max_results), _MAX_SEARCH_RESULTS))
 
     logger.info(
