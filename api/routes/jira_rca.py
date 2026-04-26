@@ -22,6 +22,7 @@ router = APIRouter()
 @router.post("/jira/rca/run", response_model=JiraRcaRunResponse)
 async def run_jira_rca_endpoint(body: JiraRcaRunRequest) -> JiraRcaRunResponse:
     """Run deterministic RCA from JIRA context + uploaded logs."""
+    print("RCA RUN HIT")
     try:
         return run_jira_rca(body)
     except MissingTicketContextError as exc:
