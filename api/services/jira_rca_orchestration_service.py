@@ -379,6 +379,7 @@ def _rank_jira_log_candidates(
     trace_paths_ordered = _extract_python_trace_paths_ordered(log_content or "")
     trace_index = {p: i for i, p in enumerate(trace_paths_ordered)}
     last_trace_path = trace_paths_ordered[-1] if trace_paths_ordered else None
+    has_timeout_error = bool(re.search(r"\btimeouterror\b", log_content or "", re.IGNORECASE))
 
     ticket_services = {svc.lower() for svc in ticket_hints.service_names}
     log_services = {svc.lower() for svc in log_signals.service_names}
@@ -417,6 +418,7 @@ def _rank_jira_log_candidates(
             "trace_depth_bonus": round(trace_depth_bonus, 4),
             "last_trace_frame": last_frame_bonus,
         }
+        exception_raising_frame_bonus = 1.0 if (has_timeout_error and last_frame_bonus > 0.0) else 0.0
         score = (
             (0.26 * signals["path_mentions"])
             + (0.16 * signals["stack_path_mentions"])
@@ -426,7 +428,9 @@ def _rank_jira_log_candidates(
             + (0.05 * signals["service_alignment"])
             + (0.08 * trace_depth_bonus)
             + (0.13 * last_frame_bonus)
+            + (0.12 * exception_raising_frame_bonus)
         )
+        signals["exception_raising_frame"] = exception_raising_frame_bonus
         scored.append((path, score, signals))
 
     scored.sort(key=lambda item: (-item[1], item[0]))

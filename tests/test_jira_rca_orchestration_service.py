@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from pydantic import ValidationError
 
 from api.services.jira_rca_orchestration_service import (
     _derive_log_signals,
@@ -33,9 +32,9 @@ Exception: timeout
     assert signals.time_window is not None
 
 
-def test_jira_rca_run_request_requires_ticket_or_key() -> None:
-    with pytest.raises(ValidationError):
-        JiraRcaRunRequest(anomaly_id="an-1", log_content="ERROR sample log")
+def test_jira_rca_run_request_defaults_ticket_key_when_missing() -> None:
+    body = JiraRcaRunRequest(anomaly_id="an-1", log_content="ERROR sample log")
+    assert body.ticket_key == "UNKNOWN"
 
 
 def test_run_jira_rca_uses_existing_rca_engine_adapter() -> None:

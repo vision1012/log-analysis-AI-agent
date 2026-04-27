@@ -120,8 +120,11 @@ def test_jira_rca_run_maps_no_signal_error() -> None:
                 "log_content": "2026-04-07T10:00:00Z INFO hello",
             },
         )
-    assert r.status_code == 422
-    assert r.json()["detail"]["code"] == "no_useful_signals"
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["rca"]["rca_result"]["candidate_root_causes"] == []
+    assert payload["derived_log_signals"] == {}
+    assert payload["evidence_summary"]["evidence_highlights"] == []
 
 
 def test_jira_rca_route_accepts_multipart_log_upload() -> None:

@@ -21,16 +21,16 @@ class JiraNormalizedTicket(BaseModel):
     """Backend-friendly normalized JIRA ticket context."""
 
     ticket_id: Optional[str] = None
-    ticket_key: str
+    ticket_key: str = "UNKNOWN"
     summary: str = ""
     description: str = ""
     comments_text: str = ""
-    status: Optional[str] = None
-    priority: Optional[str] = None
+    status: Optional[str] = "unknown"
+    priority: Optional[str] = "unknown"
     labels: List[str] = Field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-    url: str
+    url: str = ""
     cleaned_text_body: str = ""
 
 

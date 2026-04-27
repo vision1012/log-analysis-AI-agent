@@ -16,9 +16,13 @@ class JiraRcaRunRequest(BaseModel):
         default=None,
         description="Existing anomaly id used to invoke deterministic RCA engine",
     )
-    ticket_key: str = Field(..., min_length=1)
+    ticket_key: str = Field(default="UNKNOWN", min_length=1)
     ticket: Optional[JiraNormalizedTicket] = None
     ticket_hints: Optional[JiraExtractedHints] = None
+    ticket_summary: str = ""
+    ticket_status: str = "unknown"
+    ticket_priority: str = "unknown"
+    extracted_hints: List[str] = Field(default_factory=list)
     log_content: str = Field(..., min_length=1)
     idempotency_key: Optional[str] = None
     force: bool = False
@@ -35,9 +39,7 @@ class JiraRcaRunRequest(BaseModel):
     @classmethod
     def ticket_key_not_blank(cls, v: str) -> str:
         s = (v or "").strip()
-        if not s:
-            raise ValueError("ticket_key must not be empty or whitespace-only")
-        return s
+        return s or "UNKNOWN"
 
 
 class LogSignals(BaseModel):

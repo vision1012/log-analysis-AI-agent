@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request, UploadFile, status
 from pydantic import ValidationError
 
-from api.services.jira_rca_orchestration_service import run_jira_rca
+from api.services.jira_rca_orchestration_service import NoUsefulSignalsError, run_jira_rca
 from schemas.jira_rca import JiraRcaRunRequest
 from services.llm_client import call_llm
 
@@ -26,7 +26,43 @@ async def run_jira_rca_endpoint(request: Request) -> dict[str, object]:
     print("log_content length:", len(body.log_content))
     print("log_content preview:", (body.log_content or "")[:200])
 
-    rca_response = run_jira_rca(body)
+    try:
+        rca_response = run_jira_rca(body)
+    except NoUsefulSignalsError:
+        fallback_explanation = (
+            "Deterministic RCA identified no useful signals from the provided log content."
+        )
+        return {
+            "rca": {
+                "anomaly_id": body.anomaly_id,
+                "run_status": "completed",
+                "run_id": body.idempotency_key or "",
+                "rca_result": {"candidate_root_causes": []},
+                "evidence_summary": {"bundle_count": 0, "evidence_refs": [], "evidence_highlights": []},
+            },
+            "derived_log_signals": {},
+            "evidence_summary": {"bundle_count": 0, "evidence_refs": [], "evidence_highlights": []},
+            "explanation_payload": {
+                "root_cause": {"source": "unavailable", "confidence": 0.0},
+                "assist_status": "unavailable",
+                "ticket_context_summary": {
+                    "ticket_key": body.ticket_key,
+                    "summary": body.ticket_summary,
+                    "status": body.ticket_status,
+                    "priority": body.ticket_priority,
+                },
+                "log_signal_summary": {},
+                "explanation": fallback_explanation,
+                "remediation_suggestions": [],
+                "confidence_note": "No deterministic signals were available.",
+            },
+            "remediation_suggestions": [],
+            "primary_root_cause": "No candidate found",
+            "confidence": 0.0,
+            "root_cause": "No candidate found",
+            "evidence": {},
+            "explanation": fallback_explanation,
+        }
 
     signals = {}
     try:
@@ -66,13 +102,23 @@ async def run_jira_rca_endpoint(request: Request) -> dict[str, object]:
         explanation = "No root cause available"
     print("DEBUG -> LLM output:", explanation)
 
-    return {
+    response_payload = rca_response.model_dump() if hasattr(rca_response, "model_dump") else dict(rca_response)
+    response_payload.update(
+        {
+            "evidence_summary": response_payload.get("rca", {}).get("evidence_summary", {}),
+            "remediation_suggestions": response_payload.get("explanation_payload", {}).get(
+                "remediation_suggestions", []
+            ),
+        }
+    )
+    response_payload.update({
         "root_cause": root_cause,
         "primary_root_cause": root_cause,
         "confidence": top_score,
         "evidence": signals,
         "explanation": explanation,
-    }
+    })
+    return response_payload
 
 
 async def _coerce_jira_rca_request(request: Request) -> JiraRcaRunRequest:
