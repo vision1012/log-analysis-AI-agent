@@ -49,7 +49,7 @@ async def login_endpoint(body: LoginRequest) -> UserResponse:
 
     Unverified users receive **403** with ``detail.code == "email_not_verified"`` (no session).
     """
-    print("AUTH LOGIN HIT")
+    print("LOGIN REQUEST RECEIVED")
     try:
         return login_svc(body)
     except UserNotFoundError as e:

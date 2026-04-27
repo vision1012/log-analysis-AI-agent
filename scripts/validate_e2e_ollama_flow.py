@@ -4,7 +4,7 @@ End-to-end validation helper for the debug pipeline + RCA + explanation (Ollama 
 
 Prerequisites:
   - API running (e.g. uvicorn api.main:app --port 8000)
-  - Neo4j seeded: python scripts/seed_demo_anomaly.py
+  - Neo4j contains at least one real anomaly node
   - PostgreSQL: users seeded (scripts/seed_users.py) for POST /api/v1/jobs
   - For Ollama-assisted explanation/remediation/reporting: OLLAMA_HOST, OLLAMA_MODEL, pull model
 

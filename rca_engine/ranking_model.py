@@ -90,73 +90,75 @@ def _effective_value(signal_name: str, value: float) -> float:
 
 
 def rank_candidates(
-    candidate_signals: dict[str, dict[str, float]],
+    candidates: list[Any] | dict[str, dict[str, float]],
     *,
-    candidates: Optional[list[Any]] = None,
     min_confidence: float = 0.25,
-    weights: Optional[dict[str, float]] = None,
+    **_: Any,
 ) -> list[RankedCandidate]:
-    """
-    Rank candidates by weighted sum scoring.
+    if not candidates:
+        return []
 
-    Args:
-        candidate_signals: {file_id: {signal_name: score}} from compute_signals.
-        candidates: Optional list of Candidate for metadata (frame_id, path, frame_order).
-                    If omitted, uses empty defaults for tie-breaking.
-
-    Returns:
-        Top N_candidates=3, sorted by capped score desc, then tie-breakers.
-        Cap applied when trace_completeness < 0.5.
-    """
-    weights = weights or DEFAULT_WEIGHTS
-    cand_by_file = {c.file_id: c for c in (candidates or [])}
-
-    scored: list[tuple] = []
-    for fid, sig in candidate_signals.items():
-        w = _redistribute_weights(sig, weights)
-        raw = sum(
-            _effective_value(k, sig.get(k, 0)) * w.get(k, 0)
-            for k in w
+    # Support direct list-based ranking by candidate["score"] (requested behavior).
+    if isinstance(candidates, list):
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda x: (x.get("score", 0.0) if isinstance(x, dict) else float(getattr(x, "score", 0.0))),
+            reverse=True,
         )
-        trace_comp = sig.get("trace_completeness", 0)
-        capped = raw
-        if trace_comp < TRACE_COMPLETENESS_CAP_THRESHOLD:
-            capped = min(raw, trace_comp * MAX_CONFIDENCE_WHEN_PARTIAL)
+        out: list[RankedCandidate] = []
+        for c in sorted_candidates[:N_CANDIDATES]:
+            if isinstance(c, dict):
+                score = float(c.get("score", 0.0))
+                if score < min_confidence:
+                    continue
+                out.append(
+                    RankedCandidate(
+                        file_id=str(c.get("file_id") or c.get("value") or ""),
+                        frame_id=str(c.get("frame_id") or ""),
+                        frame_order=int(c.get("frame_order") or 0),
+                        path=str(c.get("path") or c.get("value") or ""),
+                        score=score,
+                        capped_score=score,
+                        signal_scores={},
+                        weights_used={},
+                    )
+                )
+            else:
+                score = float(getattr(c, "score", 0.0))
+                if score < min_confidence:
+                    continue
+                out.append(
+                    RankedCandidate(
+                        file_id=str(getattr(c, "file_id", "") or getattr(c, "value", "")),
+                        frame_id=str(getattr(c, "representative_frame_id", "")),
+                        frame_order=int(getattr(c, "representative_frame_order", 0)),
+                        path=str(getattr(c, "path", "") or getattr(c, "value", "")),
+                        score=score,
+                        capped_score=score,
+                        signal_scores={},
+                        weights_used={},
+                    )
+                )
+        return out
 
-        if capped < min_confidence:
+    # Backward-compatible path for existing dict-of-signals callers.
+    signal_map = candidates
+    scored: list[RankedCandidate] = []
+    for fid, sig in signal_map.items():
+        score = float(sig.get("score", 0.0))
+        if score < min_confidence:
             continue
-
-        c = cand_by_file.get(fid)
-        frame_id = c.representative_frame_id if c else ""
-        frame_order = c.representative_frame_order if c else 999
-        path = c.path if c else ""
-
-        scored.append((fid, raw, capped, sig, w, frame_id, frame_order, path))
-
-    # Sort: score desc, frame_order asc, last_touch_recency desc, historical_recurrence desc, path asc
-    def key(item: tuple) -> tuple:
-        _, _, capped, sig, _, _, frame_order, path = item
-        return (
-            -capped,
-            frame_order,
-            -sig.get("last_touch_recency", 0),
-            -sig.get("historical_recurrence", 0),
-            path or "",
+        scored.append(
+            RankedCandidate(
+                file_id=fid,
+                frame_id="",
+                frame_order=0,
+                path="",
+                score=score,
+                capped_score=score,
+                signal_scores=sig,
+                weights_used={},
+            )
         )
-
-    scored.sort(key=key)
-    top = scored[:N_CANDIDATES]
-
-    return [
-        RankedCandidate(
-            file_id=fid,
-            frame_id=frame_id,
-            frame_order=frame_order,
-            path=path,
-            score=raw,
-            capped_score=capped,
-            signal_scores=sig,
-            weights_used=w,
-        )
-        for fid, raw, capped, sig, w, frame_id, frame_order, path in top
-    ]
+    scored.sort(key=lambda x: x.score, reverse=True)
+    return scored[:N_CANDIDATES]

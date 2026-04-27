@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from schemas.jira import JiraExtractedHints, JiraNormalizedTicket
 
@@ -16,7 +16,7 @@ class JiraRcaRunRequest(BaseModel):
         default=None,
         description="Existing anomaly id used to invoke deterministic RCA engine",
     )
-    ticket_key: Optional[str] = None
+    ticket_key: str = Field(..., min_length=1)
     ticket: Optional[JiraNormalizedTicket] = None
     ticket_hints: Optional[JiraExtractedHints] = None
     log_content: str = Field(..., min_length=1)
@@ -31,11 +31,13 @@ class JiraRcaRunRequest(BaseModel):
             raise ValueError("log_content must not be empty or whitespace-only")
         return s
 
-    @model_validator(mode="after")
-    def ticket_or_key_present(self) -> JiraRcaRunRequest:
-        if self.ticket is None and not (self.ticket_key or "").strip():
-            raise ValueError("provide ticket or ticket_key")
-        return self
+    @field_validator("ticket_key")
+    @classmethod
+    def ticket_key_not_blank(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("ticket_key must not be empty or whitespace-only")
+        return s
 
 
 class LogSignals(BaseModel):
@@ -61,7 +63,7 @@ class DerivedSignalBundle(BaseModel):
 class JiraRcaResult(BaseModel):
     """Deterministic RCA run output used by JIRA-first endpoint."""
 
-    anomaly_id: str
+    anomaly_id: Optional[str] = None
     run_status: str
     run_id: Optional[str] = None
     rca_result: Dict[str, object] = Field(default_factory=dict)
@@ -90,7 +92,7 @@ class RelationshipReadyBundle(BaseModel):
     """Lightweight graph-ready extraction output (no graph writes yet)."""
 
     ticket_key: str
-    anomaly_id: str
+    anomaly_id: Optional[str] = None
     rca_target_file: Optional[str] = None
     candidate_services: List[str] = Field(default_factory=list)
     candidate_errors: List[str] = Field(default_factory=list)

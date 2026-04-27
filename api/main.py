@@ -22,7 +22,8 @@ from api.middleware.rate_limit_context import RateLimitContextMiddleware
 from api.rate_limit.config import load_rate_limit_settings
 from api.rate_limit.redis_window import set_redis_client
 from api.routes import jira_investigations as jira_investigations_routes
-from api.routes import jira_rca as jira_rca_routes
+from api.routes.anomaly_routes import router as anomaly_router
+from api.routes.jira_rca import router as jira_rca_router
 from api.routes import jobs as jobs_routes
 from api.routers import auth_routes, feedback_routes, health, jira_routes, rca_routes, users_routes
 from dotenv import load_dotenv
@@ -117,7 +118,7 @@ app.add_middleware(RateLimitContextMiddleware)
 # CORS outermost — local Vite: http://localhost:5173 and http://127.0.0.1:5173 by default; set CORS_ORIGINS to extend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_allow_origins(),
+    allow_origins=["*"],  # temporarily allow all
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,7 +131,8 @@ app.include_router(health.router, tags=["health"])
 app.include_router(rca_routes.router, prefix="/api/v1", tags=["rca"])
 app.include_router(feedback_routes.router, prefix="/api/v1", tags=["feedback"])
 app.include_router(jobs_routes.router, prefix="/api/v1", tags=["jobs"])
-app.include_router(jira_rca_routes.router, prefix="/api/v1", tags=["jira-rca"])
+app.include_router(anomaly_router)
+app.include_router(jira_rca_router, prefix="/api/v1", tags=["jira-rca"])
 app.include_router(jira_investigations_routes.router, prefix="/api/v1", tags=["jira-investigations"])
 app.include_router(users_routes.router, prefix="/api/v1", tags=["users"])
 app.include_router(auth_routes.router, prefix="/api/v1", tags=["auth"])

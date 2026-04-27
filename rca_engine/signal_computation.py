@@ -34,6 +34,84 @@ SIGNAL_NAMES = (
 )
 
 
+def extract_keyword_signals(log_content: str) -> dict[str, Any]:
+    """
+    Lightweight keyword-based signal extraction for log-only RCA fallback.
+
+    This is intentionally independent from stack-trace/file traversal so RCA can
+    still produce a useful hypothesis when traces are absent.
+    """
+    lines = [ln.strip() for ln in (log_content or "").splitlines() if ln.strip()]
+    base = extract_signals(lines)
+    # Backward-compatible shape used by existing jira/log RCA fallback code.
+    return {
+        "error_count": int(base.get("error_count") or 0),
+        "timeout": int(base.get("timeout_count") or 0),
+        "timeout_count": int(base.get("timeout_count") or 0),
+        "invalid_token_count": int(base.get("invalid_token_count") or 0),
+        "service": str(base.get("service") or ""),
+        "patterns": list(base.get("patterns") or []),
+        "exception_types": {},
+    }
+
+
+def extract_signals(log_lines: Union[str, list[str]]) -> dict[str, Any]:
+    if isinstance(log_lines, str):
+        lines_iter = [ln for ln in log_lines.splitlines() if ln.strip()]
+    else:
+        lines_iter = [ln for ln in log_lines if isinstance(ln, str) and ln.strip()]
+
+    signals: dict[str, Any] = {
+        "error_count": 0,
+        "timeout_count": 0,
+        "invalid_token_count": 0,
+        "service": None,
+        "patterns": [],
+        "errors": [],
+        "exceptions": [],
+        "files": [],
+        "latency": False,
+    }
+
+    seen_errors: set[str] = set()
+    seen_exceptions: set[str] = set()
+    seen_files: set[str] = set()
+    for line in lines_iter:
+        l = line.lower()
+
+        if "error" in l:
+            signals["error_count"] += 1
+            if line not in seen_errors:
+                signals["errors"].append(line)
+                seen_errors.add(line)
+
+        if "timeout" in l:
+            signals["timeout_count"] += 1
+            signals["latency"] = True
+
+        if "invalid otp token" in l or "invalid token" in l:
+            signals["invalid_token_count"] += 1
+
+        if "auth-service" in l:
+            signals["service"] = "auth-service"
+
+        for token in line.replace(":", " ").split():
+            t = token.strip("()[]{}<>,\"'")
+            if t.endswith("Exception") or t.endswith("Error"):
+                if t not in seen_exceptions:
+                    signals["exceptions"].append(t)
+                    seen_exceptions.add(t)
+            if t.endswith(".py") and t not in seen_files:
+                signals["files"].append(t)
+                seen_files.add(t)
+
+        # capture raw pattern
+        if "error" in l or "timeout" in l:
+            signals["patterns"].append(line)
+
+    return signals
+
+
 def _parse_ts(ts: Any) -> Optional[float]:
     """Parse timestamp to Unix seconds. Handles ISO 8601 and numeric."""
     if ts is None:
@@ -73,6 +151,7 @@ def compute_signals(
         {file_id: {signal_name: score}} for each candidate.
     """
     if not candidate_files:
+        print("[RCA] Signals: {}")
         return {}
 
     # Normalize to (file_id, frame_order) per candidate
@@ -92,7 +171,9 @@ def compute_signals(
 
     ctx = _fetch_anomaly_context(client, anomaly_id, max_depth)
     if not ctx:
-        return {fid: _zero_scores() for fid in file_ids}
+        empty_result = {fid: _zero_scores() for fid in file_ids}
+        print(f"[RCA] Signals: {empty_result}")
+        return empty_result
 
     file_data = _fetch_file_data(
         client,
@@ -107,6 +188,7 @@ def compute_signals(
         fd = file_data.get(fid, {})
         frame_order = frame_order_by_file.get(fid, 999)
         result[fid] = _compute_one(fid, frame_order, ctx, fd)
+    print(f"[RCA] Signals: {result}")
     return result
 
 
