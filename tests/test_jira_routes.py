@@ -61,3 +61,37 @@ def test_get_jira_ticket_context_maps_not_found_error() -> None:
         r = client.get("/api/v1/jira/tickets/PROJ-12")
     assert r.status_code == 404
     assert r.json()["detail"]["code"] == "jira_ticket_not_found"
+
+
+def test_get_mock_jira_ticket_laaa_78() -> None:
+    client = TestClient(app)
+    r = client.get("/api/v1/jira/ticket/LAAA-78")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ticket_key"] == "LAAA-78"
+    assert data["title"] == "Users unable to complete MFA authentication"
+    assert "mfa" in data["labels"]
+    assert data["status"] == "open"
+    assert data["priority"] == "high"
+
+
+def test_get_mock_jira_ticket_laaa_79() -> None:
+    client = TestClient(app)
+    r = client.get("/api/v1/jira/ticket/LAAA-79")
+    assert r.status_code == 200
+    assert r.json()["ticket_key"] == "LAAA-79"
+    assert "token" in r.json()["labels"]
+
+
+def test_get_mock_jira_ticket_unknown_returns_404() -> None:
+    client = TestClient(app)
+    r = client.get("/api/v1/jira/ticket/UNKNOWN-99")
+    assert r.status_code == 404
+    assert r.json()["detail"] == "Ticket not found"
+
+
+def test_get_mock_jira_ticket_key_case_insensitive() -> None:
+    client = TestClient(app)
+    r = client.get("/api/v1/jira/ticket/laaa-78")
+    assert r.status_code == 200
+    assert r.json()["ticket_key"] == "LAAA-78"

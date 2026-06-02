@@ -61,3 +61,14 @@ class JiraTicketSearchResponse(BaseModel):
         "",
         description="Effective JQL sent to JIRA (built from q or taken from jql).",
     )
+
+
+class MockJiraTicketResponse(BaseModel):
+    """Response for GET /api/v1/jira/ticket/{ticket_key} (demo mock, no JIRA API)."""
+
+    ticket_key: str
+    title: str
+    description: str
+    labels: List[str] = Field(default_factory=list)
+    status: str
+    priority: str

@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query, status
 
+from api.services.jira_mock_tickets import get_mock_jira_ticket
 from api.services.jira_service import JiraError, fetch_ticket_context, search_tickets
 from api.utils.jira_http import http_exception_for_jira_integration
-from schemas.jira import JiraTicketFetchResponse, JiraTicketSearchResponse
+from schemas.jira import JiraTicketFetchResponse, JiraTicketSearchResponse, MockJiraTicketResponse
 
 router = APIRouter()
+
+
+@router.get("/jira/ticket/{ticket_key}", response_model=MockJiraTicketResponse)
+async def get_mock_jira_ticket_endpoint(
+    ticket_key: str = Path(..., min_length=3, description="Demo JIRA ticket key, e.g. LAAA-78"),
+) -> MockJiraTicketResponse:
+    """Return deterministic mock ticket data for RCA demo (no live JIRA call)."""
+    ticket = get_mock_jira_ticket(ticket_key)
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    return ticket
 
 
 @router.get("/jira/tickets/search", response_model=JiraTicketSearchResponse)

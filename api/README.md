@@ -23,6 +23,7 @@ REST entrypoint for RCA, feedback, debug-agent, and jobs. Run with e.g. `uvicorn
 |----------|------|
 | `GET /api/v1/jira/tickets/search` | Search issues (`q` = simple text → JQL `text ~ "..."`, or `jql` = raw JQL); returns lightweight `issues` + `jql_used` + `total`. |
 | `GET /api/v1/jira/tickets/{ticket_key}` | Fetch + normalize JIRA issue; returns `ticket` + `hints`. |
+| `GET /api/v1/jira/ticket/{ticket_key}` | **Mock** demo tickets (`LAAA-78`, `LAAA-79`) for RCA UI without live JIRA; 404 if unknown. |
 | `POST /api/v1/jira/rca/run` | Ticket context + `log_content` → log signals → run deterministic RCA on `anomaly_id` → `rca`, `explanation_payload`, `relationship_bundle`; persists minimal investigation metadata. |
 | `GET /api/v1/jira/investigations` | Paginated history of persisted investigations (no raw logs). |
 | `GET /api/v1/jira/investigations/{investigation_id}` | Full stored record for one investigation (metadata + derived snapshots only). |
