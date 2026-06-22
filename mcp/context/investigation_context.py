@@ -7,6 +7,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from mcp.schemas.common import SourceMetadata
+from mcp.schemas.datadog_models import AlertEvent, MetricEvent, ServiceHealthEvent, TraceEvent
 from mcp.schemas.github_models import McpCommit, McpPullRequest
 from mcp.schemas.gitlab_models import McpDeploymentEvent, McpGitLabCommit, McpMergeRequest, McpPipeline
 from mcp.schemas.jenkins_models import BuildEvent, DeploymentEvent
@@ -26,5 +27,9 @@ class UnifiedInvestigationContext(BaseModel):
     merge_requests: List[McpMergeRequest] = Field(default_factory=list)
     build_events: List[BuildEvent] = Field(default_factory=list)
     deployment_events: List[DeploymentEvent | McpDeploymentEvent] = Field(default_factory=list)
+    metric_events: List[MetricEvent] = Field(default_factory=list)
+    alert_events: List[AlertEvent] = Field(default_factory=list)
+    trace_events: List[TraceEvent] = Field(default_factory=list)
+    service_health_events: List[ServiceHealthEvent] = Field(default_factory=list)
     pipelines: List[McpPipeline] = Field(default_factory=list)
     source_metadata: List[SourceMetadata] = Field(default_factory=list)

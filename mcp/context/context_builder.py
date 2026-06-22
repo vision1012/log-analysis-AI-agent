@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.schemas.common import SourceMetadata
+from mcp.schemas.datadog_models import AlertEvent, MetricEvent, ServiceHealthEvent, TraceEvent
 from mcp.schemas.github_models import McpCommit, McpPullRequest
 from mcp.schemas.gitlab_models import McpDeploymentEvent, McpGitLabCommit, McpMergeRequest, McpPipeline
 from mcp.schemas.jenkins_models import BuildEvent, DeploymentEvent
@@ -31,6 +32,10 @@ def merge_context(
     build_events: list[BuildEvent] | None = None,
     deployment_events: list[McpDeploymentEvent] | None = None,
     jenkins_deployment_events: list[DeploymentEvent] | None = None,
+    metric_events: list[MetricEvent] | None = None,
+    alert_events: list[AlertEvent] | None = None,
+    trace_events: list[TraceEvent] | None = None,
+    service_health_events: list[ServiceHealthEvent] | None = None,
     pipelines: list[McpPipeline] | None = None,
     source_metadata: SourceMetadata | None = None,
 ) -> UnifiedInvestigationContext:
@@ -53,6 +58,16 @@ def merge_context(
         merged_deployments.extend([d.model_dump() for d in jenkins_deployment_events])
     if merged_deployments != list(data.get("deployment_events") or []):
         data["deployment_events"] = merged_deployments
+    if metric_events:
+        data["metric_events"] = list(data.get("metric_events") or []) + [m.model_dump() for m in metric_events]
+    if alert_events:
+        data["alert_events"] = list(data.get("alert_events") or []) + [a.model_dump() for a in alert_events]
+    if trace_events:
+        data["trace_events"] = list(data.get("trace_events") or []) + [t.model_dump() for t in trace_events]
+    if service_health_events:
+        data["service_health_events"] = list(data.get("service_health_events") or []) + [
+            s.model_dump() for s in service_health_events
+        ]
     if pipelines:
         data["pipelines"] = [p.model_dump() for p in pipelines]
     if source_metadata is not None:
@@ -102,6 +117,23 @@ def enrich_ticket_hints(
             if env not in envs:
                 envs.append(env)
             hints = hints.model_copy(update={"environment_names": envs})
+
+    for alert in context.alert_events:
+        error_keywords = _uniq(error_keywords + _keyword_hits(alert.title) + _keyword_hits(alert.message))
+        if alert.service and alert.service not in service_names:
+            service_names.append(alert.service)
+
+    for metric in context.metric_events:
+        if metric.service and metric.service not in service_names:
+            service_names.append(metric.service)
+        if metric.severity in {"high", "critical"}:
+            error_keywords = _uniq(error_keywords + [metric.metric_name])
+
+    for health in context.service_health_events:
+        if health.service_name and health.service_name not in service_names:
+            service_names.append(health.service_name)
+        if health.health_status in {"degraded", "unhealthy"}:
+            error_keywords = _uniq(error_keywords + ["degraded", health.health_status])
 
     return hints.model_copy(
         update={

@@ -36,6 +36,10 @@ def jenkins_mcp_enabled() -> bool:
     return mcp_enabled() and _env_bool("JENKINS_MCP_ENABLED", default=False)
 
 
+def datadog_mcp_enabled() -> bool:
+    return mcp_enabled() and _env_bool("DATADOG_MCP_ENABLED", default=False)
+
+
 def default_enabled_sources() -> List[MCPSourceName]:
     sources: List[MCPSourceName] = []
     if jira_mcp_enabled():
@@ -46,6 +50,8 @@ def default_enabled_sources() -> List[MCPSourceName]:
         sources.append("gitlab")
     if jenkins_mcp_enabled():
         sources.append("jenkins")
+    if datadog_mcp_enabled():
+        sources.append("datadog")
     return sources
 
 

@@ -6,6 +6,9 @@ import logging
 
 from mcp.config import MCPFetchParams, mcp_enabled
 from mcp.context.build_commit_correlator import correlate_and_attach_metadata
+from mcp.context.deployment_observability_correlator import (
+    correlate_deployment_observability_and_attach_metadata,
+)
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.registry import get_provider_class, registered_sources
 from mcp.schemas.common import ProviderHealth
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class MCPOrchestrator:
     """
-    Fetch external investigation context from JIRA, GitHub, GitLab, and Jenkins.
+    Fetch external investigation context from JIRA, GitHub, GitLab, Jenkins, and Datadog.
 
     Each provider returns normalized slices; the orchestrator merges them into
     :class:`UnifiedInvestigationContext`. Provider failures are logged and skipped
@@ -40,7 +43,9 @@ class MCPOrchestrator:
                 context = _merge_unified(context, partial)
             except Exception as exc:
                 logger.warning("mcp.orchestrator.provider_failed source=%s err=%s", source, exc)
-        return correlate_and_attach_metadata(context)
+        return correlate_deployment_observability_and_attach_metadata(
+            correlate_and_attach_metadata(context)
+        )
 
     def health_status(self) -> list[ProviderHealth]:
         if not mcp_enabled():
@@ -74,6 +79,12 @@ def _merge_unified(
     data["merge_requests"] = list(data.get("merge_requests") or []) + list(r.get("merge_requests") or [])
     data["build_events"] = list(data.get("build_events") or []) + list(r.get("build_events") or [])
     data["deployment_events"] = list(data.get("deployment_events") or []) + list(r.get("deployment_events") or [])
+    data["metric_events"] = list(data.get("metric_events") or []) + list(r.get("metric_events") or [])
+    data["alert_events"] = list(data.get("alert_events") or []) + list(r.get("alert_events") or [])
+    data["trace_events"] = list(data.get("trace_events") or []) + list(r.get("trace_events") or [])
+    data["service_health_events"] = list(data.get("service_health_events") or []) + list(
+        r.get("service_health_events") or []
+    )
     data["pipelines"] = list(data.get("pipelines") or []) + list(r.get("pipelines") or [])
     data["source_metadata"] = list(data.get("source_metadata") or []) + list(r.get("source_metadata") or [])
     return UnifiedInvestigationContext.model_validate(data)

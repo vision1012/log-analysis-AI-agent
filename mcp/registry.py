@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Dict, Type
 
 from mcp.providers.base import BaseMCPProvider
+from mcp.providers.datadog_provider import DatadogProvider
 from mcp.providers.github_provider import GitHubProvider
 from mcp.providers.gitlab_provider import GitLabProvider
 from mcp.providers.jenkins_provider import JenkinsProvider
@@ -16,6 +17,7 @@ _PROVIDERS: Dict[MCPSourceName, Type[BaseMCPProvider]] = {
     "github": GitHubProvider,
     "gitlab": GitLabProvider,
     "jenkins": JenkinsProvider,
+    "datadog": DatadogProvider,
 }
 
 

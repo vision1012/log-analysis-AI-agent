@@ -7,14 +7,22 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-MCPSourceName = Literal["jira", "github", "gitlab", "jenkins"]
-MetadataSourceName = Literal["jira", "github", "gitlab", "jenkins", "correlator"]
+MCPSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog"]
+MetadataSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog", "correlator"]
 
 
 class InvestigationCorrelation(BaseModel):
     """Normalized link between investigation artifacts (stored in source_metadata)."""
 
-    relation: Literal["commit_to_build", "build_to_deployment", "pr_to_commit"]
+    relation: Literal[
+        "commit_to_build",
+        "build_to_deployment",
+        "pr_to_commit",
+        "deployment_to_metric_spike",
+        "deployment_to_alert",
+        "deployment_to_trace_failure",
+        "metric_spike_to_alert",
+    ]
     from_ref: str
     to_ref: str
     commit_sha: str = ""
@@ -22,6 +30,9 @@ class InvestigationCorrelation(BaseModel):
     deployment_id: str = ""
     environment: str = ""
     pr_number: Optional[int] = None
+    metric_name: str = ""
+    alert_id: str = ""
+    trace_id: str = ""
 
 
 class SourceMetadata(BaseModel):
