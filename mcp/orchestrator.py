@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from mcp.config import MCPFetchParams, mcp_enabled
+from mcp.context.alert_incident_correlator import correlate_alert_incident_and_attach_metadata
 from mcp.context.build_commit_correlator import correlate_and_attach_metadata
 from mcp.context.deployment_kubernetes_correlator import (
     correlate_deployment_kubernetes_and_attach_metadata,
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class MCPOrchestrator:
     """
-    Fetch external investigation context from JIRA, GitHub, GitLab, Jenkins, Datadog, and Kubernetes.
+    Fetch external investigation context from JIRA, GitHub, GitLab, Jenkins, Datadog, Kubernetes, and PagerDuty.
 
     Each provider returns normalized slices; the orchestrator merges them into
     :class:`UnifiedInvestigationContext`. Provider failures are logged and skipped
@@ -46,9 +47,11 @@ class MCPOrchestrator:
                 context = _merge_unified(context, partial)
             except Exception as exc:
                 logger.warning("mcp.orchestrator.provider_failed source=%s err=%s", source, exc)
-        return correlate_deployment_kubernetes_and_attach_metadata(
-            correlate_deployment_observability_and_attach_metadata(
-                correlate_and_attach_metadata(context)
+        return correlate_alert_incident_and_attach_metadata(
+            correlate_deployment_kubernetes_and_attach_metadata(
+                correlate_deployment_observability_and_attach_metadata(
+                    correlate_and_attach_metadata(context)
+                )
             )
         )
 
@@ -95,6 +98,15 @@ def _merge_unified(
     data["pod_events"] = list(data.get("pod_events") or []) + list(r.get("pod_events") or [])
     data["container_events"] = list(data.get("container_events") or []) + list(r.get("container_events") or [])
     data["node_events"] = list(data.get("node_events") or []) + list(r.get("node_events") or [])
+    data["pagerduty_incidents"] = list(data.get("pagerduty_incidents") or []) + list(
+        r.get("pagerduty_incidents") or []
+    )
+    data["pagerduty_escalations"] = list(data.get("pagerduty_escalations") or []) + list(
+        r.get("pagerduty_escalations") or []
+    )
+    data["pagerduty_timeline_events"] = list(data.get("pagerduty_timeline_events") or []) + list(
+        r.get("pagerduty_timeline_events") or []
+    )
     data["pipelines"] = list(data.get("pipelines") or []) + list(r.get("pipelines") or [])
     data["source_metadata"] = list(data.get("source_metadata") or []) + list(r.get("source_metadata") or [])
     return UnifiedInvestigationContext.model_validate(data)

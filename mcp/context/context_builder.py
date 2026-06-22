@@ -18,6 +18,11 @@ from mcp.schemas.kubernetes_models import (
     NodeEvent,
     PodEvent,
 )
+from mcp.schemas.pagerduty_models import (
+    PagerDutyEscalationEvent,
+    PagerDutyIncidentEvent,
+    PagerDutyTimelineEvent,
+)
 from schemas.jira import JiraExtractedHints
 
 
@@ -48,6 +53,9 @@ def merge_context(
     pod_events: list[PodEvent] | None = None,
     container_events: list[ContainerEvent] | None = None,
     node_events: list[NodeEvent] | None = None,
+    pagerduty_incidents: list[PagerDutyIncidentEvent] | None = None,
+    pagerduty_escalations: list[PagerDutyEscalationEvent] | None = None,
+    pagerduty_timeline_events: list[PagerDutyTimelineEvent] | None = None,
     pipelines: list[McpPipeline] | None = None,
     source_metadata: SourceMetadata | None = None,
 ) -> UnifiedInvestigationContext:
@@ -92,6 +100,18 @@ def merge_context(
         ]
     if node_events:
         data["node_events"] = list(data.get("node_events") or []) + [n.model_dump() for n in node_events]
+    if pagerduty_incidents:
+        data["pagerduty_incidents"] = list(data.get("pagerduty_incidents") or []) + [
+            i.model_dump() for i in pagerduty_incidents
+        ]
+    if pagerduty_escalations:
+        data["pagerduty_escalations"] = list(data.get("pagerduty_escalations") or []) + [
+            e.model_dump() for e in pagerduty_escalations
+        ]
+    if pagerduty_timeline_events:
+        data["pagerduty_timeline_events"] = list(data.get("pagerduty_timeline_events") or []) + [
+            t.model_dump() for t in pagerduty_timeline_events
+        ]
     if pipelines:
         data["pipelines"] = [p.model_dump() for p in pipelines]
     if source_metadata is not None:
@@ -175,6 +195,20 @@ def enrich_ticket_hints(
     for node in context.node_events:
         if node.status not in {"True", "Ready"}:
             error_keywords = _uniq(error_keywords + ["node_pressure", node.node_name])
+
+    for incident in context.pagerduty_incidents:
+        error_keywords = _uniq(
+            error_keywords + _keyword_hits(incident.title) + _keyword_hits(incident.description)
+        )
+        if incident.urgency in {"high", "critical"}:
+            error_keywords = _uniq(error_keywords + [incident.urgency, "pagerduty_incident"])
+        if incident.status:
+            labels = _uniq(labels + [f"pd:{incident.status}"])
+        if incident.service_name and incident.service_name not in service_names:
+            service_names.append(incident.service_name)
+
+    for event in context.pagerduty_timeline_events:
+        error_keywords = _uniq(error_keywords + _keyword_hits(event.summary))
 
     return hints.model_copy(
         update={
