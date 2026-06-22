@@ -19,6 +19,7 @@ from api.middleware.observability import ObservabilityMiddleware
 from api.middleware.rate_limit_context import RateLimitContextMiddleware
 from api.rate_limit.config import load_rate_limit_settings
 from api.rate_limit.redis_window import set_redis_client
+from api.routes import investigation_graph as investigation_graph_routes
 from api.routes import jira_investigations as jira_investigations_routes
 from api.routes import mcp_routes
 from api.routes.jira_rca import router as jira_rca_router
@@ -127,6 +128,7 @@ app.include_router(feedback_routes.router, prefix="/api/v1", tags=["feedback"])
 app.include_router(jobs_routes.router, prefix="/api/v1", tags=["jobs"])
 app.include_router(jira_rca_router, prefix="/api/v1", tags=["jira-rca"])
 app.include_router(jira_investigations_routes.router, prefix="/api/v1", tags=["jira-investigations"])
+app.include_router(investigation_graph_routes.router, prefix="/api/v1", tags=["investigation-graph"])
 app.include_router(users_routes.router, prefix="/api/v1", tags=["users"])
 app.include_router(auth_routes.router, prefix="/api/v1", tags=["auth"])
 app.include_router(jira_routes.router, prefix="/api/v1", tags=["jira"])

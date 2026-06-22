@@ -95,3 +95,15 @@ class GraphInvestigationRecord(BaseModel):
     similarity_score: float = 0.0
     shared_service: str = ""
     match_reason: str = ""
+
+
+class SimilarInvestigation(BaseModel):
+    """Historical investigation similar to the current investigation context."""
+
+    investigation_id: str
+    similarity_score: float = 0.0
+    matched_factors: List[str] = Field(default_factory=list)
+    root_cause: str = ""
+    confidence: float = 0.0
+    resolution_summary: str = ""
+    created_at: Optional[str] = None
