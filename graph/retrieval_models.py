@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from feedback.feedback_models import HistoricalFeedback
+
 
 class GraphDeploymentRecord(BaseModel):
     """Deployment node retrieved from the investigation graph."""
@@ -107,3 +109,4 @@ class SimilarInvestigation(BaseModel):
     confidence: float = 0.0
     resolution_summary: str = ""
     created_at: Optional[str] = None
+    historical_feedback: List[HistoricalFeedback] = Field(default_factory=list)

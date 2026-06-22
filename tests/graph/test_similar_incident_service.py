@@ -18,9 +18,11 @@ class _MockClient:
         *,
         exists: bool = True,
         similar_rows: list[dict[str, Any]] | None = None,
+        feedback_rows: list[dict[str, Any]] | None = None,
     ) -> None:
         self.exists = exists
         self.similar_rows = similar_rows or []
+        self.feedback_rows = feedback_rows or []
         self.queries: list[str] = []
 
     def execute_read(self, query: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -29,6 +31,8 @@ class _MockClient:
             return [{"id": parameters.get("investigation_id")}] if self.exists else []
         if "shared_keys" in query:
             return self.similar_rows
+        if "UNWIND $investigation_ids" in query:
+            return self.feedback_rows
         return []
 
 
@@ -82,9 +86,39 @@ def test_find_similar_investigations_returns_ranked_results(monkeypatch, tmp_pat
     assert results[0].investigation_id == "inv-old-1"
     assert results[0].similarity_score > 0
     assert results[0].matched_factors
-    assert "[*1..10]" in client.queries[-1]
+    assert any("[*1..10]" in q for q in client.queries)
 
 
 def test_find_similar_investigations_empty_when_source_missing() -> None:
     client = _MockClient(exists=False)
     assert find_similar_investigations(client, "missing") == []
+
+
+def test_find_similar_investigations_includes_historical_feedback(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JIRA_INVESTIGATION_STORE_DIR", str(tmp_path))
+    client = _MockClient(
+        similar_rows=[
+            {
+                "investigation_id": "inv-old-1",
+                "ticket_key": "OPS-10",
+                "created_at": "2024-01-01T10:00:00Z",
+                "shared_keys": ["Service:auth-service"],
+            },
+        ],
+        feedback_rows=[
+            {
+                "investigation_id": "inv-old-1",
+                "feedback_id": "fb-1",
+                "candidate_id": "/srv/auth/handler.py",
+                "feedback_type": "CONFIRMED",
+                "comments": "correct",
+                "user_id": "user-1",
+                "created_at": "2024-01-02T00:00:00Z",
+                "override_candidate_id": "",
+            }
+        ],
+    )
+    results = find_similar_investigations(client, "inv-current", limit=5)
+    assert len(results) == 1
+    assert len(results[0].historical_feedback) == 1
+    assert results[0].historical_feedback[0].feedback_type == "CONFIRMED"

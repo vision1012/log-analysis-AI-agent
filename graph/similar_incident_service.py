@@ -13,6 +13,8 @@ from typing import Any
 from graph.graph_visualization_service import investigation_exists
 from graph.neo4j_client import Neo4jClient
 from graph.retrieval_models import SimilarInvestigation
+from feedback.feedback_learning_service import get_feedback_by_investigation_ids
+from feedback.feedback_models import HistoricalFeedback
 
 FACTOR_WEIGHTS: dict[str, float] = {
     "service_match": 0.12,
@@ -115,11 +117,27 @@ def _file_paths_for_investigation(investigation_id: str) -> set[str]:
     return paths
 
 
+def _feedback_to_historical(records: list) -> list[HistoricalFeedback]:
+    return [
+        HistoricalFeedback(
+            feedback_id=r.feedback_id,
+            candidate_id=r.candidate_id,
+            feedback_type=r.feedback_type,
+            comments=r.comments,
+            user_id=r.user_id,
+            created_at=r.created_at,
+            override_candidate_id=r.override_candidate_id,
+        )
+        for r in records
+    ]
+
+
 def _enrich_similar_investigation(
     item: SimilarInvestigation,
     *,
     shared_keys: list[str],
     store_record: dict[str, Any] | None,
+    historical_feedback: list[HistoricalFeedback] | None = None,
 ) -> SimilarInvestigation:
     root_cause = item.root_cause
     confidence = item.confidence
@@ -154,6 +172,7 @@ def _enrich_similar_investigation(
             "root_cause": root_cause,
             "confidence": confidence,
             "resolution_summary": resolution_summary,
+            "historical_feedback": historical_feedback or [],
         }
     )
 
@@ -232,7 +251,28 @@ def find_similar_investigations(
             matched_factors=factors,
             created_at=row.get("created_at"),
         )
-        scored.append(_enrich_similar_investigation(item, shared_keys=shared_keys, store_record=store_record))
+        scored.append(
+            _enrich_similar_investigation(
+                item,
+                shared_keys=shared_keys,
+                store_record=store_record,
+            )
+        )
+
+    feedback_map = get_feedback_by_investigation_ids(
+        client,
+        [s.investigation_id for s in scored],
+    )
+    scored = [
+        item.model_copy(
+            update={
+                "historical_feedback": _feedback_to_historical(
+                    feedback_map.get(item.investigation_id, [])
+                ),
+            }
+        )
+        for item in scored
+    ]
 
     scored.sort(
         key=lambda s: (

@@ -49,6 +49,8 @@ def _apply_constraints(client: "Neo4jClient") -> None:
         ("constraint_pagerduty_incident_id", "PagerDutyIncident", "id"),
         ("constraint_runbook_id", "Runbook", "id"),
         ("constraint_known_issue_id", "KnownIssue", "id"),
+        ("constraint_feedback_id", "Feedback", "feedback_id"),
+        ("constraint_rca_candidate_id", "RCACandidate", "candidate_id"),
     ]
     for name, label, prop in single_prop:
         q = (

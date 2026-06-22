@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from api.deps.auth import get_current_user
+from api.services.feedback_learning_api_service import fetch_investigation_feedback
 from api.services.investigation_graph_service import (
     InvestigationGraphNotFoundError,
     fetch_investigation_graph,
@@ -60,4 +61,16 @@ async def get_similar_investigations_endpoint(
         ) from exc
     return {
         "similar_investigations": [item.model_dump() for item in results],
+    }
+
+
+@router.get("/investigations/{investigation_id}/feedback")
+async def get_investigation_feedback_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+) -> dict[str, object]:
+    """Return engineer feedback recorded for an investigation."""
+    records = fetch_investigation_feedback(investigation_id)
+    return {
+        "investigation_id": investigation_id,
+        "feedback": [record.model_dump() for record in records],
     }
