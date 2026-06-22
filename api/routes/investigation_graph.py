@@ -12,6 +12,7 @@ from api.services.investigation_graph_service import (
     fetch_similar_investigations,
 )
 from api.services.investigation_timeline_api_service import fetch_investigation_timeline
+from api.services.multi_agent_investigation_api_service import fetch_multi_agent_investigation_report
 from graph.graph_visualization_service import MAX_DEPTH, MIN_DEPTH
 from graph.similar_incident_service import DEFAULT_LIMIT, MAX_LIMIT
 
@@ -112,3 +113,18 @@ async def get_investigation_timeline_endpoint(
         "investigation_id": investigation_id,
         "events": [event.model_dump() for event in events],
     }
+
+
+@router.post("/investigations/{investigation_id}/multi-agent")
+async def run_multi_agent_investigation_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+) -> dict[str, object]:
+    """Run specialized investigation agents and return a merged report."""
+    try:
+        report = fetch_multi_agent_investigation_report(investigation_id)
+    except InvestigationGraphNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "investigation_graph_not_found", "message": str(exc)},
+        ) from exc
+    return {"report": report.model_dump()}
