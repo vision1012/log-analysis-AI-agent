@@ -1,0 +1,9 @@
+2024-01-01T11:57:00Z INFO auth-service starting request id=req-1001
+2024-01-01T11:58:12Z ERROR auth-service request failed: timeout while validating token
+2024-01-01T11:58:12Z ERROR auth-service Traceback (most recent call last):
+  File "/srv/auth/handler.py", line 42, in handle_request
+    result = process_token(token)
+  File "/srv/auth/service.py", line 18, in process_token
+    raise TimeoutError("token validation timed out")
+TimeoutError: token validation timed out
+2024-01-01T11:58:13Z ERROR auth-service repeated failure for auth-service pod auth-pod-7f8c9

@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import tempfile
+import uuid
 from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
@@ -103,6 +104,8 @@ class RcaInputContext:
     log_content: str
     run_id: str
     force: bool
+    investigation_id: str = ""
+    mcp_context: object | None = None
 
 
 def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
@@ -113,6 +116,7 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         (request.ticket_key or (request.ticket.ticket_key if request.ticket else "")),
     )
     ticket, ticket_hints = _resolve_ticket_context(request)
+    investigation_id = str(uuid.uuid4())
     raw_log = request.log_content or ""
     if _jira_rca_debug_enabled() or logger.isEnabledFor(logging.DEBUG):
         snippet = raw_log[:200].replace("\n", "\\n").replace("\r", "\\r")
@@ -144,11 +148,17 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         logger.warning("jira_rca.signals.empty ticket_key=%s", ticket.ticket_key)
         raise NoUsefulSignalsError("no useful signals found in uploaded log content")
 
-    ticket_hints = _maybe_enrich_hints_via_mcp(
+    ticket_hints, mcp_context = _fetch_mcp_context_and_enrich_hints(
         ticket=ticket,
         ticket_hints=ticket_hints,
         log_signals=log_signals,
     )
+    if mcp_context is not None:
+        _persist_mcp_investigation_graph(
+            investigation_id=investigation_id,
+            ticket=ticket,
+            context=mcp_context,
+        )
 
     bundle = _merge_signals(ticket_hints, log_signals)
     anomaly_id = (request.anomaly_id or "").strip() or None
@@ -163,6 +173,8 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         log_content=request.log_content,
         run_id=run_id,
         force=request.force,
+        investigation_id=investigation_id,
+        mcp_context=mcp_context,
     )
 
     logger.info(
@@ -212,6 +224,7 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         bundle=bundle,
         rca_view=rca_view,
         relationship_bundle=relationship_bundle,
+        investigation_id=investigation_id,
     )
     evidence_summary["investigation_id"] = investigation_id
     logger.info(
@@ -255,7 +268,13 @@ def _run_deterministic_rca_for_input(ctx: RcaInputContext) -> dict[str, object]:
     """Explicit RCA mode switch: anomaly-first or JIRA/log-first."""
     if ctx.mode == "anomaly":
         assert ctx.anomaly_id is not None
-        run = trigger_manual_rca(ctx.anomaly_id, ctx.run_id, force=ctx.force)
+        run = trigger_manual_rca(
+            ctx.anomaly_id,
+            ctx.run_id,
+            force=ctx.force,
+            investigation_id=ctx.investigation_id,
+            unified_investigation_context=ctx.mcp_context,
+        )
         if str(run.get("status") or "") == "completed":
             run["rca_view"] = get_rca_result_view(ctx.anomaly_id)
         return run
@@ -461,26 +480,28 @@ def _extract_python_trace_paths_ordered(content: str) -> list[str]:
     return out
 
 
-def _maybe_enrich_hints_via_mcp(
+def _fetch_mcp_context_and_enrich_hints(
     *,
     ticket: JiraNormalizedTicket,
     ticket_hints: JiraExtractedHints,
     log_signals: LogSignals,
-) -> JiraExtractedHints:
+) -> tuple[JiraExtractedHints, object | None]:
     """
-    Optionally fetch MCP investigation context and enrich ticket hints.
+    Optionally fetch MCP investigation context, persist graph, and enrich ticket hints.
 
     When ``MCP_ENABLED=false`` this is a no-op — existing RCA behavior is unchanged.
+    Returns enriched hints and the raw MCP context (when fetched).
     """
     try:
         from mcp.config import MCPFetchParams, default_enabled_sources, mcp_enabled
         from mcp.context.context_builder import enrich_ticket_hints
+        from mcp.context.investigation_context import UnifiedInvestigationContext
         from mcp.orchestrator import MCPOrchestrator
     except ImportError:
-        return ticket_hints
+        return ticket_hints, None
 
     if not mcp_enabled():
-        return ticket_hints
+        return ticket_hints, None
 
     tw = log_signals.time_window or {}
     service = ""
@@ -505,10 +526,46 @@ def _maybe_enrich_hints_via_mcp(
             len(context.commits),
             len(context.pull_requests),
         )
-        return enriched
+        return enriched, context
     except Exception as exc:
         logger.warning("jira_rca.mcp.enrich_failed ticket_key=%s err=%s", ticket.ticket_key, exc)
-        return ticket_hints
+        return ticket_hints, None
+
+
+def _persist_mcp_investigation_graph(
+    *,
+    investigation_id: str,
+    ticket: JiraNormalizedTicket,
+    context: object,
+) -> None:
+    """Persist MCP context to Neo4j; failures are logged and never block RCA."""
+    try:
+        from graph.investigation_graph_service import persist_investigation_context_safe
+        from mcp.context.investigation_context import UnifiedInvestigationContext
+    except ImportError:
+        return
+    if not isinstance(context, UnifiedInvestigationContext):
+        return
+    persist_investigation_context_safe(
+        investigation_id,
+        context,
+        ticket_key=ticket.ticket_key,
+    )
+
+
+def _maybe_enrich_hints_via_mcp(
+    *,
+    ticket: JiraNormalizedTicket,
+    ticket_hints: JiraExtractedHints,
+    log_signals: LogSignals,
+) -> JiraExtractedHints:
+    """Backward-compatible wrapper around MCP hint enrichment."""
+    enriched, _ = _fetch_mcp_context_and_enrich_hints(
+        ticket=ticket,
+        ticket_hints=ticket_hints,
+        log_signals=log_signals,
+    )
+    return enriched
 
 
 def _resolve_ticket_context(request: JiraRcaRunRequest) -> tuple[JiraNormalizedTicket, JiraExtractedHints]:
@@ -702,9 +759,11 @@ def _persist_investigation_trace(
     bundle: DerivedSignalBundle,
     rca_view: dict[str, object],
     relationship_bundle: RelationshipReadyBundle,
+    investigation_id: str | None = None,
 ) -> str:
     store = _get_investigation_store()
     payload: dict[str, object] = {
+        "investigation_id": investigation_id,
         "ticket_key": ticket.ticket_key,
         "ticket_id": ticket.ticket_id,
         "ticket_summary": ticket.summary,
