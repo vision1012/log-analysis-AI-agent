@@ -7,8 +7,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-MCPSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog"]
-MetadataSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog", "correlator"]
+MCPSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog", "kubernetes"]
+MetadataSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog", "kubernetes", "correlator"]
 
 
 class InvestigationCorrelation(BaseModel):
@@ -22,6 +22,11 @@ class InvestigationCorrelation(BaseModel):
         "deployment_to_alert",
         "deployment_to_trace_failure",
         "metric_spike_to_alert",
+        "deployment_to_pod_restart",
+        "deployment_to_crash_loop",
+        "deployment_to_oom_killed",
+        "deployment_to_node_pressure",
+        "pod_restart_to_alert",
     ]
     from_ref: str
     to_ref: str
@@ -33,6 +38,9 @@ class InvestigationCorrelation(BaseModel):
     metric_name: str = ""
     alert_id: str = ""
     trace_id: str = ""
+    pod_name: str = ""
+    container_name: str = ""
+    node_name: str = ""
 
 
 class SourceMetadata(BaseModel):

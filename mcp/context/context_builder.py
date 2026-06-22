@@ -11,6 +11,13 @@ from mcp.schemas.github_models import McpCommit, McpPullRequest
 from mcp.schemas.gitlab_models import McpDeploymentEvent, McpGitLabCommit, McpMergeRequest, McpPipeline
 from mcp.schemas.jenkins_models import BuildEvent, DeploymentEvent
 from mcp.schemas.jira_models import McpTicketContext
+from mcp.schemas.kubernetes_models import (
+    ClusterEvent,
+    ContainerEvent,
+    NamespaceEvent,
+    NodeEvent,
+    PodEvent,
+)
 from schemas.jira import JiraExtractedHints
 
 
@@ -36,6 +43,11 @@ def merge_context(
     alert_events: list[AlertEvent] | None = None,
     trace_events: list[TraceEvent] | None = None,
     service_health_events: list[ServiceHealthEvent] | None = None,
+    cluster_events: list[ClusterEvent] | None = None,
+    namespace_events: list[NamespaceEvent] | None = None,
+    pod_events: list[PodEvent] | None = None,
+    container_events: list[ContainerEvent] | None = None,
+    node_events: list[NodeEvent] | None = None,
     pipelines: list[McpPipeline] | None = None,
     source_metadata: SourceMetadata | None = None,
 ) -> UnifiedInvestigationContext:
@@ -68,6 +80,18 @@ def merge_context(
         data["service_health_events"] = list(data.get("service_health_events") or []) + [
             s.model_dump() for s in service_health_events
         ]
+    if cluster_events:
+        data["cluster_events"] = list(data.get("cluster_events") or []) + [c.model_dump() for c in cluster_events]
+    if namespace_events:
+        data["namespace_events"] = list(data.get("namespace_events") or []) + [n.model_dump() for n in namespace_events]
+    if pod_events:
+        data["pod_events"] = list(data.get("pod_events") or []) + [p.model_dump() for p in pod_events]
+    if container_events:
+        data["container_events"] = list(data.get("container_events") or []) + [
+            c.model_dump() for c in container_events
+        ]
+    if node_events:
+        data["node_events"] = list(data.get("node_events") or []) + [n.model_dump() for n in node_events]
     if pipelines:
         data["pipelines"] = [p.model_dump() for p in pipelines]
     if source_metadata is not None:
@@ -134,6 +158,23 @@ def enrich_ticket_hints(
             service_names.append(health.service_name)
         if health.health_status in {"degraded", "unhealthy"}:
             error_keywords = _uniq(error_keywords + ["degraded", health.health_status])
+
+    for pod in context.pod_events:
+        if pod.restart_count > 0:
+            error_keywords = _uniq(error_keywords + ["pod_restart", "restart"])
+        if pod.reason in {"CrashLoopBackOff", "FailedDeployment", "OOMKilled", "Error"}:
+            error_keywords = _uniq(error_keywords + [pod.reason.lower(), pod.reason])
+
+    for container in context.container_events:
+        if container.reason in {"OOMKilled", "CrashLoopBackOff", "Error"}:
+            error_keywords = _uniq(error_keywords + [container.reason.lower(), container.reason])
+
+    for ns_event in context.namespace_events:
+        error_keywords = _uniq(error_keywords + _keyword_hits(ns_event.message))
+
+    for node in context.node_events:
+        if node.status not in {"True", "Ready"}:
+            error_keywords = _uniq(error_keywords + ["node_pressure", node.node_name])
 
     return hints.model_copy(
         update={

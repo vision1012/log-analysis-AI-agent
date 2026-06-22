@@ -12,6 +12,13 @@ from mcp.schemas.github_models import McpCommit, McpPullRequest
 from mcp.schemas.gitlab_models import McpDeploymentEvent, McpGitLabCommit, McpMergeRequest, McpPipeline
 from mcp.schemas.jenkins_models import BuildEvent, DeploymentEvent
 from mcp.schemas.jira_models import McpTicketContext
+from mcp.schemas.kubernetes_models import (
+    ClusterEvent,
+    ContainerEvent,
+    NamespaceEvent,
+    NodeEvent,
+    PodEvent,
+)
 
 
 class UnifiedInvestigationContext(BaseModel):
@@ -31,5 +38,10 @@ class UnifiedInvestigationContext(BaseModel):
     alert_events: List[AlertEvent] = Field(default_factory=list)
     trace_events: List[TraceEvent] = Field(default_factory=list)
     service_health_events: List[ServiceHealthEvent] = Field(default_factory=list)
+    cluster_events: List[ClusterEvent] = Field(default_factory=list)
+    namespace_events: List[NamespaceEvent] = Field(default_factory=list)
+    pod_events: List[PodEvent] = Field(default_factory=list)
+    container_events: List[ContainerEvent] = Field(default_factory=list)
+    node_events: List[NodeEvent] = Field(default_factory=list)
     pipelines: List[McpPipeline] = Field(default_factory=list)
     source_metadata: List[SourceMetadata] = Field(default_factory=list)
