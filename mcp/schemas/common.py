@@ -7,9 +7,19 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-MCPSourceName = Literal["jira", "github", "gitlab", "jenkins", "datadog", "kubernetes", "pagerduty"]
+MCPSourceName = Literal[
+    "jira", "github", "gitlab", "jenkins", "datadog", "kubernetes", "pagerduty", "confluence"
+]
 MetadataSourceName = Literal[
-    "jira", "github", "gitlab", "jenkins", "datadog", "kubernetes", "pagerduty", "correlator"
+    "jira",
+    "github",
+    "gitlab",
+    "jenkins",
+    "datadog",
+    "kubernetes",
+    "pagerduty",
+    "confluence",
+    "correlator",
 ]
 
 
@@ -33,9 +43,15 @@ class InvestigationCorrelation(BaseModel):
         "pagerduty_incident_to_escalation",
         "pagerduty_incident_to_resolved",
         "pagerduty_incident_to_service",
+        "service_to_runbook",
+        "alert_to_known_issue",
+        "pod_error_to_known_issue",
+        "incident_to_sop",
+        "service_to_architecture_doc",
     ]
     from_ref: str
     to_ref: str
+    document_id: str = ""
     commit_sha: str = ""
     build_number: Optional[int] = None
     deployment_id: str = ""

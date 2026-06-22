@@ -18,6 +18,7 @@ from mcp.schemas.kubernetes_models import (
     NodeEvent,
     PodEvent,
 )
+from mcp.schemas.confluence_models import ArchitectureDocument, KnownIssueDocument, RunbookDocument
 from mcp.schemas.pagerduty_models import (
     PagerDutyEscalationEvent,
     PagerDutyIncidentEvent,
@@ -56,6 +57,9 @@ def merge_context(
     pagerduty_incidents: list[PagerDutyIncidentEvent] | None = None,
     pagerduty_escalations: list[PagerDutyEscalationEvent] | None = None,
     pagerduty_timeline_events: list[PagerDutyTimelineEvent] | None = None,
+    runbook_documents: list[RunbookDocument] | None = None,
+    known_issue_documents: list[KnownIssueDocument] | None = None,
+    architecture_documents: list[ArchitectureDocument] | None = None,
     pipelines: list[McpPipeline] | None = None,
     source_metadata: SourceMetadata | None = None,
 ) -> UnifiedInvestigationContext:
@@ -111,6 +115,18 @@ def merge_context(
     if pagerduty_timeline_events:
         data["pagerduty_timeline_events"] = list(data.get("pagerduty_timeline_events") or []) + [
             t.model_dump() for t in pagerduty_timeline_events
+        ]
+    if runbook_documents:
+        data["runbook_documents"] = list(data.get("runbook_documents") or []) + [
+            d.model_dump() for d in runbook_documents
+        ]
+    if known_issue_documents:
+        data["known_issue_documents"] = list(data.get("known_issue_documents") or []) + [
+            d.model_dump() for d in known_issue_documents
+        ]
+    if architecture_documents:
+        data["architecture_documents"] = list(data.get("architecture_documents") or []) + [
+            d.model_dump() for d in architecture_documents
         ]
     if pipelines:
         data["pipelines"] = [p.model_dump() for p in pipelines]
@@ -209,6 +225,25 @@ def enrich_ticket_hints(
 
     for event in context.pagerduty_timeline_events:
         error_keywords = _uniq(error_keywords + _keyword_hits(event.summary))
+
+    for runbook in context.runbook_documents:
+        error_keywords = _uniq(error_keywords + _keyword_hits(runbook.title) + _keyword_hits(runbook.summary))
+        labels = _uniq(labels + runbook.labels)
+        if runbook.service_name and runbook.service_name not in service_names:
+            service_names.append(runbook.service_name)
+
+    for known_issue in context.known_issue_documents:
+        error_keywords = _uniq(error_keywords + known_issue.error_keywords + _keyword_hits(known_issue.title))
+        if known_issue.workaround:
+            error_keywords = _uniq(error_keywords + _keyword_hits(known_issue.workaround))
+        if known_issue.affected_service and known_issue.affected_service not in service_names:
+            service_names.append(known_issue.affected_service)
+
+    for arch_doc in context.architecture_documents:
+        error_keywords = _uniq(error_keywords + _keyword_hits(arch_doc.title) + _keyword_hits(arch_doc.summary))
+        labels = _uniq(labels + [f"component:{c}" for c in arch_doc.components[:10]])
+        if arch_doc.service_name and arch_doc.service_name not in service_names:
+            service_names.append(arch_doc.service_name)
 
     return hints.model_copy(
         update={

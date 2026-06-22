@@ -13,6 +13,7 @@ from mcp.context.deployment_kubernetes_correlator import (
 from mcp.context.deployment_observability_correlator import (
     correlate_deployment_observability_and_attach_metadata,
 )
+from mcp.context.knowledge_context_correlator import correlate_knowledge_and_attach_metadata
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.registry import get_provider_class, registered_sources
 from mcp.schemas.common import ProviderHealth
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class MCPOrchestrator:
     """
-    Fetch external investigation context from JIRA, GitHub, GitLab, Jenkins, Datadog, Kubernetes, and PagerDuty.
+    Fetch external investigation context from JIRA, GitHub, GitLab, Jenkins, Datadog, Kubernetes, PagerDuty, and Confluence.
 
     Each provider returns normalized slices; the orchestrator merges them into
     :class:`UnifiedInvestigationContext`. Provider failures are logged and skipped
@@ -47,10 +48,12 @@ class MCPOrchestrator:
                 context = _merge_unified(context, partial)
             except Exception as exc:
                 logger.warning("mcp.orchestrator.provider_failed source=%s err=%s", source, exc)
-        return correlate_alert_incident_and_attach_metadata(
-            correlate_deployment_kubernetes_and_attach_metadata(
-                correlate_deployment_observability_and_attach_metadata(
-                    correlate_and_attach_metadata(context)
+        return correlate_knowledge_and_attach_metadata(
+            correlate_alert_incident_and_attach_metadata(
+                correlate_deployment_kubernetes_and_attach_metadata(
+                    correlate_deployment_observability_and_attach_metadata(
+                        correlate_and_attach_metadata(context)
+                    )
                 )
             )
         )
@@ -106,6 +109,15 @@ def _merge_unified(
     )
     data["pagerduty_timeline_events"] = list(data.get("pagerduty_timeline_events") or []) + list(
         r.get("pagerduty_timeline_events") or []
+    )
+    data["runbook_documents"] = list(data.get("runbook_documents") or []) + list(
+        r.get("runbook_documents") or []
+    )
+    data["known_issue_documents"] = list(data.get("known_issue_documents") or []) + list(
+        r.get("known_issue_documents") or []
+    )
+    data["architecture_documents"] = list(data.get("architecture_documents") or []) + list(
+        r.get("architecture_documents") or []
     )
     data["pipelines"] = list(data.get("pipelines") or []) + list(r.get("pipelines") or [])
     data["source_metadata"] = list(data.get("source_metadata") or []) + list(r.get("source_metadata") or [])

@@ -11,6 +11,7 @@ from mcp.providers.gitlab_provider import GitLabProvider
 from mcp.providers.jenkins_provider import JenkinsProvider
 from mcp.providers.jira_provider import JiraProvider
 from mcp.providers.kubernetes_provider import KubernetesProvider
+from mcp.providers.confluence_provider import ConfluenceProvider
 from mcp.providers.pagerduty_provider import PagerDutyProvider
 from mcp.schemas.common import MCPSourceName
 
@@ -22,6 +23,7 @@ _PROVIDERS: Dict[MCPSourceName, Type[BaseMCPProvider]] = {
     "datadog": DatadogProvider,
     "kubernetes": KubernetesProvider,
     "pagerduty": PagerDutyProvider,
+    "confluence": ConfluenceProvider,
 }
 
 

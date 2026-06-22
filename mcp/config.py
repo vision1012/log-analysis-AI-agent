@@ -48,6 +48,10 @@ def pagerduty_mcp_enabled() -> bool:
     return mcp_enabled() and _env_bool("PAGERDUTY_MCP_ENABLED", default=False)
 
 
+def confluence_mcp_enabled() -> bool:
+    return mcp_enabled() and _env_bool("CONFLUENCE_MCP_ENABLED", default=False)
+
+
 def default_enabled_sources() -> List[MCPSourceName]:
     sources: List[MCPSourceName] = []
     if jira_mcp_enabled():
@@ -64,6 +68,8 @@ def default_enabled_sources() -> List[MCPSourceName]:
         sources.append("kubernetes")
     if pagerduty_mcp_enabled():
         sources.append("pagerduty")
+    if confluence_mcp_enabled():
+        sources.append("confluence")
     return sources
 
 

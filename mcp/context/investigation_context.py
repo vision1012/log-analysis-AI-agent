@@ -19,6 +19,7 @@ from mcp.schemas.kubernetes_models import (
     NodeEvent,
     PodEvent,
 )
+from mcp.schemas.confluence_models import ArchitectureDocument, KnownIssueDocument, RunbookDocument
 from mcp.schemas.pagerduty_models import (
     PagerDutyEscalationEvent,
     PagerDutyIncidentEvent,
@@ -51,5 +52,8 @@ class UnifiedInvestigationContext(BaseModel):
     pagerduty_incidents: List[PagerDutyIncidentEvent] = Field(default_factory=list)
     pagerduty_escalations: List[PagerDutyEscalationEvent] = Field(default_factory=list)
     pagerduty_timeline_events: List[PagerDutyTimelineEvent] = Field(default_factory=list)
+    runbook_documents: List[RunbookDocument] = Field(default_factory=list)
+    known_issue_documents: List[KnownIssueDocument] = Field(default_factory=list)
+    architecture_documents: List[ArchitectureDocument] = Field(default_factory=list)
     pipelines: List[McpPipeline] = Field(default_factory=list)
     source_metadata: List[SourceMetadata] = Field(default_factory=list)
