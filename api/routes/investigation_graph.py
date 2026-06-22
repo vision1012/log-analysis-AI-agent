@@ -11,6 +11,7 @@ from api.services.investigation_graph_service import (
     fetch_investigation_graph,
     fetch_similar_investigations,
 )
+from api.services.investigation_timeline_api_service import fetch_investigation_timeline
 from graph.graph_visualization_service import MAX_DEPTH, MIN_DEPTH
 from graph.similar_incident_service import DEFAULT_LIMIT, MAX_LIMIT
 
@@ -73,4 +74,41 @@ async def get_investigation_feedback_endpoint(
     return {
         "investigation_id": investigation_id,
         "feedback": [record.model_dump() for record in records],
+    }
+
+
+@router.get("/investigations/{investigation_id}/timeline")
+async def get_investigation_timeline_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+    from_ts: str | None = Query(
+        None,
+        alias="from",
+        description="Include events at or after this ISO-8601 timestamp.",
+    ),
+    to_ts: str | None = Query(
+        None,
+        alias="to",
+        description="Include events at or before this ISO-8601 timestamp.",
+    ),
+    event_type: str | None = Query(
+        None,
+        description="Filter to a single timeline event type (e.g. ALERT_TRIGGERED).",
+    ),
+) -> dict[str, object]:
+    """Return a unified chronological timeline for the investigation."""
+    try:
+        events = fetch_investigation_timeline(
+            investigation_id,
+            from_ts=from_ts,
+            to_ts=to_ts,
+            event_type=event_type,
+        )
+    except InvestigationGraphNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "investigation_graph_not_found", "message": str(exc)},
+        ) from exc
+    return {
+        "investigation_id": investigation_id,
+        "events": [event.model_dump() for event in events],
     }
