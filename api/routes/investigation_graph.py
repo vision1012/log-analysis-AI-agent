@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.responses import FileResponse
 
 from api.deps.auth import get_current_user
 from api.services.feedback_learning_api_service import fetch_investigation_feedback
@@ -12,6 +13,12 @@ from api.services.investigation_graph_service import (
     fetch_similar_investigations,
 )
 from api.services.investigation_timeline_api_service import fetch_investigation_timeline
+from api.services.investigation_replay_api_service import fetch_investigation_replay
+from api.services.investigation_report_api_service import (
+    fetch_investigation_report,
+    fetch_investigation_report_markdown,
+    fetch_investigation_report_pdf,
+)
 from api.services.multi_agent_investigation_api_service import fetch_multi_agent_investigation_report
 from graph.graph_visualization_service import MAX_DEPTH, MIN_DEPTH
 from graph.similar_incident_service import DEFAULT_LIMIT, MAX_LIMIT
@@ -128,3 +135,97 @@ async def run_multi_agent_investigation_endpoint(
             detail={"code": "investigation_graph_not_found", "message": str(exc)},
         ) from exc
     return {"report": report.model_dump()}
+
+
+@router.get("/investigations/{investigation_id}/report")
+async def get_investigation_report_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+) -> dict[str, object]:
+    """Return a unified investigation report assembled from all data sources."""
+    try:
+        report = fetch_investigation_report(investigation_id)
+    except InvestigationGraphNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "investigation_graph_not_found", "message": str(exc)},
+        ) from exc
+    return {"report": report.model_dump()}
+
+
+@router.get("/investigations/{investigation_id}/report/pdf")
+async def get_investigation_report_pdf_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+) -> FileResponse:
+    """Generate and download the investigation report as PDF."""
+    try:
+        path, _report = fetch_investigation_report_pdf(investigation_id)
+    except InvestigationGraphNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "investigation_graph_not_found", "message": str(exc)},
+        ) from exc
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"{investigation_id}.pdf",
+    )
+
+
+@router.get("/investigations/{investigation_id}/report/markdown")
+async def get_investigation_report_markdown_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+) -> FileResponse:
+    """Generate and download the investigation report as Markdown."""
+    try:
+        path, _report = fetch_investigation_report_markdown(investigation_id)
+    except InvestigationGraphNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "investigation_graph_not_found", "message": str(exc)},
+        ) from exc
+    return FileResponse(
+        path,
+        media_type="text/markdown",
+        filename=f"{investigation_id}.md",
+    )
+
+
+@router.get("/investigations/{investigation_id}/replay")
+async def get_investigation_replay_endpoint(
+    investigation_id: str = Path(..., min_length=1, description="Investigation id"),
+    from_ts: str | None = Query(
+        None,
+        alias="from",
+        description="Include frames at or after this ISO-8601 timestamp.",
+    ),
+    to_ts: str | None = Query(
+        None,
+        alias="to",
+        description="Include frames at or before this ISO-8601 timestamp.",
+    ),
+    event_type: str | None = Query(
+        None,
+        description="Filter to a single event type (e.g. ALERT_TRIGGERED).",
+    ),
+    playback_speed: float | None = Query(
+        1.0,
+        ge=0.25,
+        le=4.0,
+        description="Playback speed multiplier (0.25–4.0).",
+    ),
+) -> dict[str, object]:
+    """Return ordered replay frames for sequential investigation playback."""
+    try:
+        replay = fetch_investigation_replay(
+            investigation_id,
+            from_ts=from_ts,
+            to_ts=to_ts,
+            event_type=event_type,
+            playback_speed=playback_speed,
+        )
+    except InvestigationGraphNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "investigation_graph_not_found", "message": str(exc)},
+        ) from exc
+    return replay.model_dump()
