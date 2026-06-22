@@ -114,23 +114,6 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
     )
     ticket, ticket_hints = _resolve_ticket_context(request)
     raw_log = request.log_content or ""
-    # TEMP DEBUG: remove after RCA pipeline investigation (safe: counts + 200-char preview only)
-    _aid = (request.anomaly_id or "").strip() or None
-    print("DEBUG JIRA_RCA: run_jira_rca entry")
-    print("DEBUG JIRA_RCA: anomaly_id present =", _aid is not None, "anomaly_id =", repr(_aid))
-    print("DEBUG JIRA_RCA: ticket_key =", ticket.ticket_key)
-    print("DEBUG JIRA_RCA: ticket summary =", repr((ticket.summary or "")[:120]))
-    print("DEBUG JIRA_RCA: len(log_content) =", len(raw_log))
-    print("DEBUG JIRA_RCA: log sample =", repr(raw_log[:200]))
-    print(
-        "DEBUG JIRA_RCA: extracted_ticket_hints =",
-        {
-            "service_names": list(ticket_hints.service_names)[:15],
-            "file_paths": list(ticket_hints.file_paths)[:10],
-            "error_keywords": list(ticket_hints.error_keywords)[:15],
-            "environment_names": list(ticket_hints.environment_names)[:10],
-        },
-    )
     if _jira_rca_debug_enabled() or logger.isEnabledFor(logging.DEBUG):
         snippet = raw_log[:200].replace("\n", "\\n").replace("\r", "\\r")
         logger.info(
@@ -138,15 +121,7 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
             len(raw_log),
             snippet,
         )
-    print("DEBUG JIRA_RCA: calling _derive_log_signals()")
     log_signals = _derive_log_signals(raw_log)
-    print("DEBUG JIRA_RCA: _derive_log_signals returned")
-    print("DEBUG JIRA_RCA: severity_counts =", dict(log_signals.severity_counts))
-    print("DEBUG JIRA_RCA: repeated_error_lines count =", len(log_signals.repeated_error_lines))
-    print("DEBUG JIRA_RCA: file_paths =", list(log_signals.file_paths)[:20])
-    print("DEBUG JIRA_RCA: error_keywords =", list(log_signals.error_keywords)[:20])
-    print("DEBUG JIRA_RCA: stack_traces count =", len(log_signals.stack_traces))
-    print("DEBUG JIRA_RCA: service_names =", list(log_signals.service_names)[:20])
     if _jira_rca_debug_enabled():
         logger.info(
             "jira_rca.signals.structure severity=%s repeated=%s keywords=%s services=%s paths=%d stacks=%d",
@@ -182,14 +157,6 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         log_content=request.log_content,
         run_id=run_id,
         force=request.force,
-    )
-    if rca_input.mode == "jira_log":
-        print("DEBUG JIRA_RCA: entered jira/log RCA mode (no anomaly_id)")
-    else:
-        print("DEBUG JIRA_RCA: anomaly-first RCA mode")
-    print(
-        "DEBUG JIRA_RCA: merged candidate file_paths (pre-rank) =",
-        list(bundle.merged.get("file_paths", []))[:25],
     )
 
     logger.info(
@@ -254,22 +221,6 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         log_signals=log_signals,
         rca_view=rca_view,
     )
-    # TEMP DEBUG: response shaping
-    _cands = rca_view.get("candidate_root_causes") or []
-    _top = _cands[0] if _cands else None
-    print("DEBUG JIRA_RCA: ranked candidate count =", len(_cands))
-    print(
-        "DEBUG JIRA_RCA: ranked_candidates (paths only) =",
-        [c.get("path") for c in _cands if isinstance(c, dict)][:10],
-    )
-    print("DEBUG JIRA_RCA: top_candidate =", _top)
-    print("DEBUG JIRA_RCA: evidence_summary =", dict(evidence_summary))
-    print(
-        "DEBUG JIRA_RCA: explanation non-empty =",
-        bool((explanation_payload.explanation or "").strip()),
-        "remediation count =",
-        len(explanation_payload.remediation_suggestions or []),
-    )
     return JiraRcaRunResponse(
         ticket_summary={
             "ticket_key": ticket.ticket_key,
@@ -315,23 +266,12 @@ def _run_jira_log_deterministic_rca(ctx: RcaInputContext) -> dict[str, object]:
         log_content=ctx.log_content,
         run_id=ctx.run_id,
     )
-    print(
-        "DEBUG JIRA_RCA: jira_log ranker returned candidates count =",
-        len(candidates),
-    )
-    print(
-        "DEBUG JIRA_RCA: jira_log ranked paths =",
-        [c.get("path") for c in candidates if isinstance(c, dict)][:10],
-    )
-    if candidates:
-        print("DEBUG JIRA_RCA: jira_log top ranked item =", candidates[0])
     if not candidates:
         fallback = _build_log_keyword_fallback_candidates(
             keyword_signals=keyword_signals,
             run_id=ctx.run_id,
         )
         candidates = fallback
-        print("DEBUG JIRA_RCA: jira_log fallback candidates =", candidates)
 
     primary_cause = _build_primary_cause_text(keyword_signals)
     confidence_label = "MEDIUM"
@@ -549,10 +489,6 @@ def _extract_hints_from_ticket_text(ticket: JiraNormalizedTicket) -> JiraExtract
 
 
 def _derive_log_signals(log_content: str) -> LogSignals:
-    print(
-        "DEBUG JIRA_RCA: _derive_log_signals() called, len(content) =",
-        len(log_content or ""),
-    )
     content = (log_content or "").strip()
     # Strip BOM / odd whitespace that can hide ERROR tokens from parsers
     if content.startswith("\ufeff"):
@@ -594,8 +530,6 @@ def _derive_log_signals(log_content: str) -> LogSignals:
 
     stack_blocks = _extract_stack_traces(lines)
     signals = extract_signals(log_content)
-    print("----- SIGNALS -----")
-    print(signals)
     fallback_signals = signals
     time_window = _extract_time_window(content)
     # Do not return effectively empty signals when explicit ERROR lines exist.
@@ -636,7 +570,6 @@ def _derive_log_signals(log_content: str) -> LogSignals:
         stack_traces=stack_blocks[:5],
         time_window=time_window,
     )
-    print("SIGNALS:", signals.model_dump())
     return signals
 
 

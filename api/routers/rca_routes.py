@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 
+from api.deps.auth import get_current_user
 from api.rate_limit.deps import rate_limit
 from pydantic import BaseModel
 
@@ -17,7 +18,7 @@ from api.services.rca_service import (
     trigger_manual_rca,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 class RunRequest(BaseModel):

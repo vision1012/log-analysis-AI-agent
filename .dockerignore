@@ -18,15 +18,12 @@ venv/
 # Logs
 *.log
 
-# Data / artifacts (your project-specific heavy folders)
+# Data / artifacts (runtime generated; not needed in image)
 data/
 runs/
 output/
-# Keep artifacts/ — Python package (evidence_store) required at import time; runtime bundle data uses EVIDENCE_STORE_DIR / temp
+# Keep artifacts/ — Python package required at import time
 machine_learning/
-
-# Old architecture (not needed in container)
-old_log_arch_v1/
 
 # OS files
 .DS_Store

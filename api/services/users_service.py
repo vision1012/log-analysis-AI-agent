@@ -1,4 +1,4 @@
-"""User CRUD and password login backed by PostgreSQL ``users`` table (no JWT)."""
+"""User CRUD and password login backed by PostgreSQL ``users`` table."""
 
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from db.postgres.repository import (
     list_users as list_users_repo,
 )
 from api.services.auth_lifecycle import create_user_with_verification
-from schemas.auth import LoginRequest
+from schemas.auth import LoginRequest, LoginResponse
 from schemas.users import UserCreate, UserListResponse, UserResponse
+from security.jwt_auth import create_access_token
 from security.passwords import verify_password
 
 
@@ -61,8 +62,8 @@ def create_user_svc(body: UserCreate) -> UserResponse:
     return create_user_with_verification(body)
 
 
-def login_svc(body: LoginRequest) -> UserResponse:
-    """Resolve user by email and verify password; returns safe user fields only.
+def login_svc(body: LoginRequest) -> LoginResponse:
+    """Resolve user by email and verify password; returns user fields and JWT.
 
     **Verified-only login:** if ``is_email_verified`` is false, raises
     :class:`EmailNotVerifiedError` (mapped to HTTP 403 by the auth router). There is no
@@ -77,7 +78,13 @@ def login_svc(body: LoginRequest) -> UserResponse:
             raise InvalidCredentialsError()
         if not row.is_email_verified:
             raise EmailNotVerifiedError(email=body.email)
-        return UserResponse.model_validate(row)
+        user = UserResponse.model_validate(row)
+        token = create_access_token(
+            user_id=user.user_id,
+            email=user.email,
+            role=user.role,
+        )
+        return LoginResponse(**user.model_dump(), access_token=token)
 
 
 def list_users_svc(limit: int = 50, offset: int = 0) -> UserListResponse:

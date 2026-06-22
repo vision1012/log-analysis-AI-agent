@@ -1,6 +1,6 @@
 """
 User management API: create and read users from PostgreSQL.
-Passwords are stored hashed; use ``POST /api/v1/auth/login`` for password login (no JWT in this phase).
+Passwords are stored hashed; use ``POST /api/v1/auth/login`` for password login.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
+from api.deps.auth import get_current_user
 from api.rate_limit.deps import rate_limit
 from api.services.users_service import (
     DuplicateUserEmailError,
@@ -94,7 +95,7 @@ async def create_user_endpoint(body: UserCreate) -> UserResponse:
         raise
 
 
-@router.get("/users", response_model=UserListResponse)
+@router.get("/users", response_model=UserListResponse, dependencies=[Depends(get_current_user)])
 async def list_users_endpoint(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -106,7 +107,7 @@ async def list_users_endpoint(
 @router.get(
     "/users/by-email/{email}",
     response_model=UserResponse,
-    dependencies=[Depends(rate_limit("users_by_email"))],
+    dependencies=[Depends(rate_limit("users_by_email")), Depends(get_current_user)],
 )
 async def get_user_by_email_endpoint(
     email: str = Path(..., min_length=3, max_length=320, description="Email address (URL-encoded if needed)"),
@@ -134,7 +135,7 @@ async def get_user_by_email_endpoint(
         ) from e
 
 
-@router.get("/users/{user_id}", response_model=UserResponse)
+@router.get("/users/{user_id}", response_model=UserResponse, dependencies=[Depends(get_current_user)])
 async def get_user_by_id_endpoint(
     user_id: str = Path(..., min_length=1, description="User UUID"),
 ) -> UserResponse:

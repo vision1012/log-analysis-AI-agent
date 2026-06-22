@@ -254,20 +254,20 @@ GET    /health                                 # Health check
 
 ---
 
-### **9. Debug Agent Pipeline** (`debug_agent/`)
-**Responsibility:** Multi-agent investigation orchestration
+### **9. JIRA-First RCA Orchestration** (`api/services/jira_rca_orchestration_service.py`)
+**Responsibility:** Single entry workflow for ticket + logs → deterministic RCA → GraphRAG explanation → investigation record
 
-**7-Agent Pipeline:**
-1. **Triage Agent** - Initial anomaly assessment
-2. **Evidence Agent** - Gathers & structures evidence
-3. **RCA Agent** - Bridges to deterministic RCA
-4. **Memory Agent** - Context management
-5. **Explanation Agent** - LLM-assisted explanation
-6. **Remediation Agent** - Suggested fixes
-7. **Reporting Agent** - Final structured report
+**Steps:**
+1. Resolve ticket (embedded payload or `jira_service.fetch_ticket_context`)
+2. Parse logs into `LogSignals`; merge with ticket hints
+3. Trigger deterministic RCA via `rca_service.trigger_manual_rca`
+4. Build grounded `explanation_payload` via `rca_service.get_rca_explanation` (GraphRAG)
+5. Persist minimal investigation JSON via `artifacts.investigation_store`
 
-**Key File:**
-- `orchestrator.py` - Runs full pipeline; handles retries & aggregation
+**Key files:**
+- `api/routes/jira_rca.py` — HTTP handler for `POST /api/v1/jira/rca/run`
+- `api/services/jira_service.py` — JIRA API integration
+- `api/services/jira_investigation_service.py` — investigation list/detail
 
 ---
 
@@ -366,49 +366,23 @@ User → API /rca/rerun/{anomaly_id}
 
 ---
 
-### **Workflow 4: Debug Agent Full Pipeline**
+### **Workflow 4: JIRA-First RCA**
 
 ```
-User → API /debug/run (anomaly_id, hint)
+User → POST /api/v1/jira/rca/run (ticket_key + log_content)
   │
-  ├─→ Debug Agent Orchestrator:
-  │    │
-  │    ├─ TRIAGE AGENT
-  │    │    ├─ Assess anomaly severity
-  │    │    ├─ Initial categorization
-  │    │    └─ Output: TriageReport
-  │    │
-  │    ├─ EVIDENCE AGENT
-  │    │    ├─ Gather logs, metrics, events
-  │    │    ├─ Structure evidence
-  │    │    └─ Output: EvidenceBundle
-  │    │
-  │    ├─ RCA AGENT
-  │    │    ├─ Call deterministic RCA
-  │    │    ├─ Score candidates
-  │    │    └─ Output: RCAResult
-  │    │
-  │    ├─ MEMORY AGENT
-  │    │    ├─ Build context from prior steps
-  │    │    ├─ Manage token budget
-  │    │    └─ Output: ContextSummary
-  │    │
-  │    ├─ EXPLANATION AGENT
-  │    │    ├─ LLM-based explanation
-  │    │    ├─ Narrative generation
-  │    │    └─ Output: Explanation
-  │    │
-  │    ├─ REMEDIATION AGENT
-  │    │    ├─ Suggest fixes
-  │    │    ├─ Estimate impact
-  │    │    └─ Output: RemediationPlan
-  │    │
-  │    └─ REPORTING AGENT
-  │         ├─ Aggregate outputs
-  │         ├─ Format for UI/API
-  │         └─ Output: InvestigationReport
+  ├─→ jira_rca_orchestration_service:
+  │    ├─ Fetch/normalize JIRA ticket (jira_service)
+  │    ├─ Parse logs → DerivedSignalBundle
+  │    ├─ trigger_manual_rca(anomaly_id) → rca_engine
+  │    │    ├─ Pre-RCA gate
+  │    │    ├─ Candidates, signals, ranking
+  │    │    ├─ Evidence bundle → artifacts/evidence_store
+  │    │    └─ RCA_ATTRIBUTED edges → Neo4j
+  │    ├─ get_rca_explanation → graphrag (assistive)
+  │    └─ Persist investigation record
   │
-  └─→ Response: 200 OK {report: {...}, status: "success"}
+  └─→ Response: RCA result, explanation_payload, relationship_bundle, investigation id
 ```
 
 ---
@@ -893,14 +867,12 @@ Fields:
 | `rca_engine/` | Python | Deterministic RCA | **Active** |
 | `gates/` | Python | Quality validation | **Active** |
 | `graph/` | Python | Neo4j connectivity | **Active** |
-| `graphrag/` | Python/LangChain | LLM explanations | **Active** |
-| `artifacts/` | Python | Evidence storage | **Active** |
+| `graphrag/` | Python | LLM explanations | **Active** |
+| `artifacts/` | Python | Evidence + investigation storage | **Active** |
 | `jobs/` | Python | Background tasks | **Active** |
 | `db/` | Python | Data persistence | **Active** |
-| `debug_agent/` | Python/LangChain | Multi-agent pipeline | **Active** |
 | `tests/` | Python | Unit tests | **Maintained** |
 | `scripts/` | Python/Shell | Smoke tests | **Utilities** |
-| `old_log_arch_v1/` | Python | Legacy code | **Archived** |
 
 ---
 

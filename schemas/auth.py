@@ -1,9 +1,10 @@
-"""Schemas for password-based auth (no JWT in this phase)."""
+"""Schemas for password-based auth and JWT session responses."""
 
 from __future__ import annotations
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
+from schemas.users import UserResponse
 from security.validation import normalize_and_validate_email, validate_signup_password
 
 
@@ -69,3 +70,10 @@ class GenericAuthMessageResponse(BaseModel):
     """Non-leaky response for forgot-password / resend flows."""
 
     message: str
+
+
+class LoginResponse(UserResponse):
+    """Successful login: user profile fields plus JWT access token."""
+
+    access_token: str
+    token_type: str = "bearer"

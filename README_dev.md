@@ -70,5 +70,16 @@ For evidence bundle persistence (future):
 For graph migrations and RCA:
 
 ```bash
-pip install neo4j>=5.0.0
+pip install -r requirements.txt
 ```
+
+## Verify JIRA-first RCA locally
+
+```bash
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+python scripts/smoke_test_graph.py
+python scripts/smoke_test_graphrag.py
+# With API running:
+python scripts/smoke_test_rca_api.py
+```
+

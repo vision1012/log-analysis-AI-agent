@@ -39,6 +39,8 @@ secrets.json
 *~
 
 # Output files (generated logs and job directories)
+output/
+runs/
 output/*.log
 output/*.txt
 output/jobs/

@@ -31,7 +31,7 @@ def resolve_rate_limit_key(request: Request, scope: str) -> str:
     Return a stable string for Redis keying.
 
     - ``jobs_post``: ``request.state.rate_limit_user_id`` (from JSON body middleware), else headers, else IP.
-    - ``debug_agent_run``, ``rca_results``, ``rca_explanation``: headers, else IP.
+    - ``rca_results``, ``rca_explanation``: headers, else IP.
     - Other scopes: IP only.
     """
     if scope == "jobs_post":
@@ -44,7 +44,7 @@ def resolve_rate_limit_key(request: Request, scope: str) -> str:
                 return f"u:{_safe_segment(raw)}"
         return f"ip:{_safe_segment(client_ip(request))}"
 
-    if scope in ("debug_agent_run", "rca_results", "rca_explanation"):
+    if scope in ("rca_results", "rca_explanation"):
         for h in USER_ID_HEADERS:
             raw = request.headers.get(h)
             if raw and raw.strip():

@@ -4,9 +4,10 @@ Feedback API endpoints: confirm, reject, reject all, rollback.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel
 
+from api.deps.auth import get_current_user
 from api.services.feedback_service import (
     confirm_candidate,
     reject_all,
@@ -14,7 +15,7 @@ from api.services.feedback_service import (
     rollback,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 class ConfirmRejectBody(BaseModel):

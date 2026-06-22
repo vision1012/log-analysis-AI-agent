@@ -1,5 +1,5 @@
 """
-Redis fixed-window limiter compatible with ``fastapi_limiter.depends.RateLimiter``.
+Redis fixed-window limiter for :class:`api.rate_limit.deps._ScopedRateLimit`.
 
 The stock ``pyrate_limiter.Limiter`` + in-memory/Redis bucket is not used here: a single
 shared bucket would not isolate per-client keys correctly for our policy. Instead we
@@ -25,7 +25,6 @@ _SCOPE_LIMITS: dict[str, Callable[[RateLimitSettings], int]] = {
     "auth_login": lambda s: s.auth_login_per_min,
     "users_by_email": lambda s: s.users_by_email_per_min,
     "jobs_post": lambda s: s.jobs_post_per_min,
-    "debug_agent_run": lambda s: s.debug_agent_run_per_min,
     "rca_results": lambda s: s.rca_results_per_min,
     "rca_explanation": lambda s: s.rca_explanation_per_min,
     "auth_verify_email": lambda s: s.auth_verify_email_per_min,
@@ -37,9 +36,9 @@ _SCOPE_LIMITS: dict[str, Callable[[RateLimitSettings], int]] = {
 
 class RedisFixedWindowLimiter:
     """
-    Minimal duck-typed limiter for ``fastapi_limiter.depends.RateLimiter``.
+    Redis-backed fixed-window counter used by :class:`api.rate_limit.deps._ScopedRateLimit`.
 
-    ``name`` is the composite key built by ``RateLimiter`` (identifier + route indices).
+    ``name`` is the client identifier from :func:`api.rate_limit.keys.resolve_rate_limit_key`.
     """
 
     def __init__(self, scope: str, window_seconds: int) -> None:

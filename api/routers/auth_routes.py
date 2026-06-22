@@ -1,5 +1,5 @@
 """
-Password login and email verification / password reset (no JWT or session middleware).
+Password login and email verification / password reset.
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from api.deps.auth import get_current_user
 from api.rate_limit.deps import rate_limit
 from api.services.auth_lifecycle import (
     AuthTokenError,
@@ -26,6 +27,7 @@ from schemas.auth import (
     ForgotPasswordBody,
     GenericAuthMessageResponse,
     LoginRequest,
+    LoginResponse,
     ResendVerificationBody,
     ResetPasswordBody,
     VerifyEmailBody,
@@ -41,15 +43,14 @@ _GENERIC_OK = GenericAuthMessageResponse(
 
 @router.post(
     "/auth/login",
-    response_model=UserResponse,
+    response_model=LoginResponse,
     dependencies=[Depends(rate_limit("auth_login"))],
 )
-async def login_endpoint(body: LoginRequest) -> UserResponse:
-    """Authenticate by email and password.
+async def login_endpoint(body: LoginRequest) -> LoginResponse:
+    """Authenticate by email and password; returns user profile and JWT access token.
 
-    Unverified users receive **403** with ``detail.code == "email_not_verified"`` (no session).
+    Unverified users receive **403** with ``detail.code == "email_not_verified"``.
     """
-    print("LOGIN REQUEST RECEIVED")
     try:
         return login_svc(body)
     except UserNotFoundError as e:
@@ -78,6 +79,15 @@ async def login_endpoint(body: LoginRequest) -> UserResponse:
                 "email": e.email,
             },
         ) from e
+
+
+@router.get(
+    "/auth/me",
+    response_model=UserResponse,
+)
+async def auth_me_endpoint(current_user: UserResponse = Depends(get_current_user)) -> UserResponse:
+    """Return the authenticated user from a valid Bearer JWT."""
+    return current_user
 
 
 @router.get(

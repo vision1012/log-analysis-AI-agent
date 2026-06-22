@@ -6,26 +6,11 @@
 #   npm:  >=10.8.0  (ships with Node 20+)
 
 # Core Dependencies
-pydantic>=2.6.0              # Schema validation for ToolResult contract
-pydantic-settings>=2.0.0     # Settings management for Pydantic v2 (optional, fallback available)
+pydantic>=2.6.0              # Schema validation
+pydantic-settings>=2.0.0     # Settings management (optional)
 python-dateutil>=2.8.0        # Flexible date/time parsing for log timestamps
-langchain>=0.3.0             # Lightweight prompt + invocation utilities for LLM-assisted agents
-langchain-core>=0.3.0        # Core prompt/message/output parser primitives
 
-# RAG Dependencies (optional - install as needed)
-# sentence-transformers>=2.2.0  # For local embeddings (no API required)
-# chromadb>=0.4.0              # For local vector store
-# openai>=1.0.0                # For OpenAI embeddings (alternative to sentence-transformers)
-
-# Optional provider integration for LangChain LLM invocation (OpenAI provider path)
-langchain-openai>=0.2.0      # Used when GRAPHRAG_LLM_PROVIDER=openai
-
-# Optional: For future AI agent integration (uncomment when needed)
-# openai>=1.0.0                # OpenAI API client
-# langchain>=0.1.0             # LangChain framework
-# langchain-openai>=0.0.5      # LangChain OpenAI integration
-
-# Optional: For future web UI (uncomment when needed)
+# Web API
 fastapi>=0.104.0             # FastAPI web framework
 uvicorn>=0.24.0              # ASGI server for FastAPI
 python-multipart>=0.0.9      # Required for FastAPI Form/File request parsing
@@ -35,6 +20,7 @@ python-multipart>=0.0.9      # Required for FastAPI Form/File request parsing
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
 bcrypt>=4.0.0
+PyJWT>=2.8.0
 email-validator>=2.0.0
 redis>=5.0.0
 fastapi-limiter>=0.2.0

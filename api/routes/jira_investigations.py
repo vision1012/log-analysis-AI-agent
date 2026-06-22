@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
+from api.deps.auth import get_current_user
 from api.services.jira_investigation_service import (
     InvestigationNotFoundError,
     get_investigation,
@@ -11,7 +12,7 @@ from api.services.jira_investigation_service import (
 )
 from schemas.jira_investigations import JiraInvestigationDetailResponse, JiraInvestigationListResponse
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/jira/investigations", response_model=JiraInvestigationListResponse)

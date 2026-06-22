@@ -5,26 +5,21 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import ValidationError
 
+from api.deps.auth import get_current_user
 from api.services.jira_rca_orchestration_service import NoUsefulSignalsError, run_jira_rca
 from schemas.jira_rca import JiraRcaRunRequest
-from services.llm_client import call_llm
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/jira/rca/run")
+@router.post("/jira/rca/run", dependencies=[Depends(get_current_user)])
 async def run_jira_rca_endpoint(request: Request) -> dict[str, object]:
-    """JIRA-first RCA: ticket + logs -> deterministic RCA + explanation."""
+    """JIRA-first RCA: ticket + logs -> deterministic RCA + GraphRAG explanation."""
     body = await _coerce_jira_rca_request(request)
-
-    print("----- RCA REQUEST RECEIVED -----")
-    print("ticket_key:", body.ticket_key)
-    print("log_content length:", len(body.log_content))
-    print("log_content preview:", (body.log_content or "")[:200])
 
     try:
         rca_response = run_jira_rca(body)
@@ -64,60 +59,56 @@ async def run_jira_rca_endpoint(request: Request) -> dict[str, object]:
             "explanation": fallback_explanation,
         }
 
-    signals = {}
-    try:
-        signals = dict((rca_response.derived_log_signals.model_dump() if hasattr(rca_response, "derived_log_signals") else {}))
-    except Exception:
-        signals = {}
+    response_payload = rca_response.model_dump() if hasattr(rca_response, "model_dump") else dict(rca_response)
+    explanation_payload = response_payload.get("explanation_payload") or {}
+    if not isinstance(explanation_payload, dict):
+        explanation_payload = {}
 
     candidates: list[dict[str, object]] = []
     try:
-        candidates = list((rca_response.rca.rca_result or {}).get("candidate_root_causes") or [])
+        candidates = list((response_payload.get("rca") or {}).get("rca_result", {}).get("candidate_root_causes") or [])
     except Exception:
         candidates = []
 
-    root_cause = None
     top_candidate: dict[str, object] = {}
+    if candidates and isinstance(candidates[0], dict):
+        top_candidate = candidates[0]
 
-    if candidates and len(candidates) > 0:
-        top_candidate = candidates[0] if isinstance(candidates[0], dict) else {}
-        root_cause = (
-            top_candidate.get("file_path")
-            or top_candidate.get("value")
-            or top_candidate.get("file")
-            or top_candidate.get("path")
-            or top_candidate.get("node")
-            or "unknown"
+    root_cause = (
+        top_candidate.get("file_path")
+        or top_candidate.get("value")
+        or top_candidate.get("file")
+        or top_candidate.get("path")
+        or top_candidate.get("node")
+        or top_candidate.get("file_id")
+        or "No candidate found"
+    )
+    top_score = top_candidate.get("score", top_candidate.get("confidence", 0.0))
+
+    signals: dict[str, object] = {}
+    derived = response_payload.get("derived_log_signals")
+    if isinstance(derived, dict):
+        signals = dict(derived)
+
+    explanation = str(explanation_payload.get("explanation") or "").strip()
+    if not explanation:
+        explanation = (
+            f"Deterministic RCA identified {root_cause} as the leading candidate."
+            if root_cause != "No candidate found"
+            else "No root cause available"
         )
-    else:
-        root_cause = "No candidate found"
-    logger.debug("Top candidate: %s", top_candidate)
-    logger.debug("Resolved root cause: %s", root_cause)
-    print("DEBUG -> root_cause:", root_cause)
 
-    top_score = top_candidate.get("score", top_candidate.get("confidence", 0.5))
-    if root_cause:
-        explanation = call_llm(str(root_cause))
-    else:
-        explanation = "No root cause available"
-    print("DEBUG -> LLM output:", explanation)
-
-    response_payload = rca_response.model_dump() if hasattr(rca_response, "model_dump") else dict(rca_response)
     response_payload.update(
         {
-            "evidence_summary": response_payload.get("rca", {}).get("evidence_summary", {}),
-            "remediation_suggestions": response_payload.get("explanation_payload", {}).get(
-                "remediation_suggestions", []
-            ),
+            "evidence_summary": (response_payload.get("rca") or {}).get("evidence_summary", {}),
+            "remediation_suggestions": explanation_payload.get("remediation_suggestions", []),
+            "root_cause": root_cause,
+            "primary_root_cause": root_cause,
+            "confidence": top_score,
+            "evidence": signals,
+            "explanation": explanation,
         }
     )
-    response_payload.update({
-        "root_cause": root_cause,
-        "primary_root_cause": root_cause,
-        "confidence": top_score,
-        "evidence": signals,
-        "explanation": explanation,
-    })
     return response_payload
 
 

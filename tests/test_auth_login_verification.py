@@ -46,7 +46,7 @@ def test_login_endpoint_403_json_shape_for_unverified() -> None:
 def test_login_svc_succeeds_when_verified() -> None:
     from datetime import datetime
 
-    from schemas.users import UserResponse
+    from schemas.auth import LoginResponse
 
     row = MagicMock()
     row.password_hash = "stored-hash"
@@ -65,5 +65,7 @@ def test_login_svc_succeeds_when_verified() -> None:
         patch("api.services.users_service.get_db_session_readonly", return_value=MagicMock()),
     ):
         out = login_svc(LoginRequest(email="user@example.com", password="correct"))
-    assert isinstance(out, UserResponse)
+    assert isinstance(out, LoginResponse)
     assert out.email == "user@example.com"
+    assert out.access_token
+    assert out.token_type == "bearer"

@@ -6,6 +6,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
+from api.deps.auth import get_current_user
 from api.rate_limit.deps import rate_limit
 from schemas.jobs import CreateJobRequest, JobDetailResponse, JobResponse
 from services.jobs_service import (
@@ -18,7 +19,7 @@ from services.jobs_service import (
     list_jobs as list_jobs_svc,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.post(

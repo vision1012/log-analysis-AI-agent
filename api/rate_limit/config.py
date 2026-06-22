@@ -47,7 +47,6 @@ class RateLimitSettings:
     auth_login_per_min: int
     users_by_email_per_min: int
     jobs_post_per_min: int
-    debug_agent_run_per_min: int
     rca_results_per_min: int
     rca_explanation_per_min: int
     auth_verify_email_per_min: int
@@ -80,11 +79,6 @@ def load_rate_limit_settings() -> RateLimitSettings:
             "RATE_LIMIT_JOBS_CREATE",
             "RATE_LIMIT_JOBS_POST_PER_MIN",
             default=20,
-        ),
-        debug_agent_run_per_min=_env_requests_per_min(
-            "RATE_LIMIT_DEBUG_RUN",
-            "RATE_LIMIT_DEBUG_AGENT_RUN_PER_MIN",
-            default=5,
         ),
         rca_results_per_min=_env_requests_per_min(
             "RATE_LIMIT_RCA_RESULTS",
