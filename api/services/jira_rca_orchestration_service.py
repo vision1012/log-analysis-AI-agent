@@ -144,6 +144,12 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         logger.warning("jira_rca.signals.empty ticket_key=%s", ticket.ticket_key)
         raise NoUsefulSignalsError("no useful signals found in uploaded log content")
 
+    ticket_hints = _maybe_enrich_hints_via_mcp(
+        ticket=ticket,
+        ticket_hints=ticket_hints,
+        log_signals=log_signals,
+    )
+
     bundle = _merge_signals(ticket_hints, log_signals)
     anomaly_id = (request.anomaly_id or "").strip() or None
     run_id = request.idempotency_key or _default_idempotency_key(ticket.ticket_key, request.log_content)
@@ -453,6 +459,56 @@ def _extract_python_trace_paths_ordered(content: str) -> list[str]:
         seen.add(p)
         out.append(p)
     return out
+
+
+def _maybe_enrich_hints_via_mcp(
+    *,
+    ticket: JiraNormalizedTicket,
+    ticket_hints: JiraExtractedHints,
+    log_signals: LogSignals,
+) -> JiraExtractedHints:
+    """
+    Optionally fetch MCP investigation context and enrich ticket hints.
+
+    When ``MCP_ENABLED=false`` this is a no-op — existing RCA behavior is unchanged.
+    """
+    try:
+        from mcp.config import MCPFetchParams, default_enabled_sources, mcp_enabled
+        from mcp.context.context_builder import enrich_ticket_hints
+        from mcp.orchestrator import MCPOrchestrator
+    except ImportError:
+        return ticket_hints
+
+    if not mcp_enabled():
+        return ticket_hints
+
+    tw = log_signals.time_window or {}
+    service = ""
+    if ticket_hints.service_names:
+        service = ticket_hints.service_names[0]
+
+    params = MCPFetchParams(
+        ticket_key=ticket.ticket_key,
+        service_name=service,
+        repo_name="",
+        start_time=tw.get("start"),
+        end_time=tw.get("end"),
+        enabled_sources=default_enabled_sources(),
+    )
+    try:
+        context = MCPOrchestrator().fetch_context(params)
+        enriched = enrich_ticket_hints(ticket_hints, context)
+        logger.info(
+            "jira_rca.mcp.enriched ticket_key=%s sources=%d commits=%d prs=%d",
+            ticket.ticket_key,
+            len(context.source_metadata),
+            len(context.commits),
+            len(context.pull_requests),
+        )
+        return enriched
+    except Exception as exc:
+        logger.warning("jira_rca.mcp.enrich_failed ticket_key=%s err=%s", ticket.ticket_key, exc)
+        return ticket_hints
 
 
 def _resolve_ticket_context(request: JiraRcaRunRequest) -> tuple[JiraNormalizedTicket, JiraExtractedHints]:
