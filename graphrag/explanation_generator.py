@@ -9,8 +9,10 @@ from artifacts.evidence_store import EvidenceStore
 from graph.neo4j_client import Neo4jClient
 from graphrag.context_packer import pack_context
 from graphrag.evidence_summarizer import summarize_evidence
+from graphrag.narrative_generator import attach_narrative_to_output, generate_investigation_narrative
 from graphrag.output_validator import validate_or_repair_output
 from graphrag.prompt_builder import build_minimal_deterministic_prompt
+from rca_engine.confidence_engine import build_confidence_reasoning
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,92 @@ def _fallback_output(
         "optional_patch_direction": "",
         "limitations": "; ".join(errors[:4]) if errors else "LLM output validation failed.",
     }
+
+
+def _primary_confidence_assessment(context_pack: dict[str, Any]) -> dict[str, Any]:
+    candidates = context_pack.get("candidates") or []
+    if not isinstance(candidates, list) or not candidates:
+        return {}
+    top = candidates[0] if isinstance(candidates[0], dict) else {}
+    assessment = top.get("confidence_assessment")
+    return dict(assessment) if isinstance(assessment, dict) else {}
+
+
+def _attach_confidence_explanation(output: dict[str, Any], context_pack: dict[str, Any]) -> dict[str, Any]:
+    """Add confidence engine reasoning without changing deterministic ranking."""
+    assessment = _primary_confidence_assessment(context_pack)
+    if assessment:
+        output["confidence_assessment"] = assessment
+        output["confidence_reasoning"] = build_confidence_reasoning(assessment)
+    else:
+        output.setdefault("confidence_assessment", {})
+        output.setdefault(
+            "confidence_reasoning",
+            "Confidence assessment unavailable; deterministic ranking score remains authoritative.",
+        )
+    return output
+
+
+def _attach_supplementary_context(
+    output: dict[str, Any],
+    *,
+    context_pack: dict[str, Any],
+) -> dict[str, Any]:
+    """Expose packed supplementary context on the explanation output (additive)."""
+    for key in (
+        "jira_ticket_context",
+        "feedback_context",
+        "similar_incident_context",
+        "multi_agent_findings",
+    ):
+        value = context_pack.get(key)
+        if value:
+            output[key] = value
+    investigation_context = context_pack.get("investigation_context") or {}
+    previous = investigation_context.get("previous_investigations")
+    if previous:
+        output["previous_investigations"] = previous
+    return output
+
+
+def _finalize_explanation_output(
+    output: dict[str, Any],
+    *,
+    context_pack: dict[str, Any],
+    unified_investigation_context: Any | None = None,
+) -> dict[str, Any]:
+    with_narrative = _attach_investigation_narrative(
+        output,
+        context_pack=context_pack,
+        unified_investigation_context=unified_investigation_context,
+    )
+    with_confidence = _attach_confidence_explanation(with_narrative, context_pack)
+    return _attach_supplementary_context(with_confidence, context_pack=context_pack)
+
+
+def _attach_investigation_narrative(
+    output: dict[str, Any],
+    *,
+    context_pack: dict[str, Any],
+    unified_investigation_context: Any | None = None,
+) -> dict[str, Any]:
+    """Add timeline/causal narrative without changing deterministic RCA fields."""
+    try:
+        narrative = generate_investigation_narrative(
+            {"candidates": context_pack.get("candidates") or [], "ranked_hypotheses": output.get("ranked_hypotheses") or []},
+            unified_context=unified_investigation_context,
+            graph_context=context_pack.get("investigation_context") or {},
+            supplementary_context={
+                "jira_ticket_context": context_pack.get("jira_ticket_context") or {},
+                "feedback_context": context_pack.get("feedback_context") or {},
+                "similar_incident_context": context_pack.get("similar_incident_context") or {},
+                "multi_agent_findings": context_pack.get("multi_agent_findings") or {},
+            },
+        )
+        return attach_narrative_to_output(output, narrative)
+    except Exception as exc:
+        logger.warning("graphrag.explanation_generator.narrative_failed err=%s", exc)
+        return output
 
 
 def _allowed_evidence_strings(summarized_evidence: list[dict[str, Any]]) -> list[str]:
@@ -198,6 +286,12 @@ def generate_explanation(
     llm_client: Any,
     run_id: Optional[str] = None,
     user_instruction: Optional[str] = None,
+    unified_investigation_context: Any | None = None,
+    investigation_id: Optional[str] = None,
+    service_name: Optional[str] = None,
+    ticket_key: Optional[str] = None,
+    alert_id: Optional[str] = None,
+    multi_agent_report: Any | None = None,
 ) -> dict[str, Any]:
     """
     Generate explanation for the latest deterministic RCA run (or provided run_id).
@@ -217,6 +311,12 @@ def generate_explanation(
         graph_client=graph_client,
         evidence_store=evidence_store,
         run_id=run_id,
+        investigation_id=investigation_id,
+        service_name=service_name,
+        ticket_key=ticket_key,
+        alert_id=alert_id,
+        unified_investigation_context=unified_investigation_context,
+        multi_agent_report=multi_agent_report,
         max_candidates=3,
     )
     summarized_evidence = summarize_evidence(context_pack)
@@ -237,7 +337,11 @@ def generate_explanation(
             "graphrag.explanation_generator fallback reason=no_deterministic_candidates anomaly_id=%s",
             anomaly_id,
         )
-        return _fallback_output(context_pack, summarized_evidence, ["No deterministic RCA candidates for explanation"])
+        return _finalize_explanation_output(
+            _fallback_output(context_pack, summarized_evidence, ["No deterministic RCA candidates for explanation"]),
+            context_pack=context_pack,
+            unified_investigation_context=unified_investigation_context,
+        )
 
     prompts = build_minimal_deterministic_prompt(context_pack, summarized_evidence)
 
@@ -255,7 +359,11 @@ def generate_explanation(
             "graphrag.explanation_generator fallback reason=non_object_llm_response anomaly_id=%s",
             anomaly_id,
         )
-        return _fallback_output(context_pack, summarized_evidence, ["LLM returned non-object response"])
+        return _finalize_explanation_output(
+            _fallback_output(context_pack, summarized_evidence, ["LLM returned non-object response"]),
+            context_pack=context_pack,
+            unified_investigation_context=unified_investigation_context,
+        )
 
     lim = str(raw.get("limitations") or "")
     summary = str(raw.get("explanation_summary") or "")
@@ -265,7 +373,11 @@ def generate_explanation(
             anomaly_id,
             lim[:200],
         )
-        return _fallback_output(context_pack, summarized_evidence, [lim or "LLM provider unavailable"])
+        return _finalize_explanation_output(
+            _fallback_output(context_pack, summarized_evidence, [lim or "LLM provider unavailable"]),
+            context_pack=context_pack,
+            unified_investigation_context=unified_investigation_context,
+        )
 
     merged = _merge_llm_text_into_deterministic_contract(
         raw,
@@ -278,4 +390,8 @@ def generate_explanation(
         context_pack=context_pack,
         summarized_evidence=summarized_evidence,
     )
-    return repaired
+    return _finalize_explanation_output(
+        repaired,
+        context_pack=context_pack,
+        unified_investigation_context=unified_investigation_context,
+    )

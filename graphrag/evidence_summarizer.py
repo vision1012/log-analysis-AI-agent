@@ -234,4 +234,204 @@ def summarize_evidence(
         if len(out) >= max_bullets:
             break
 
+    out = _append_supplementary_context_bullets(
+        context_pack,
+        out,
+        anomaly_id=anomaly_id,
+        max_bullets=max_bullets,
+    )
+
     return out[:max_bullets]
+
+
+def _append_supplementary_context_bullets(
+    context_pack: dict[str, Any],
+    out: list[dict[str, Any]],
+    *,
+    anomaly_id: str,
+    max_bullets: int,
+) -> list[dict[str, Any]]:
+    """Add Jira, feedback, similar-incident, and multi-agent bullets when present."""
+    bullets = list(out)
+
+    jira = context_pack.get("jira_ticket_context") or {}
+    if isinstance(jira, dict) and jira.get("summary"):
+        labels = ", ".join(str(label) for label in (jira.get("labels") or [])[:5])
+        priority = str(jira.get("priority") or "n/a")
+        status = str(jira.get("status") or "n/a")
+        issue_key = str(jira.get("issue_key") or "ticket")
+        bullets.append(
+            _bullet(
+                anomaly_id=anomaly_id,
+                candidate_rank=0,
+                candidate_file_id="",
+                evidence_ref="",
+                category="jira",
+                text=(
+                    f"Jira ticket {issue_key}: {jira.get('summary')} "
+                    f"(priority {priority}, status {status}"
+                    f"{', labels: ' + labels if labels else ''})."
+                ),
+                evidence={"ticket_context": jira},
+            )
+        )
+
+    feedback = context_pack.get("feedback_context") or {}
+    if isinstance(feedback, dict):
+        for item in (feedback.get("confirmed_rcas") or [])[:2]:
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="feedback",
+                    text=(
+                        "Historical Feedback (confirmed RCA): candidate "
+                        f"{item.get('candidate_id')} — {_truncate_feedback_comment(item.get('comments'))}."
+                    ),
+                    evidence={"feedback": item},
+                )
+            )
+        for item in (feedback.get("rejected_rcas") or [])[:2]:
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="feedback",
+                    text=(
+                        "Historical Feedback (rejected RCA): candidate "
+                        f"{item.get('candidate_id')} — {_truncate_feedback_comment(item.get('comments'))}."
+                    ),
+                    evidence={"feedback": item},
+                )
+            )
+        for item in (feedback.get("overridden_rcas") or [])[:2]:
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="feedback",
+                    text=(
+                        "Historical Feedback (overridden RCA): candidate "
+                        f"{item.get('candidate_id')} -> {item.get('override_candidate_id')}."
+                    ),
+                    evidence={"feedback": item},
+                )
+            )
+
+    similar = context_pack.get("similar_incident_context") or {}
+    if isinstance(similar, dict):
+        for item in (similar.get("previous_investigation_summaries") or [])[:2]:
+            explanation = str(item.get("match_explanation") or "").strip()
+            summary_text = explanation or (
+                f"Historical incident {item.get('investigation_id')} "
+                f"(score {item.get('similarity_score')}): "
+                f"{item.get('resolution_summary') or 'prior investigation'}."
+            )
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="similar_incident",
+                    text=summary_text if summary_text.endswith(".") else f"{summary_text}.",
+                    evidence={"similar_investigation": item},
+                )
+            )
+        for item in (similar.get("historical_root_causes") or [])[:2]:
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="similar_incident",
+                    text=(
+                        f"Historical root cause from {item.get('investigation_id')}: "
+                        f"{item.get('root_cause')}."
+                    ),
+                    evidence={"historical_root_cause": item},
+                )
+            )
+        for item in (similar.get("historical_feedback") or [])[:2]:
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="feedback",
+                    text=(
+                        "Historical Feedback on similar incident "
+                        f"{item.get('investigation_id')}: {item.get('feedback_type')} "
+                        f"for candidate {item.get('candidate_id')}."
+                    ),
+                    evidence={"historical_feedback": item},
+                )
+            )
+        for item in (similar.get("historical_remediation_actions") or [])[:2]:
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="similar_incident",
+                    text=(
+                        f"Historical remediation from {item.get('investigation_id')}: "
+                        f"{item.get('action')}."
+                    ),
+                    evidence={"historical_remediation": item},
+                )
+            )
+
+    multi_agent = context_pack.get("multi_agent_findings") or {}
+    if isinstance(multi_agent, dict):
+        if multi_agent.get("final_summary"):
+            bullets.append(
+                _bullet(
+                    anomaly_id=anomaly_id,
+                    candidate_rank=0,
+                    candidate_file_id="",
+                    evidence_ref="",
+                    category="multi_agent",
+                    text=f"Multi-Agent Findings: {multi_agent.get('final_summary')}",
+                    evidence={"multi_agent_findings": multi_agent},
+                )
+            )
+        for key in (
+            "timeline_findings",
+            "deployment_findings",
+            "infrastructure_findings",
+            "incident_findings",
+            "knowledge_findings",
+            "rca_findings",
+        ):
+            finding = multi_agent.get(key) or {}
+            if isinstance(finding, dict) and finding.get("summary"):
+                bullets.append(
+                    _bullet(
+                        anomaly_id=anomaly_id,
+                        candidate_rank=0,
+                        candidate_file_id="",
+                        evidence_ref="",
+                        category="multi_agent",
+                        text=f"Multi-Agent {key.replace('_findings', '')}: {finding.get('summary')}",
+                        evidence={"agent_finding": finding},
+                    )
+                )
+
+    return bullets[:max_bullets]
+
+
+def _truncate_feedback_comment(value: Any, limit: int = 120) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text or "no comment"
+    return text[: limit - 3].rstrip() + "..."

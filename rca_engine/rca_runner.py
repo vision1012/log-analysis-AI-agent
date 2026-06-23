@@ -15,12 +15,20 @@ from graph.neo4j_client import Neo4jClient
 from graph.writer import GraphWriter
 
 from rca_engine.candidate_generator import Candidate, generate_candidates
+from rca_engine.confidence_engine import compute_confidence_for_ranked, build_confidence_graph_context
 from rca_engine.ranking_model import RankedCandidate, rank_candidates
 from rca_engine.signal_computation import (
     compute_signals,
     fetch_anomaly_context,
     fetch_file_metadata,
 )
+
+
+def _keyword_context_from_signals(signal_scores_by_file: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    for raw in signal_scores_by_file.values():
+        if isinstance(raw, dict) and raw.get("keyword_context_available"):
+            return {"available": True}
+    return {"available": False}
 
 
 def run_deterministic_rca(
@@ -35,6 +43,10 @@ def run_deterministic_rca(
     K_frames: int = 5,
     max_depth: int = 20,
     min_confidence: float = 0.25,
+    mcp_graph_context: Optional[dict[str, Any]] = None,
+    unified_investigation_context: Any = None,
+    investigation_id: str = "",
+    log_content: str = "",
 ) -> Optional["RCARunResult"]:
     """
     Execute deterministic RCA for one anomaly. Single transaction per anomaly.
@@ -84,9 +96,15 @@ def run_deterministic_rca(
         candidates,
         max_depth=max_depth,
         excluded_deployment_ids=gate_result.excluded_deployment_ids,
+        mcp_graph_context=mcp_graph_context,
+        unified_investigation_context=unified_investigation_context,
+        investigation_id=investigation_id,
+        log_content=log_content,
     )
     if not signal_scores_by_file:
         return None
+
+    keyword_context = _keyword_context_from_signals(signal_scores_by_file)
 
     # 4. Rank candidates
     ranked = rank_candidates(
@@ -96,6 +114,18 @@ def run_deterministic_rca(
     )
     if not ranked:
         return None
+
+    confidence_assessments = [
+        a.to_dict()
+        for a in compute_confidence_for_ranked(
+            ranked,
+            graph_context=build_confidence_graph_context(
+                mcp_graph_context,
+                unified_investigation_context=unified_investigation_context,
+                keyword_context=keyword_context,
+            ),
+        )
+    ]
 
     cand_by_file = {c.file_id: c for c in candidates}
     ctx = fetch_anomaly_context(graph_client, anomaly_id, max_depth)
@@ -111,11 +141,15 @@ def run_deterministic_rca(
     trace_ref = ctx.get("trace_ref") or ""
     bundle_ids: list[str] = []
 
-    for r in ranked:
+    for i, r in enumerate(ranked):
         c = cand_by_file.get(r.file_id)
         meta = file_metadata.get(r.file_id, {})
         if not c:
             continue
+
+        confidence_payload = confidence_assessments[i] if i < len(confidence_assessments) else {}
+        raw_signals = signal_scores_by_file.get(r.file_id, {})
+        keyword_signal = raw_signals.get("keyword_signal") if isinstance(raw_signals, dict) else None
 
         bundle_payload: dict[str, Any] = {
             "anomaly_id": anomaly_id,
@@ -126,11 +160,16 @@ def run_deterministic_rca(
             "evidence_symbol": c.symbol_name or "",
             "last_touch_commit_sha": meta.get("last_commit_sha") or "",
             "signal_scores": r.signal_scores,
+            "score_breakdown": r.score_breakdown,
+            "weights_used": r.weights_used,
+            "confidence_assessment": confidence_payload,
             "decision_timestamp": created_at,
             "schema_version": "1.0.0",
             "attributed_frame_id": r.frame_id,
             "frame_order": r.frame_order,
         }
+        if isinstance(keyword_signal, dict):
+            bundle_payload["keyword_signal"] = keyword_signal
         if meta.get("deployment_id"):
             bundle_payload["deployment_id"] = meta["deployment_id"]
 
@@ -162,6 +201,15 @@ def run_deterministic_rca(
         anomaly_id=anomaly_id,
         attribution_count=len(ranked),
         bundle_ids=bundle_ids,
+        confidence_assessments=confidence_assessments,
+        ranked_candidates=[
+            {
+                "file_id": r.file_id,
+                "path": r.path,
+                "ranking_score": r.capped_score if r.capped_score is not None else r.score,
+            }
+            for r in ranked
+        ],
     )
 
 
@@ -178,6 +226,10 @@ def run_rca(
     max_depth: int = 20,
     top_n: int = 3,
     min_confidence: float = 0.25,
+    mcp_graph_context: Optional[dict[str, Any]] = None,
+    unified_investigation_context: Any = None,
+    investigation_id: str = "",
+    log_content: str = "",
 ) -> Optional["RCARunResult"]:
     """
     Execute full RCA pipeline for one anomaly.
@@ -222,9 +274,15 @@ def run_rca(
         candidates,
         max_depth=max_depth,
         excluded_deployment_ids=gate_result.excluded_deployment_ids,
+        mcp_graph_context=mcp_graph_context,
+        unified_investigation_context=unified_investigation_context,
+        investigation_id=investigation_id,
+        log_content=log_content,
     )
     if not signal_scores_by_file:
         return None
+
+    keyword_context = _keyword_context_from_signals(signal_scores_by_file)
 
     # 4. Ranking
     ranked = rank_candidates(
@@ -234,6 +292,18 @@ def run_rca(
     )
     if not ranked:
         return None
+
+    confidence_assessments = [
+        a.to_dict()
+        for a in compute_confidence_for_ranked(
+            ranked,
+            graph_context=build_confidence_graph_context(
+                mcp_graph_context,
+                unified_investigation_context=unified_investigation_context,
+                keyword_context=keyword_context,
+            ),
+        )
+    ]
 
     cand_by_file = {c.file_id: c for c in candidates}
     ctx = fetch_anomaly_context(graph_client, anomaly_id, max_depth)
@@ -250,11 +320,15 @@ def run_rca(
     decision_ts = datetime.now(timezone.utc).isoformat()
     bundle_ids: list[str] = []
 
-    for r in ranked:
+    for i, r in enumerate(ranked):
         c = cand_by_file.get(r.file_id)
         meta = file_metadata.get(r.file_id, {})
         if not c:
             continue
+
+        confidence_payload = confidence_assessments[i] if i < len(confidence_assessments) else {}
+        raw_signals = signal_scores_by_file.get(r.file_id, {})
+        keyword_signal = raw_signals.get("keyword_signal") if isinstance(raw_signals, dict) else None
 
         bundle_payload: dict[str, Any] = {
             "anomaly_id": anomaly_id,
@@ -265,11 +339,16 @@ def run_rca(
             "evidence_symbol": c.symbol_name or "",
             "last_touch_commit_sha": meta.get("last_commit_sha") or "",
             "signal_scores": r.signal_scores,
+            "score_breakdown": r.score_breakdown,
+            "weights_used": r.weights_used,
+            "confidence_assessment": confidence_payload,
             "decision_timestamp": decision_ts,
             "schema_version": "1.0.0",
             "attributed_frame_id": r.frame_id,
             "frame_order": r.frame_order,
         }
+        if isinstance(keyword_signal, dict):
+            bundle_payload["keyword_signal"] = keyword_signal
         if meta.get("deployment_id"):
             bundle_payload["deployment_id"] = meta["deployment_id"]
 
@@ -301,6 +380,15 @@ def run_rca(
         anomaly_id=anomaly_id,
         attribution_count=len(ranked),
         bundle_ids=bundle_ids,
+        confidence_assessments=confidence_assessments,
+        ranked_candidates=[
+            {
+                "file_id": r.file_id,
+                "path": r.path,
+                "ranking_score": r.capped_score if r.capped_score is not None else r.score,
+            }
+            for r in ranked
+        ],
     )
 
 
@@ -313,8 +401,12 @@ class RCARunResult:
         anomaly_id: str,
         attribution_count: int,
         bundle_ids: list[str],
+        confidence_assessments: list[dict[str, Any]] | None = None,
+        ranked_candidates: list[dict[str, Any]] | None = None,
     ) -> None:
         self.run_id = run_id
         self.anomaly_id = anomaly_id
         self.attribution_count = attribution_count
         self.bundle_ids = bundle_ids
+        self.confidence_assessments = confidence_assessments or []
+        self.ranked_candidates = ranked_candidates or []

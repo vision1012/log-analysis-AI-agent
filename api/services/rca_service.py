@@ -41,6 +41,7 @@ def _run_summary(
     attribution_count: Optional[int] = None,
     bundle_ids: Optional[list[str]] = None,
     reason: Optional[str] = None,
+    confidence_assessments: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Structured run summary."""
     out: dict[str, Any] = {
@@ -50,6 +51,8 @@ def _run_summary(
         "attribution_count": attribution_count,
         "bundle_ids": bundle_ids or [],
     }
+    if confidence_assessments:
+        out["confidence_assessments"] = confidence_assessments
     if reason:
         out["reason"] = reason
     return out
@@ -112,6 +115,7 @@ def trigger_auto_rca(anomaly_id: str, *, _lock_held: bool = False) -> dict[str, 
             run_id=result["run_id"],
             attribution_count=result["attribution_count"],
             bundle_ids=result.get("bundle_ids", []),
+            confidence_assessments=result.get("confidence_assessments"),
         )
     finally:
         if not _lock_held:
@@ -124,6 +128,10 @@ def trigger_manual_rca(
     force: bool = False,
     *,
     _lock_held: bool = False,
+    investigation_id: str = "",
+    unified_investigation_context: Any | None = None,
+    mcp_graph_context: dict[str, Any] | None = None,
+    log_content: str = "",
 ) -> dict[str, Any]:
     """
     Trigger manual RCA with idempotency key.
@@ -170,6 +178,10 @@ def trigger_manual_rca(
             trigger_type="manual",
             run_id=idempotency_key,
             override=force,
+            investigation_id=investigation_id,
+            unified_investigation_context=unified_investigation_context,
+            mcp_graph_context=mcp_graph_context,
+            log_content=log_content,
         )
         if result is None:
             return _run_summary(
@@ -184,6 +196,7 @@ def trigger_manual_rca(
             run_id=result["run_id"],
             attribution_count=result["attribution_count"],
             bundle_ids=result.get("bundle_ids", []),
+            confidence_assessments=result.get("confidence_assessments"),
         )
     finally:
         if not _lock_held:
@@ -199,6 +212,10 @@ def run_rca(
     graph_client: Optional[Neo4jClient] = None,
     graph_writer: Optional[GraphWriter] = None,
     evidence_store: Optional[EvidenceStore] = None,
+    investigation_id: str = "",
+    unified_investigation_context: Any | None = None,
+    mcp_graph_context: Optional[dict[str, Any]] = None,
+    log_content: str = "",
 ) -> Optional[dict[str, Any]]:
     """
     Run deterministic RCA for one anomaly.
@@ -215,6 +232,34 @@ def run_rca(
         client.connect()
 
     try:
+        mcp_ctx = mcp_graph_context
+        if mcp_ctx is None and (investigation_id or unified_investigation_context is not None):
+            from rca_engine.mcp_graph_context import build_mcp_graph_context
+
+            service_name = ""
+            ticket_key = ""
+            if unified_investigation_context is not None:
+                ticket_key = str(getattr(unified_investigation_context, "ticket_key", "") or "")
+                for svc in getattr(unified_investigation_context, "service_names", []) or []:
+                    service_name = str(svc or "")
+                    if service_name:
+                        break
+            try:
+                mcp_ctx = build_mcp_graph_context(
+                    client,
+                    investigation_id=investigation_id,
+                    service_name=service_name,
+                    ticket_key=ticket_key,
+                )
+            except Exception:
+                logger.warning(
+                    "rca.mcp_graph_context_failed anomaly_id=%s investigation_id=%s",
+                    anomaly_id,
+                    investigation_id,
+                    exc_info=True,
+                )
+                mcp_ctx = None
+
         result = run_deterministic_rca(
             anomaly_id,
             trigger_type,
@@ -223,6 +268,10 @@ def run_rca(
             evidence_store=store,
             run_id=run_id,
             override=override,
+            mcp_graph_context=mcp_ctx,
+            unified_investigation_context=unified_investigation_context,
+            investigation_id=investigation_id,
+            log_content=log_content,
         )
         if result is None:
             return None
@@ -231,6 +280,8 @@ def run_rca(
             "anomaly_id": result.anomaly_id,
             "attribution_count": result.attribution_count,
             "bundle_ids": result.bundle_ids,
+            "confidence_assessments": result.confidence_assessments,
+            "ranked_candidates": result.ranked_candidates,
         }
     finally:
         if own_client and getattr(client, "_driver", None):
@@ -280,6 +331,7 @@ def get_rca_result_view(
     anomaly_id: str,
     *,
     graph_client: Optional[Neo4jClient] = None,
+    evidence_store: Optional[EvidenceStore] = None,
 ) -> dict[str, Any]:
     """
     Return RCA results for an anomaly in structured view.
@@ -292,6 +344,8 @@ def get_rca_result_view(
     own_client = graph_client is None
     if not getattr(client, "_driver", None):
         client.connect()
+
+    store = evidence_store or _get_evidence_store()
 
     try:
         q = """
@@ -324,6 +378,19 @@ def get_rca_result_view(
                 "run_id": row.get("run_id"),
                 "evidence_ref": ref,
             }
+            if ref:
+                bundle = store.get_bundle(ref) or {}
+                breakdown = bundle.get("score_breakdown")
+                if isinstance(breakdown, dict) and breakdown:
+                    item["score_breakdown"] = {
+                        str(k): float(v) for k, v in breakdown.items()
+                        if isinstance(v, (int, float))
+                    }
+                assessment = bundle.get("confidence_assessment")
+                if isinstance(assessment, dict) and assessment:
+                    item["confidence_assessment"] = assessment
+                    item["evidence_confidence"] = assessment.get("confidence")
+                    item["confidence_level"] = assessment.get("confidence_level")
 
             ts_candidates = []
             if row.get("created_at"):

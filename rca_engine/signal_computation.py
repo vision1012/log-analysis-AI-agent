@@ -6,18 +6,70 @@ Uses Neo4j queries only. Returns {file_id: signal_scores}.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional, Union
 
 from graph.neo4j_client import Neo4jClient
 
 from rca_engine.candidate_generator import Candidate
+from rca_engine.mcp_signal_config import (
+    alert_correlation_points,
+    deployment_proximity_points,
+    historical_investigation_points,
+    incident_severity_points,
+    known_issue_match_points,
+    mcp_rca_signals_enabled,
+)
 
 # Decay window for recency signals (seconds)
 DECAY_WINDOW_SEC = 7 * 24 * 3600  # 7 days
 MAX_RECURRENCE_CAP = 5
 VALID_RESOLUTIONS = ("exact", "probable", "resolved")
+
+KEYWORD_ALIGNMENT_SIGNAL = "keyword_alignment"
+
+KEYWORD_CATEGORIES: tuple[str, ...] = (
+    "Authentication",
+    "Database",
+    "Deployment",
+    "Infrastructure",
+    "Performance",
+    "Networking",
+    "Application",
+)
+
+KEYWORD_CATEGORY_PATTERNS: dict[str, tuple[str, ...]] = {
+    "Authentication": (
+        "auth",
+        "token",
+        "otp",
+        "login",
+        "password",
+        "jwt",
+        "oauth",
+        "unauthorized",
+        "forbidden",
+        "invalid token",
+    ),
+    "Database": (
+        "database",
+        "sql",
+        "deadlock",
+        "postgres",
+        "mysql",
+        "redis",
+        "mongodb",
+        "connection pool",
+        "query",
+    ),
+    "Deployment": ("deploy", "rollout", "release", "rollback", "canary"),
+    "Infrastructure": ("pod", "oom", "kubernetes", "k8s", "restart", "crashloop", "node", "container"),
+    "Performance": ("timeout", "latency", "slow", "throttle", "backpressure"),
+    "Networking": ("connection refused", "503", "502", "504", "network", "dns", "socket", "unreachable"),
+    "Application": ("error", "exception", "failed", "panic", "stacktrace", "traceback"),
+}
 
 # Signal names
 SIGNAL_NAMES = (
@@ -31,19 +83,177 @@ SIGNAL_NAMES = (
     "spike_correlation_strength",
     "trace_completeness",
     "file_touch_sparsity",
+    KEYWORD_ALIGNMENT_SIGNAL,
 )
+
+MCP_SIGNAL_NAMES = (
+    "deployment_proximity_mcp",
+    "alert_correlation",
+    "incident_severity",
+    "known_issue_match",
+    "historical_investigation",
+)
+
+
+@dataclass
+class KeywordSignal:
+    """Structured keyword evidence extracted from logs and aligned to a candidate."""
+
+    matched_keywords: list[str] = field(default_factory=list)
+    keyword_score: float = 0.0
+    keyword_categories: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "matched_keywords": list(self.matched_keywords),
+            "keyword_score": round(float(self.keyword_score), 4),
+            "keyword_categories": list(self.keyword_categories),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "KeywordSignal":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            matched_keywords=[str(k) for k in (data.get("matched_keywords") or []) if k],
+            keyword_score=float(data.get("keyword_score") or 0.0),
+            keyword_categories=[str(c) for c in (data.get("keyword_categories") or []) if c],
+        )
+
+
+def _keyword_categories_for_text(text: str) -> set[str]:
+    lowered = (text or "").lower()
+    categories: set[str] = set()
+    for category, patterns in KEYWORD_CATEGORY_PATTERNS.items():
+        if any(pattern in lowered for pattern in patterns):
+            categories.add(category)
+    return categories
+
+
+def _collect_keyword_hits(text: str) -> list[str]:
+    lowered = (text or "").lower()
+    hits: list[str] = []
+    seen: set[str] = set()
+    for patterns in KEYWORD_CATEGORY_PATTERNS.values():
+        for pattern in patterns:
+            if pattern in lowered and pattern not in seen:
+                seen.add(pattern)
+                hits.append(pattern)
+    return hits
+
+
+def compute_log_keyword_signal(
+    log_content: str,
+    *,
+    extra_keywords: Optional[list[str]] = None,
+) -> KeywordSignal:
+    """Extract global keyword evidence from log text and optional ticket hints."""
+    content = (log_content or "").strip()
+    if not content and not extra_keywords:
+        return KeywordSignal()
+
+    base = extract_signals(content)
+    matched: list[str] = []
+    seen: set[str] = set()
+    categories: set[str] = set()
+
+    for kw in extra_keywords or []:
+        token = str(kw or "").strip().lower()
+        if token and token not in seen:
+            seen.add(token)
+            matched.append(token)
+            categories.update(_keyword_categories_for_text(token))
+
+    for line in (base.get("errors") or [])[:30]:
+        for hit in _collect_keyword_hits(str(line)):
+            if hit not in seen:
+                seen.add(hit)
+                matched.append(hit)
+        categories.update(_keyword_categories_for_text(str(line)))
+
+    for hit in _collect_keyword_hits(content):
+        if hit not in seen:
+            seen.add(hit)
+            matched.append(hit)
+
+    categories.update(_keyword_categories_for_text(content))
+
+    for exc in base.get("exceptions") or []:
+        token = str(exc).strip().lower()
+        if token and token not in seen:
+            seen.add(token)
+            matched.append(token)
+            categories.update(_keyword_categories_for_text(token))
+
+    if int(base.get("timeout_count") or 0) > 0 and "timeout" not in seen:
+        matched.append("timeout")
+        categories.add("Performance")
+
+    density = min(1.0, len(matched) / 6.0)
+    category_bonus = min(0.35, 0.05 * len(categories))
+    score = _clamp(density + category_bonus) if matched else 0.0
+
+    return KeywordSignal(
+        matched_keywords=matched[:40],
+        keyword_score=score,
+        keyword_categories=sorted(categories),
+    )
+
+
+def align_keyword_signal_for_path(
+    path: str,
+    log_signal: KeywordSignal,
+    *,
+    extra_keywords: Optional[list[str]] = None,
+    log_files: Optional[list[str]] = None,
+) -> tuple[float, KeywordSignal]:
+    """Score how well a candidate path aligns with extracted keyword evidence."""
+    if not log_signal.matched_keywords and not (extra_keywords or []) and not (log_files or []):
+        return 0.0, KeywordSignal()
+
+    path_l = (path or "").lower()
+    basename = os.path.basename(path_l)
+    all_keywords = list(
+        dict.fromkeys([*(log_signal.matched_keywords or []), *(extra_keywords or [])])
+    )
+
+    path_keyword_hits = [kw for kw in all_keywords if kw.lower() in path_l]
+    file_hits = [
+        f for f in (log_files or [])
+        if basename and (basename in str(f).lower() or str(f).lower() in path_l)
+    ]
+
+    alignment = 0.0
+    if path_keyword_hits:
+        alignment = min(
+            1.0,
+            0.45 + (len(path_keyword_hits) / max(1, min(4, len(all_keywords)))) * 0.55,
+        )
+    elif file_hits:
+        alignment = 0.75
+
+    path_categories = set()
+    for category in log_signal.keyword_categories:
+        if any(pattern in path_l for pattern in KEYWORD_CATEGORY_PATTERNS.get(category, ())):
+            path_categories.add(category)
+
+    keyword_score = _clamp(alignment * max(log_signal.keyword_score, 0.25)) if alignment > 0 else 0.0
+    return keyword_score, KeywordSignal(
+        matched_keywords=path_keyword_hits or log_signal.matched_keywords[:8],
+        keyword_score=keyword_score,
+        keyword_categories=sorted(path_categories or log_signal.keyword_categories),
+    )
 
 
 def extract_keyword_signals(log_content: str) -> dict[str, Any]:
     """
     Lightweight keyword-based signal extraction for log-only RCA fallback.
 
-    This is intentionally independent from stack-trace/file traversal so RCA can
-    still produce a useful hypothesis when traces are absent.
+    Backward-compatible dict shape used by existing jira/log RCA fallback code.
     """
+    signal = compute_log_keyword_signal(log_content)
     lines = [ln.strip() for ln in (log_content or "").splitlines() if ln.strip()]
     base = extract_signals(lines)
-    # Backward-compatible shape used by existing jira/log RCA fallback code.
     return {
         "error_count": int(base.get("error_count") or 0),
         "timeout": int(base.get("timeout_count") or 0),
@@ -52,6 +262,9 @@ def extract_keyword_signals(log_content: str) -> dict[str, Any]:
         "service": str(base.get("service") or ""),
         "patterns": list(base.get("patterns") or []),
         "exception_types": {},
+        "matched_keywords": signal.matched_keywords,
+        "keyword_score": signal.keyword_score,
+        "keyword_categories": signal.keyword_categories,
     }
 
 
@@ -136,6 +349,27 @@ def _zero_scores() -> dict[str, float]:
     return {name: 0.0 for name in SIGNAL_NAMES}
 
 
+def _collect_ticket_keywords(unified_investigation_context: Any | None) -> list[str]:
+    if unified_investigation_context is None:
+        return []
+    keywords: list[str] = []
+    ticket = getattr(unified_investigation_context, "ticket_context", None)
+    if ticket is not None:
+        for label in getattr(ticket, "labels", []) or []:
+            token = str(label or "").strip().lower()
+            if token:
+                keywords.append(token)
+        for field_name in ("summary", "description"):
+            text = str(getattr(ticket, field_name, "") or "")
+            keywords.extend(_collect_keyword_hits(text))
+    for doc in getattr(unified_investigation_context, "known_issue_documents", []) or []:
+        for kw in getattr(doc, "error_keywords", []) or []:
+            token = str(kw or "").strip().lower()
+            if token:
+                keywords.append(token)
+    return list(dict.fromkeys(keywords))
+
+
 def compute_signals(
     client: Neo4jClient,
     anomaly_id: str,
@@ -143,6 +377,10 @@ def compute_signals(
     *,
     max_depth: int = 20,
     excluded_deployment_ids: Optional[list[str]] = None,
+    mcp_graph_context: Optional[dict[str, Any]] = None,
+    unified_investigation_context: Any | None = None,
+    investigation_id: str = "",
+    log_content: str = "",
 ) -> dict[str, dict[str, float]]:
     """
     Compute signals for each candidate file. Neo4j queries only.
@@ -154,20 +392,24 @@ def compute_signals(
         print("[RCA] Signals: {}")
         return {}
 
-    # Normalize to (file_id, frame_order) per candidate
+    # Normalize to (file_id, frame_order, path) per candidate
     file_ids: list[str] = []
     frame_order_by_file: dict[str, int] = {}
+    path_by_file: dict[str, str] = {}
     for c in candidate_files:
         if isinstance(c, Candidate):
             fid = c.file_id
             order = c.representative_frame_order
+            path = c.path
         else:
             fid = c.get("file_id", "")
             rep = c.get("representative_frame") or {}
             order = rep.get("frame_order", c.get("representative_frame_order", 999))
+            path = str(c.get("path") or "")
         if fid:
             file_ids.append(fid)
             frame_order_by_file[fid] = order
+            path_by_file[fid] = path
 
     ctx = _fetch_anomaly_context(client, anomaly_id, max_depth)
     if not ctx:
@@ -188,6 +430,40 @@ def compute_signals(
         fd = file_data.get(fid, {})
         frame_order = frame_order_by_file.get(fid, 999)
         result[fid] = _compute_one(fid, frame_order, ctx, fd)
+
+    ticket_keywords = _collect_ticket_keywords(unified_investigation_context)
+    log_signal = compute_log_keyword_signal(log_content, extra_keywords=ticket_keywords)
+    log_files = extract_signals(log_content).get("files") or [] if log_content.strip() else []
+    keyword_context_available = bool(log_signal.matched_keywords or ticket_keywords or log_content.strip())
+
+    for fid in file_ids:
+        alignment, candidate_signal = align_keyword_signal_for_path(
+            path_by_file.get(fid, ""),
+            log_signal,
+            extra_keywords=ticket_keywords,
+            log_files=log_files,
+        )
+        result[fid][KEYWORD_ALIGNMENT_SIGNAL] = alignment
+        result[fid]["keyword_signal"] = candidate_signal.to_dict()
+        result[fid]["keyword_context_available"] = 1.0 if keyword_context_available else 0.0
+
+    if mcp_rca_signals_enabled():
+        mcp_signals, mcp_breakdowns = compute_mcp_signals(
+            file_ids=file_ids,
+            path_by_file=path_by_file,
+            anomaly_ts=ctx.get("anomaly_ts"),
+            service_ref=str(ctx.get("service_ref") or ""),
+            mcp_graph_context=mcp_graph_context,
+            unified_investigation_context=unified_investigation_context,
+            graph_client=client,
+            investigation_id=investigation_id,
+        )
+        for fid in file_ids:
+            if fid in mcp_signals:
+                result[fid].update(mcp_signals[fid])
+            if fid in mcp_breakdowns:
+                result[fid]["score_breakdown"] = mcp_breakdowns[fid]
+
     print(f"[RCA] Signals: {result}")
     return result
 
@@ -471,3 +747,222 @@ def _compute_one(
         "trace_completeness": trace_completeness,
         "file_touch_sparsity": file_touch_sparsity,
     }
+
+
+def _minutes_before_anomaly(event_ts: Any, anomaly_ts: float | None) -> float | None:
+    event = _parse_ts(event_ts)
+    if event is None or anomaly_ts is None:
+        return None
+    if event > anomaly_ts:
+        return None
+    return (anomaly_ts - event) / 60.0
+
+
+def _deployment_proximity_bucket(minutes: float | None) -> tuple[str, float, int]:
+    if minutes is None:
+        return ("none", 0.0, 0)
+    if minutes <= 5:
+        return ("0_5", 1.0, deployment_proximity_points("0_5"))
+    if minutes <= 15:
+        return ("5_15", 0.67, deployment_proximity_points("5_15"))
+    if minutes <= 30:
+        return ("15_30", 0.33, deployment_proximity_points("15_30"))
+    return ("beyond_30", 0.0, 0)
+
+
+def _collect_deployments(
+    mcp_graph_context: dict[str, Any] | None,
+    unified_context: Any | None,
+) -> list[dict[str, Any]]:
+    deployments: list[dict[str, Any]] = []
+    if isinstance(mcp_graph_context, dict):
+        for item in mcp_graph_context.get("related_deployments") or []:
+            if isinstance(item, dict):
+                deployments.append(item)
+    if unified_context is not None:
+        for dep in getattr(unified_context, "deployment_events", []) or []:
+            deployments.append(dep.model_dump() if hasattr(dep, "model_dump") else dict(dep))
+    return deployments
+
+
+def _collect_alerts(
+    mcp_graph_context: dict[str, Any] | None,
+    unified_context: Any | None,
+) -> list[dict[str, Any]]:
+    alerts: list[dict[str, Any]] = []
+    if isinstance(mcp_graph_context, dict):
+        for item in mcp_graph_context.get("related_alerts") or []:
+            if isinstance(item, dict):
+                alerts.append(item)
+    if unified_context is not None:
+        for alert in getattr(unified_context, "alert_events", []) or []:
+            alerts.append(alert.model_dump() if hasattr(alert, "model_dump") else dict(alert))
+    return alerts
+
+
+def _collect_incidents(
+    mcp_graph_context: dict[str, Any] | None,
+    unified_context: Any | None,
+) -> list[dict[str, Any]]:
+    incidents: list[dict[str, Any]] = []
+    if isinstance(mcp_graph_context, dict):
+        for item in mcp_graph_context.get("related_incidents") or []:
+            if isinstance(item, dict):
+                incidents.append(item)
+    if unified_context is not None:
+        for incident in getattr(unified_context, "pagerduty_incidents", []) or []:
+            incidents.append(incident.model_dump() if hasattr(incident, "model_dump") else dict(incident))
+    return incidents
+
+
+def _collect_known_issues(
+    mcp_graph_context: dict[str, Any] | None,
+    unified_context: Any | None,
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    if isinstance(mcp_graph_context, dict):
+        for item in mcp_graph_context.get("known_issues") or []:
+            if isinstance(item, dict):
+                issues.append(item)
+    if unified_context is not None:
+        for doc in getattr(unified_context, "known_issue_documents", []) or []:
+            issues.append(doc.model_dump() if hasattr(doc, "model_dump") else dict(doc))
+    return issues
+
+
+def _known_issue_matches_candidate(path: str, service_ref: str, issue: dict[str, Any]) -> bool:
+    path_l = (path or "").lower()
+    service_l = (service_ref or "").lower()
+    affected = str(issue.get("affected_service") or "").lower()
+    if affected and (affected in path_l or affected == service_l or affected in service_l):
+        return True
+    title = str(issue.get("title") or "").lower()
+    if title and any(token in path_l for token in title.split() if len(token) > 3):
+        return True
+    for kw in issue.get("error_keywords") or []:
+        token = str(kw or "").lower()
+        if token and token in path_l:
+            return True
+    return False
+
+
+def _fetch_historical_investigation_boost(
+    graph_client: Neo4jClient | None,
+    *,
+    investigation_id: str,
+    service_ref: str,
+    path: str,
+    mcp_graph_context: dict[str, Any] | None,
+) -> tuple[float, int]:
+    similarity = 0.0
+    if isinstance(mcp_graph_context, dict):
+        for item in mcp_graph_context.get("previous_investigations") or []:
+            if not isinstance(item, dict):
+                continue
+            sim = float(item.get("similarity_score") or 0.0)
+            if sim > similarity:
+                similarity = sim
+
+    if graph_client is not None and path:
+        try:
+            rows = graph_client.execute_read(
+                """
+                MATCH (a:Anomaly)-[r:RCA_ATTRIBUTED]->(f:File)
+                WHERE f.path = $path
+                  AND r.status IN ['accepted', 'candidate']
+                  AND ($service_ref = '' OR a.service_ref = $service_ref)
+                RETURN count(DISTINCT a) AS prior_count
+                """,
+                {"path": path, "service_ref": service_ref or ""},
+            )
+            if rows and int(rows[0].get("prior_count") or 0) > 0:
+                similarity = max(similarity, 0.8)
+        except Exception:
+            pass
+
+    points = historical_investigation_points(similarity) if similarity > 0 else 0
+    return (min(1.0, similarity), points)
+
+
+def compute_mcp_signals(
+    *,
+    file_ids: list[str],
+    path_by_file: dict[str, str],
+    anomaly_ts: float | None,
+    service_ref: str,
+    mcp_graph_context: dict[str, Any] | None = None,
+    unified_investigation_context: Any | None = None,
+    graph_client: Neo4jClient | None = None,
+    investigation_id: str = "",
+) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, float]]]:
+    """
+    Compute MCP-derived signal values and point-based score breakdown per file.
+
+    Returns:
+        (signal_values, score_breakdown_points)
+    """
+    deployments = _collect_deployments(mcp_graph_context, unified_investigation_context)
+    alerts = _collect_alerts(mcp_graph_context, unified_investigation_context)
+    incidents = _collect_incidents(mcp_graph_context, unified_investigation_context)
+    known_issues = _collect_known_issues(mcp_graph_context, unified_investigation_context)
+
+    nearest_dep_minutes: float | None = None
+    for dep in deployments:
+        minutes = _minutes_before_anomaly(dep.get("deployed_at"), anomaly_ts)
+        if minutes is None:
+            continue
+        if nearest_dep_minutes is None or minutes < nearest_dep_minutes:
+            nearest_dep_minutes = minutes
+    _, deploy_signal, deploy_points = _deployment_proximity_bucket(nearest_dep_minutes)
+
+    top_alert = alerts[0] if alerts else {}
+    alert_severity = str(top_alert.get("severity") or "")
+    repeated_alert = len(alerts) > 1
+    alert_signal = 1.0 if alert_severity in {"critical", "high", "sev1"} else (
+        0.6 if alert_severity in {"warning", "medium", "warn", "sev2"} else 0.2
+    )
+    alert_points = alert_correlation_points(alert_severity, repeated=repeated_alert) if alerts else 0
+
+    top_incident = incidents[0] if incidents else {}
+    incident_urgency = str(top_incident.get("urgency") or "")
+    incident_signal = 1.0 if incident_urgency in {"high", "critical"} else 0.4
+    incident_points = incident_severity_points(incident_urgency) if incidents else 0
+
+    signals_out: dict[str, dict[str, float]] = {}
+    breakdown_out: dict[str, dict[str, float]] = {}
+
+    for fid in file_ids:
+        path = path_by_file.get(fid, "")
+        known_match = any(_known_issue_matches_candidate(path, service_ref, issue) for issue in known_issues)
+        known_signal = 1.0 if known_match else 0.0
+        known_points = known_issue_match_points() if known_match else 0
+
+        hist_signal, hist_points = _fetch_historical_investigation_boost(
+            graph_client,
+            investigation_id=investigation_id,
+            service_ref=service_ref,
+            path=path,
+            mcp_graph_context=mcp_graph_context,
+        )
+
+        signals_out[fid] = {
+            "deployment_proximity_mcp": deploy_signal,
+            "alert_correlation": alert_signal,
+            "incident_severity": incident_signal,
+            "known_issue_match": known_signal,
+            "historical_investigation": hist_signal,
+        }
+        breakdown: dict[str, float] = {}
+        if deploy_points:
+            breakdown["deployment_proximity"] = float(deploy_points)
+        if alert_points:
+            breakdown["alert_correlation"] = float(alert_points)
+        if incident_points:
+            breakdown["incident_severity"] = float(incident_points)
+        if known_points:
+            breakdown["known_issue_match"] = float(known_points)
+        if hist_points:
+            breakdown["historical_investigation"] = float(hist_points)
+        breakdown_out[fid] = breakdown
+
+    return signals_out, breakdown_out

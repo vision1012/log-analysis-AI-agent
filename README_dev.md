@@ -83,3 +83,79 @@ python scripts/smoke_test_graphrag.py
 python scripts/smoke_test_rca_api.py
 ```
 
+---
+
+## End-to-End MCP RCA Validation
+
+Validate the full MCP-powered RCA pipeline without frontend changes.
+
+### What it checks
+
+1. API health (`GET /health`)
+2. MCP status (`GET /api/v1/mcp/status`) and enabled providers
+3. MCP context preview (`POST /api/v1/mcp/context/preview`) — `UnifiedInvestigationContext` fields
+4. JIRA RCA orchestration (`POST /api/v1/jira/rca/run`)
+5. RCA candidates in the response
+6. Confidence assessments (`confidence_assessment` on candidates or `confidence_assessments` on run)
+7. GraphRAG explanation (`explanation_payload`)
+8. Investigation narrative (via `GET /api/v1/rca/explanation/{anomaly_id}` when available)
+9. Neo4j investigation graph persistence (graceful skip if disabled)
+10. Evidence bundle on disk (when `EVIDENCE_STORE_DIR` is set)
+
+Terminal output uses `[PASS]`, `[FAIL]`, and `[SKIPPED]` per step.
+
+### Mock mode (no external MCP credentials)
+
+```bash
+# Terminal 1 — API
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 — seed auth user (once)
+export POSTGRES_URL=postgresql://...
+python scripts/seed_users.py
+
+# Neo4j for graph RCA + confidence (recommended)
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USER=neo4j
+export NEO4J_PASSWORD=your-password
+python -m graph.migrations
+
+# Run validation (embedded ticket + sample logs; MCP preview uses enabled_sources=[])
+python scripts/validate_e2e_mcp_rca_flow.py --mode mock
+```
+
+Optional auth override:
+
+```bash
+export API_BEARER_TOKEN=<jwt>
+# or VALIDATE_AUTH_EMAIL / VALIDATE_AUTH_PASSWORD (default: seed user)
+```
+
+### Live mode (real `.env` credentials on API host)
+
+```bash
+python scripts/validate_e2e_mcp_rca_flow.py \
+  --mode live \
+  --ticket-key PROJ-123 \
+  --service-name auth-service \
+  --repo-name org/auth-service \
+  --logs-file scripts/fixtures/e2e_mcp_rca_sample.log
+```
+
+Providers without credentials on the **validator host** are reported as `[SKIPPED]` (e.g. `Live credentials: datadog`). The API still runs with its own `.env`; use MCP status output to confirm provider health.
+
+### CLI options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--base-url` | `http://127.0.0.1:8000` | API base URL |
+| `--mode` | `mock` | `mock` or `live` |
+| `--ticket-key` | `MOCK-1001` | Jira ticket key |
+| `--service-name` | `auth-service` | Service for hints / graph seed |
+| `--repo-name` | `org/auth-service` | Repo name for graph seed |
+| `--logs-file` | `scripts/fixtures/e2e_mcp_rca_sample.log` | Log upload content |
+| `--anomaly-id` | auto-generated | Anomaly id for graph RCA |
+| `--no-bootstrap-anomaly` | — | Skip Neo4j anomaly seeding |
+
+Exit code `0` when all required checks pass; `1` when any check fails.
+
