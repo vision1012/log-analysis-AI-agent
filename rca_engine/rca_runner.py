@@ -15,7 +15,7 @@ from graph.neo4j_client import Neo4jClient
 from graph.writer import GraphWriter
 
 from rca_engine.candidate_generator import Candidate, generate_candidates
-from rca_engine.confidence_engine import compute_confidence_for_ranked
+from rca_engine.confidence_engine import compute_confidence_for_ranked, build_confidence_graph_context
 from rca_engine.ranking_model import RankedCandidate, rank_candidates
 from rca_engine.signal_computation import (
     compute_signals,
@@ -106,7 +106,13 @@ def run_deterministic_rca(
 
     confidence_assessments = [
         a.to_dict()
-        for a in compute_confidence_for_ranked(ranked, graph_context=mcp_graph_context)
+        for a in compute_confidence_for_ranked(
+            ranked,
+            graph_context=build_confidence_graph_context(
+                mcp_graph_context,
+                unified_investigation_context=unified_investigation_context,
+            ),
+        )
     ]
 
     cand_by_file = {c.file_id: c for c in candidates}
@@ -269,7 +275,13 @@ def run_rca(
 
     confidence_assessments = [
         a.to_dict()
-        for a in compute_confidence_for_ranked(ranked, graph_context=mcp_graph_context)
+        for a in compute_confidence_for_ranked(
+            ranked,
+            graph_context=build_confidence_graph_context(
+                mcp_graph_context,
+                unified_investigation_context=unified_investigation_context,
+            ),
+        )
     ]
 
     cand_by_file = {c.file_id: c for c in candidates}

@@ -57,3 +57,4 @@ class UnifiedInvestigationContext(BaseModel):
     architecture_documents: List[ArchitectureDocument] = Field(default_factory=list)
     pipelines: List[McpPipeline] = Field(default_factory=list)
     source_metadata: List[SourceMetadata] = Field(default_factory=list)
+    evidence_coverage: Optional["EvidenceCoverage"] = None

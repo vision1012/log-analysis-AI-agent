@@ -38,6 +38,16 @@ class RunbookEntry(BaseModel):
     url: str = ""
 
 
+class EvidenceCoverageSection(BaseModel):
+    """MCP evidence coverage summary for export."""
+
+    coverage_score: float = 0.0
+    coverage_level: str = "low"
+    available_sources: List[str] = Field(default_factory=list)
+    missing_sources: List[str] = Field(default_factory=list)
+    confidence_limitations: List[str] = Field(default_factory=list)
+
+
 class InvestigationReport(BaseModel):
     """Unified investigation report assembled from all data sources."""
 
@@ -54,6 +64,7 @@ class InvestigationReport(BaseModel):
     runbooks: List[RunbookEntry] = Field(default_factory=list)
     remediation_steps: List[str] = Field(default_factory=list)
     multi_agent_summary: str = ""
+    evidence_coverage: EvidenceCoverageSection = Field(default_factory=EvidenceCoverageSection)
     generated_at: str
 
     def to_export_dict(self) -> dict[str, Any]:

@@ -15,6 +15,7 @@ from mcp.context.deployment_observability_correlator import (
 )
 from mcp.context.knowledge_context_correlator import correlate_knowledge_and_attach_metadata
 from mcp.context.investigation_context import UnifiedInvestigationContext
+from mcp.evidence_coverage import attach_evidence_coverage
 from mcp.registry import get_provider_class, registered_sources
 from mcp.schemas.common import ProviderHealth
 
@@ -32,7 +33,7 @@ class MCPOrchestrator:
 
     def fetch_context(self, params: MCPFetchParams) -> UnifiedInvestigationContext:
         if not mcp_enabled():
-            return UnifiedInvestigationContext()
+            return attach_evidence_coverage(UnifiedInvestigationContext())
 
         context = UnifiedInvestigationContext()
         for source in params.enabled_sources:
@@ -48,7 +49,7 @@ class MCPOrchestrator:
                 context = _merge_unified(context, partial)
             except Exception as exc:
                 logger.warning("mcp.orchestrator.provider_failed source=%s err=%s", source, exc)
-        return correlate_knowledge_and_attach_metadata(
+        context = correlate_knowledge_and_attach_metadata(
             correlate_alert_incident_and_attach_metadata(
                 correlate_deployment_kubernetes_and_attach_metadata(
                     correlate_deployment_observability_and_attach_metadata(
@@ -57,6 +58,7 @@ class MCPOrchestrator:
                 )
             )
         )
+        return attach_evidence_coverage(context)
 
     def health_status(self) -> list[ProviderHealth]:
         if not mcp_enabled():

@@ -65,6 +65,32 @@ def _write_bullets(pdf: _InvestigationPDF, title: str, items: list[str]) -> None
     pdf.ln(2)
 
 
+def _format_evidence_coverage(report: InvestigationReport) -> str:
+    section = report.evidence_coverage
+    lines = [
+        f"Coverage Score: {section.coverage_score:.2f}",
+        f"Coverage Level: {section.coverage_level}",
+        "Available Sources:",
+    ]
+    if section.available_sources:
+        lines.extend(f"- {source}" for source in section.available_sources)
+    else:
+        lines.append("- None recorded.")
+
+    lines.append("Missing Sources:")
+    if section.missing_sources:
+        lines.extend(f"- {source}" for source in section.missing_sources)
+    else:
+        lines.append("- None recorded.")
+
+    lines.append("Confidence Limitations:")
+    if section.confidence_limitations:
+        lines.extend(f"- {item}" for item in section.confidence_limitations)
+    else:
+        lines.append("- None recorded.")
+    return "\n".join(lines)
+
+
 def render_pdf_bytes(report: InvestigationReport) -> bytes:
     """Render an investigation report as PDF bytes."""
     pdf = _InvestigationPDF()
@@ -102,6 +128,7 @@ def render_pdf_bytes(report: InvestigationReport) -> bytes:
         "4. Confidence Assessment",
         report.confidence_reasoning or "No confidence reasoning available.",
     )
+    _write_section(pdf, "5. Evidence Coverage", _format_evidence_coverage(report))
 
     similar_lines = []
     for item in report.similar_incidents:
@@ -109,17 +136,17 @@ def render_pdf_bytes(report: InvestigationReport) -> bytes:
             f"{item.investigation_id} (score {item.similarity_score:.2f}): "
             f"{item.root_cause or 'unknown'} — {item.resolution_summary or 'no resolution'}"
         )
-    _write_bullets(pdf, "5. Similar Incidents", similar_lines)
+    _write_bullets(pdf, "6. Similar Incidents", similar_lines)
 
-    _write_section(pdf, "6. Multi-Agent Findings", report.multi_agent_summary or "No multi-agent summary.")
+    _write_section(pdf, "7. Multi-Agent Findings", report.multi_agent_summary or "No multi-agent summary.")
 
     runbook_lines = []
     for runbook in report.runbooks:
         detail = runbook.summary or "See linked runbook."
         runbook_lines.append(f"{runbook.title} [{runbook.service_name}]: {detail}")
-    _write_bullets(pdf, "7. Runbooks", runbook_lines)
+    _write_bullets(pdf, "8. Runbooks", runbook_lines)
 
-    _write_bullets(pdf, "8. Recommended Actions", report.remediation_steps)
+    _write_bullets(pdf, "9. Recommended Actions", report.remediation_steps)
 
     out = pdf.output()
     if isinstance(out, bytearray):

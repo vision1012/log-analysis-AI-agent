@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from rca_engine.candidate_generator import Candidate, RepresentativeFrame
 from rca_engine.confidence_engine import (
+    build_confidence_graph_context,
     build_confidence_reasoning,
     compute_confidence_assessment,
     compute_confidence_for_ranked,
@@ -153,3 +154,128 @@ def test_build_confidence_reasoning_includes_factors() -> None:
     assert "0.91" in text
     assert "high" in text
     assert "Deployment" in text
+
+
+def _sample_signals() -> dict[str, float]:
+    return {
+        "deployment_proximity_mcp": 1.0,
+        "known_issue_match": 1.0,
+        "alert_correlation": 1.0,
+        "historical_investigation": 0.8,
+        "historical_recurrence": 0.6,
+        "top_frame_presence": 1.0,
+        "trace_completeness": 0.9,
+        "resolution_quality": 0.9,
+        "last_touch_recency": 0.8,
+        "deploy_proximity": 0.7,
+    }
+
+
+def _sample_graph_context() -> dict[str, object]:
+    return {
+        "related_deployments": [{"deployment_id": "d1"}],
+        "related_alerts": [{"severity": "critical"}],
+    }
+
+
+def test_coverage_fields_exposed_from_evidence_coverage() -> None:
+    assessment = compute_confidence_assessment(
+        candidate_path="/srv/auth/handler.py",
+        signal_scores=_sample_signals(),
+        graph_context={
+            **_sample_graph_context(),
+            "evidence_coverage": {
+                "coverage_score": 0.375,
+                "coverage_level": "partial",
+                "missing_sources": ["jenkins", "datadog", "pagerduty", "confluence"],
+            },
+        },
+    )
+
+    assert assessment.coverage_score == 0.375
+    assert assessment.coverage_level == "partial"
+    assert "Missing Jenkins" in assessment.confidence_limitations
+    assert "Missing Datadog" in assessment.confidence_limitations
+    assert "Missing PagerDuty" in assessment.confidence_limitations
+    assert "Missing Confluence" in assessment.confidence_limitations
+
+    payload = assessment.to_dict()
+    assert payload["coverage_score"] == 0.375
+    assert payload["coverage_level"] == "partial"
+    assert payload["confidence_limitations"]
+
+
+def test_coverage_does_not_change_confidence_score() -> None:
+    base = compute_confidence_assessment(
+        candidate_path="/srv/auth/handler.py",
+        signal_scores=_sample_signals(),
+        graph_context=_sample_graph_context(),
+    )
+    with_coverage = compute_confidence_assessment(
+        candidate_path="/srv/auth/handler.py",
+        signal_scores=_sample_signals(),
+        graph_context={
+            **_sample_graph_context(),
+            "evidence_coverage": {
+                "coverage_score": 0.125,
+                "coverage_level": "low",
+                "missing_sources": [
+                    "jenkins",
+                    "datadog",
+                    "pagerduty",
+                    "confluence",
+                    "kubernetes",
+                    "gitlab",
+                    "github",
+                ],
+            },
+        },
+    )
+
+    assert with_coverage.confidence == base.confidence
+    assert with_coverage.confidence_level == base.confidence_level
+    assert with_coverage.supporting_factors == base.supporting_factors
+    assert with_coverage.contradicting_factors == base.contradicting_factors
+    assert with_coverage.evidence_breakdown == base.evidence_breakdown
+    assert with_coverage.confidence_limitations
+
+
+def test_build_confidence_graph_context_merges_unified_coverage() -> None:
+    from mcp.evidence_coverage import EvidenceCoverage
+
+    unified = type(
+        "UnifiedStub",
+        (),
+        {
+            "evidence_coverage": EvidenceCoverage(
+                coverage_score=0.5,
+                coverage_level="good",
+                missing_sources=["jenkins"],
+            )
+        },
+    )()
+
+    graph_context = build_confidence_graph_context(
+        {"related_deployments": [{"deployment_id": "d1"}]},
+        unified_investigation_context=unified,
+    )
+
+    assert graph_context is not None
+    assert graph_context["evidence_coverage"]["coverage_score"] == 0.5
+    assert graph_context["related_deployments"]
+
+
+def test_build_confidence_reasoning_includes_limitations() -> None:
+    text = build_confidence_reasoning(
+        {
+            "candidate": "/srv/auth/handler.py",
+            "confidence": 0.91,
+            "confidence_level": "high",
+            "supporting_factors": ["Deployment occurred within 5 minutes of incident"],
+            "contradicting_factors": [],
+            "confidence_limitations": ["Missing Jenkins", "Missing Datadog"],
+        }
+    )
+    assert "Confidence limitations" in text
+    assert "Missing Jenkins" in text
+    assert "Missing Datadog" in text

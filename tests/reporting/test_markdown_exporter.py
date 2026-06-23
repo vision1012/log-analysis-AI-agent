@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from reporting.markdown_exporter import export_markdown, render_markdown
-from reporting.report_models import InvestigationReport, RunbookEntry, SimilarIncidentEntry
+from reporting.report_models import (
+    EvidenceCoverageSection,
+    InvestigationReport,
+    RunbookEntry,
+    SimilarIncidentEntry,
+)
 
 
 def _sample_report() -> InvestigationReport:
@@ -33,6 +38,13 @@ def _sample_report() -> InvestigationReport:
         ],
         remediation_steps=["Follow runbook 'Payment Rollback': Rollback to previous deployment."],
         multi_agent_summary="Lead signal from deployment agent.",
+        evidence_coverage=EvidenceCoverageSection(
+            coverage_score=0.375,
+            coverage_level="partial",
+            available_sources=["jira", "github", "datadog"],
+            missing_sources=["jenkins", "pagerduty", "confluence"],
+            confidence_limitations=["Missing Jenkins", "Missing PagerDuty", "Missing Confluence"],
+        ),
         generated_at="2024-01-01T12:00:00Z",
     )
 
@@ -44,6 +56,10 @@ def test_render_markdown_includes_all_sections() -> None:
     assert "## Timeline" in content
     assert "## RCA Findings" in content
     assert "## Confidence Assessment" in content
+    assert "## Evidence Coverage" in content
+    assert "**Coverage Score:** 0.38" in content
+    assert "**Coverage Level:** partial" in content
+    assert "Missing Jenkins" in content
     assert "## Similar Incidents" in content
     assert "## Multi-Agent Findings" in content
     assert "## Runbooks" in content

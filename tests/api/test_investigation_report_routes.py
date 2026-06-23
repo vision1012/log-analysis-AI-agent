@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.services.investigation_graph_service import InvestigationGraphNotFoundError
-from reporting.report_models import InvestigationReport
+from reporting.report_models import EvidenceCoverageSection, InvestigationReport
 
 
 def _report() -> InvestigationReport:
@@ -24,6 +24,13 @@ def _report() -> InvestigationReport:
         confidence=0.85,
         confidence_reasoning="Confidence is high.",
         multi_agent_summary="Lead signal from rca agent.",
+        evidence_coverage=EvidenceCoverageSection(
+            coverage_score=0.5,
+            coverage_level="good",
+            available_sources=["jira", "datadog"],
+            missing_sources=["jenkins"],
+            confidence_limitations=["Missing Jenkins"],
+        ),
         generated_at="2024-01-01T12:00:00Z",
     )
 
@@ -39,6 +46,8 @@ def test_investigation_report_endpoint_success() -> None:
 
     assert body["report"]["investigation_id"] == "inv-1"
     assert body["report"]["root_cause"] == "/srv/auth/handler.py"
+    assert body["report"]["evidence_coverage"]["coverage_level"] == "good"
+    assert "Missing Jenkins" in body["report"]["evidence_coverage"]["confidence_limitations"]
 
 
 def test_investigation_report_endpoint_not_found() -> None:

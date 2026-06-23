@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from reporting.pdf_exporter import export_pdf, render_pdf_bytes
-from reporting.report_models import InvestigationReport
+from reporting.report_models import EvidenceCoverageSection, InvestigationReport
 
 
 def _sample_report() -> InvestigationReport:
@@ -18,6 +18,13 @@ def _sample_report() -> InvestigationReport:
         confidence_reasoning="Confidence for /srv/api/router.py is 0.73 (medium).",
         remediation_steps=["Review recent deployment changes."],
         multi_agent_summary="Lead signal from timeline agent.",
+        evidence_coverage=EvidenceCoverageSection(
+            coverage_score=0.5,
+            coverage_level="good",
+            available_sources=["jira", "datadog"],
+            missing_sources=["jenkins"],
+            confidence_limitations=["Missing Jenkins"],
+        ),
         generated_at="2024-01-01T12:00:00Z",
     )
 

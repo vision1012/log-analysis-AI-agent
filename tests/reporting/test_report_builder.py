@@ -76,6 +76,13 @@ def _sample_context() -> AgentInvestigationContext:
                     "confidence_level": "high",
                     "supporting_factors": ["deployment_proximity"],
                     "contradicting_factors": [],
+                    "coverage_score": 0.375,
+                    "coverage_level": "partial",
+                    "confidence_limitations": [
+                        "Missing Jenkins",
+                        "Missing PagerDuty",
+                        "Missing Confluence",
+                    ],
                 }
             ],
         },
@@ -135,12 +142,16 @@ def test_build_investigation_report_assembles_fields(
     assert report.runbooks[0].title == "Auth Recovery"
     assert report.remediation_steps
     assert report.multi_agent_summary
+    assert report.evidence_coverage.coverage_score == pytest.approx(0.375)
+    assert report.evidence_coverage.coverage_level == "partial"
+    assert "jenkins" in report.evidence_coverage.missing_sources
+    assert "Missing Jenkins" in report.evidence_coverage.confidence_limitations
     assert report.generated_at
 
 
 @patch("reporting.report_builder._get_evidence_store")
 def test_resolve_confidence_from_evidence_bundle(mock_get_store) -> None:
-    from reporting.report_builder import _resolve_confidence
+    from reporting.report_builder import _resolve_confidence, _resolve_evidence_coverage
 
     mock_get_store.return_value.get_bundle.return_value = {
         "confidence_assessment": {
@@ -149,6 +160,9 @@ def test_resolve_confidence_from_evidence_bundle(mock_get_store) -> None:
             "confidence_level": "medium",
             "supporting_factors": ["alert_correlation"],
             "contradicting_factors": [],
+            "coverage_score": 0.25,
+            "coverage_level": "partial",
+            "confidence_limitations": ["Missing Datadog"],
         }
     }
     store_record = {
@@ -157,3 +171,9 @@ def test_resolve_confidence_from_evidence_bundle(mock_get_store) -> None:
     confidence, reasoning = _resolve_confidence(store_record)
     assert confidence == pytest.approx(0.65)
     assert "Confidence for /app/main.py" in reasoning
+
+    coverage = _resolve_evidence_coverage(store_record)
+    assert coverage.coverage_score == pytest.approx(0.25)
+    assert coverage.coverage_level == "partial"
+    assert coverage.confidence_limitations == ["Missing Datadog"]
+    assert coverage.missing_sources == ["datadog"]

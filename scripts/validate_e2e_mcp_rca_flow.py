@@ -4,10 +4,12 @@ End-to-end validation for MCP-powered RCA (mock or live).
 
 Validates:
   Jira ticket -> MCP context preview -> Neo4j investigation graph -> RCA run ->
-  GraphRAG explanation -> confidence assessment -> API response shape.
+  GraphRAG explanation -> confidence assessment -> evidence coverage ->
+  confidence limitations -> investigation report -> API response shape.
 
-Mock mode uses embedded ticket + sample logs; no external Jira/GitHub/Jenkins/
-Datadog/Kubernetes/PagerDuty/Confluence credentials required on the API host.
+Mock mode uses embedded ticket + sample logs and in-process coverage fixtures;
+no external Jira/GitHub/Jenkins/Datadog/Kubernetes/PagerDuty/Confluence
+credentials required on the API host.
 
 Live mode uses CLI/env values and reports SKIPPED for providers without credentials.
 
@@ -77,7 +79,25 @@ UNIFIED_CONTEXT_FIELDS = (
     "architecture_documents",
     "pipelines",
     "source_metadata",
+    "evidence_coverage",
 )
+
+PROVIDER_DISPLAY: dict[str, str] = {
+    "jira": "Jira",
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "jenkins": "Jenkins",
+    "datadog": "Datadog",
+    "kubernetes": "Kubernetes",
+    "pagerduty": "PagerDuty",
+    "confluence": "Confluence",
+}
+
+MOCK_COVERAGE_EXPECTATIONS: dict[str, bool] = {
+    "jira": True,
+    "github": True,
+    "datadog": False,
+}
 
 LIVE_PROVIDER_ENV: dict[str, list[str]] = {
     "jira": ["JIRA_BASE_URL", "JIRA_API_TOKEN"],
@@ -314,6 +334,211 @@ def _extract_confidence_assessments(rca_payload: dict[str, Any]) -> list[dict[st
     return out
 
 
+def _extract_evidence_coverage(payload: dict[str, Any]) -> dict[str, Any]:
+    coverage = payload.get("evidence_coverage")
+    return coverage if isinstance(coverage, dict) else {}
+
+
+def _mock_coverage_context() -> dict[str, Any]:
+    """In-process fixture: Jira + GitHub contribute; Datadog missing."""
+    from mcp.context.investigation_context import UnifiedInvestigationContext
+    from mcp.evidence_coverage import attach_evidence_coverage
+    from mcp.schemas.github_models import McpCommit, McpPullRequest
+    from mcp.schemas.jira_models import McpTicketContext
+
+    context = attach_evidence_coverage(
+        UnifiedInvestigationContext(
+            ticket_context=McpTicketContext(issue_key="MOCK-1001", summary="Auth outage"),
+            pull_requests=[McpPullRequest(number=42, title="Fix auth handler")],
+            commits=[McpCommit(sha="deadbeef", message="fix auth")],
+        )
+    )
+    coverage = context.evidence_coverage
+    if coverage is None:
+        return {}
+    return coverage.model_dump()
+
+
+def _provider_display(source: str) -> str:
+    return PROVIDER_DISPLAY.get(source, source.replace("_", " ").title())
+
+
+def _validate_provider_contribution(
+    run: ValidationRun,
+    source: str,
+    coverage: dict[str, Any],
+    *,
+    expect_contributed: bool,
+) -> None:
+    name = _provider_display(source)
+    available = [str(s) for s in (coverage.get("available_sources") or [])]
+    missing = [str(s) for s in (coverage.get("missing_sources") or [])]
+    if expect_contributed:
+        if source in available:
+            run.record(f"{name} contributed", "PASS")
+        else:
+            run.record(
+                f"{name} contributed",
+                "FAIL",
+                f"expected in available_sources; got available={available}",
+            )
+    elif source in missing:
+        run.record(f"{name} missing", "PASS")
+    else:
+        run.record(
+            f"{name} missing",
+            "FAIL",
+            f"expected in missing_sources; got missing={missing}",
+        )
+
+
+def _validate_coverage_generation(run: ValidationRun, coverage: dict[str, Any]) -> None:
+    if not coverage:
+        run.record("Coverage generated", "FAIL", "evidence_coverage missing")
+        return
+    score = coverage.get("coverage_score")
+    level = coverage.get("coverage_level")
+    if score is None or level is None:
+        run.record("Coverage generated", "FAIL", "coverage_score or coverage_level missing")
+        return
+    run.record("Coverage generated", "PASS", f"score={score} level={level}")
+
+
+def _validate_provider_health(run: ValidationRun, client: HttpClient, *, mode: str) -> None:
+    try:
+        response = client.get("/api/v1/mcp/connections", timeout=30.0)
+    except HTTPError as exc:
+        run.record("MCP provider health", "FAIL", f"HTTP {exc.code}")
+        return
+    except (URLError, TimeoutError, OSError) as exc:
+        run.record("MCP provider health", "FAIL", str(exc))
+        return
+
+    connections = response.get("connections") or []
+    if not isinstance(connections, list) or not connections:
+        run.record("MCP provider health", "FAIL", "connections list empty")
+        return
+
+    checked = 0
+    for conn in connections:
+        if not isinstance(conn, dict):
+            continue
+        provider = str(conn.get("provider") or "")
+        if not provider:
+            continue
+        name = _provider_display(provider)
+        if mode == "live" and not _provider_env_configured(provider):
+            run.record(f"MCP health: {name}", "SKIPPED", "credentials not configured")
+            continue
+        checked += 1
+        if conn.get("healthy"):
+            run.record(f"MCP health: {name}", "PASS", "healthy")
+        elif conn.get("configured"):
+            detail = str(conn.get("error_message") or "unhealthy")
+            run.record(f"MCP health: {name}", "FAIL", detail)
+        else:
+            run.record(f"MCP health: {name}", "SKIPPED", "not configured")
+
+    if checked == 0 and mode == "mock":
+        run.record("MCP provider health", "PASS", f"connections endpoint ok ({len(connections)} providers)")
+
+
+def _validate_confidence_limitations(run: ValidationRun, assessments: list[dict[str, Any]]) -> None:
+    if not assessments:
+        run.record("Confidence limitations generated", "SKIPPED", "no confidence assessments")
+        return
+    top = assessments[0]
+    limitations = top.get("confidence_limitations") or []
+    if isinstance(limitations, list) and limitations:
+        run.record(
+            "Confidence limitations generated",
+            "PASS",
+            "; ".join(str(item) for item in limitations[:4]),
+        )
+        return
+    if top.get("coverage_score") is not None or top.get("coverage_level"):
+        run.record(
+            "Confidence limitations generated",
+            "PASS",
+            "coverage metadata present with empty limitations",
+        )
+        return
+    run.record("Confidence limitations generated", "FAIL", "confidence_limitations missing")
+
+
+def _validate_report_coverage_section(
+    run: ValidationRun,
+    client: HttpClient,
+    investigation_id: str,
+) -> None:
+    if not investigation_id:
+        run.record("Report coverage section present", "SKIPPED", "investigation_id not returned")
+        return
+    try:
+        response = client.get(f"/api/v1/investigations/{investigation_id}/report", timeout=120.0)
+    except HTTPError as exc:
+        if exc.code == 404:
+            run.record(
+                "Report coverage section present",
+                "SKIPPED",
+                "investigation graph not found for report API",
+            )
+        else:
+            run.record("Report coverage section present", "FAIL", f"HTTP {exc.code}")
+        return
+    except (URLError, TimeoutError, OSError) as exc:
+        run.record("Report coverage section present", "FAIL", str(exc))
+        return
+
+    report = response.get("report") if isinstance(response, dict) else {}
+    coverage = report.get("evidence_coverage") if isinstance(report, dict) else None
+    if not isinstance(coverage, dict):
+        run.record("Report coverage section present", "FAIL", "report.evidence_coverage missing")
+        return
+    required = ("coverage_score", "coverage_level", "available_sources", "missing_sources", "confidence_limitations")
+    missing = [key for key in required if key not in coverage]
+    if missing:
+        run.record(
+            "Report coverage section present",
+            "FAIL",
+            f"missing fields: {', '.join(missing)}",
+        )
+        return
+    run.record(
+        "Report coverage section present",
+        "PASS",
+        f"level={coverage.get('coverage_level')} score={coverage.get('coverage_score')}",
+    )
+
+
+def _validate_coverage_suite(
+    run: ValidationRun,
+    coverage: dict[str, Any],
+    *,
+    contribution_expectations: dict[str, bool] | None = None,
+) -> None:
+    _validate_coverage_generation(run, coverage)
+    if contribution_expectations:
+        for source, expect_contributed in contribution_expectations.items():
+            _validate_provider_contribution(
+                run,
+                source,
+                coverage,
+                expect_contributed=expect_contributed,
+            )
+    else:
+        details = coverage.get("source_details") or {}
+        if isinstance(details, dict):
+            for source, detail in details.items():
+                if not isinstance(detail, dict):
+                    continue
+                name = _provider_display(str(source))
+                if detail.get("contributed"):
+                    run.record(f"{name} contributed", "PASS")
+                else:
+                    run.record(f"{name} missing", "PASS")
+
+
 def run_validation(args: argparse.Namespace) -> int:
     run = ValidationRun(mode=args.mode, base_url=args.base_url.rstrip("/"))
     print("=== MCP RCA E2E validation ===")
@@ -397,6 +622,17 @@ def run_validation(args: argparse.Namespace) -> int:
     except (URLError, TimeoutError, OSError) as exc:
         run.record("Context preview", "FAIL", str(exc))
 
+    preview_coverage = _extract_evidence_coverage(context_preview)
+    _validate_provider_health(run, client, mode=args.mode)
+
+    if args.mode == "mock":
+        mock_coverage = _mock_coverage_context()
+        _validate_coverage_suite(run, mock_coverage, contribution_expectations=MOCK_COVERAGE_EXPECTATIONS)
+    elif preview_coverage:
+        _validate_coverage_suite(run, preview_coverage)
+    else:
+        run.record("Coverage generated", "SKIPPED", "context preview returned no evidence_coverage")
+
     # Bootstrap anomaly for deterministic RCA + confidence (mock default)
     anomaly_id = (args.anomaly_id or "").strip() or f"e2e-mcp-rca-{uuid.uuid4().hex[:10]}"
     if args.bootstrap_anomaly:
@@ -464,6 +700,7 @@ def run_validation(args: argparse.Namespace) -> int:
             "PASS",
             f"confidence={top_a.get('confidence')} level={top_a.get('confidence_level')}",
         )
+        _validate_confidence_limitations(run, assessments)
     else:
         # jira_log mode may lack graph confidence — check explanation confidence fields
         expl = rca_payload.get("explanation_payload") or {}
@@ -473,8 +710,10 @@ def run_validation(args: argparse.Namespace) -> int:
                 "SKIPPED",
                 "no graph confidence_assessment; explanation confidence_note present (jira_log or no anomaly RCA)",
             )
+            run.record("Confidence limitations generated", "SKIPPED", "no graph confidence assessments")
         else:
             run.record("Confidence assessment", "FAIL", "confidence_assessment missing")
+            run.record("Confidence limitations generated", "FAIL", "confidence assessments unavailable")
 
     # 8) GraphRAG explanation
     expl_payload = rca_payload.get("explanation_payload") or {}
@@ -524,6 +763,8 @@ def run_validation(args: argparse.Namespace) -> int:
             run.record("Neo4j investigation graph", "PASS", f"graceful: {detail}")
     else:
         run.record("Neo4j investigation graph", "SKIPPED", "investigation_id not returned (persistence optional)")
+
+    _validate_report_coverage_section(run, client, investigation_id)
 
     # 11) Evidence bundle
     refs = evidence_summary.get("evidence_refs") if isinstance(evidence_summary, dict) else None

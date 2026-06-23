@@ -18,6 +18,7 @@ from graph.retrieval_models import GraphRunbookRecord, SimilarInvestigation
 from investigation.timeline_models import InvestigationTimelineEvent
 from rca_engine.confidence_engine import build_confidence_reasoning
 from reporting.report_models import (
+    EvidenceCoverageSection,
     FeedbackHistoryEntry,
     InvestigationReport,
     RunbookEntry,
@@ -60,13 +61,24 @@ def _get_evidence_store():
     return LocalFileEvidenceStore(base)
 
 
-def _resolve_confidence(store_record: dict[str, Any]) -> tuple[float, str]:
+_PROVIDER_LABELS: dict[str, str] = {
+    "jira": "Jira",
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "jenkins": "Jenkins",
+    "datadog": "Datadog",
+    "kubernetes": "Kubernetes",
+    "pagerduty": "PagerDuty",
+    "confluence": "Confluence",
+}
+
+
+def _top_confidence_assessment(store_record: dict[str, Any]) -> dict[str, Any]:
     assessments = store_record.get("confidence_assessments") or []
-    if isinstance(assessments, list) and assessments:
-        top = assessments[0]
-        if isinstance(top, dict):
-            confidence = float(top.get("confidence") or 0.0)
-            return confidence, build_confidence_reasoning(top)
+    if isinstance(assessments, list):
+        for item in assessments:
+            if isinstance(item, dict):
+                return item
 
     refs = (store_record.get("rca_result_ref") or {}).get("evidence_refs") or []
     if isinstance(refs, list):
@@ -79,8 +91,75 @@ def _resolve_confidence(store_record: dict[str, Any]) -> tuple[float, str]:
                 continue
             assessment = bundle.get("confidence_assessment")
             if isinstance(assessment, dict):
-                confidence = float(assessment.get("confidence") or 0.0)
-                return confidence, build_confidence_reasoning(assessment)
+                return assessment
+    return {}
+
+
+def _missing_sources_from_limitations(limitations: list[Any]) -> list[str]:
+    label_to_source = {label.lower(): key for key, label in _PROVIDER_LABELS.items()}
+    missing: list[str] = []
+    for item in limitations:
+        text = str(item or "").strip()
+        if not text.lower().startswith("missing "):
+            continue
+        label = text[len("Missing ") :].strip().lower()
+        source = label_to_source.get(label)
+        if source:
+            missing.append(source)
+    return missing
+
+
+def _limitations_from_missing_sources(missing_sources: list[Any]) -> list[str]:
+    limitations: list[str] = []
+    for source in missing_sources:
+        key = str(source or "").strip().lower()
+        if not key:
+            continue
+        label = _PROVIDER_LABELS.get(key, key.replace("_", " ").title())
+        limitations.append(f"Missing {label}")
+    return limitations
+
+
+def _resolve_evidence_coverage(store_record: dict[str, Any]) -> EvidenceCoverageSection:
+    raw = store_record.get("evidence_coverage")
+    if isinstance(raw, dict):
+        missing = list(raw.get("missing_sources") or [])
+        limitations = list(raw.get("confidence_limitations") or [])
+        if not limitations and missing:
+            limitations = _limitations_from_missing_sources(missing)
+        return EvidenceCoverageSection(
+            coverage_score=float(raw.get("coverage_score") or 0.0),
+            coverage_level=str(raw.get("coverage_level") or "low"),
+            available_sources=[str(s) for s in (raw.get("available_sources") or []) if s],
+            missing_sources=[str(s) for s in missing if s],
+            confidence_limitations=[str(item) for item in limitations if item],
+        )
+
+    assessment = _top_confidence_assessment(store_record)
+    if assessment:
+        missing = [str(s) for s in (assessment.get("missing_sources") or []) if s]
+        limitations = [str(item) for item in (assessment.get("confidence_limitations") or []) if item]
+        if not missing and limitations:
+            missing = _missing_sources_from_limitations(limitations)
+        available = [str(s) for s in (assessment.get("available_sources") or []) if s]
+        if not limitations and missing:
+            limitations = _limitations_from_missing_sources(missing)
+        return EvidenceCoverageSection(
+            coverage_score=float(assessment.get("coverage_score") or 0.0),
+            coverage_level=str(assessment.get("coverage_level") or "low"),
+            available_sources=available,
+            missing_sources=missing,
+            confidence_limitations=limitations,
+        )
+
+    return EvidenceCoverageSection()
+
+
+def _resolve_confidence(store_record: dict[str, Any]) -> tuple[float, str]:
+    assessment = _top_confidence_assessment(store_record)
+    if assessment:
+        confidence = float(assessment.get("confidence") or 0.0)
+        return confidence, build_confidence_reasoning(assessment)
 
     return 0.0, "No confidence assessment available."
 
@@ -277,5 +356,6 @@ def build_investigation_report(
             multi_agent_report,
         ),
         multi_agent_summary=multi_agent_report.final_summary,
+        evidence_coverage=_resolve_evidence_coverage(store_record),
         generated_at=_utc_now_iso(),
     )

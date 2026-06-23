@@ -16,6 +16,17 @@ from rca_engine.ranking_model import RankedCandidate
 CONFIDENCE_LEVEL_HIGH = 0.75
 CONFIDENCE_LEVEL_MEDIUM = 0.50
 
+_PROVIDER_LABELS: dict[str, str] = {
+    "jira": "Jira",
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "jenkins": "Jenkins",
+    "datadog": "Datadog",
+    "kubernetes": "Kubernetes",
+    "pagerduty": "PagerDuty",
+    "confluence": "Confluence",
+}
+
 
 def _env_float(name: str, default: float) -> float:
     raw = (os.environ.get(name) or "").strip()
@@ -54,6 +65,9 @@ class ConfidenceAssessment:
     supporting_factors: list[str] = field(default_factory=list)
     contradicting_factors: list[str] = field(default_factory=list)
     evidence_breakdown: dict[str, float] = field(default_factory=dict)
+    coverage_score: float = 0.0
+    coverage_level: str = "low"
+    confidence_limitations: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +77,9 @@ class ConfidenceAssessment:
             "supporting_factors": list(self.supporting_factors),
             "contradicting_factors": list(self.contradicting_factors),
             "evidence_breakdown": dict(self.evidence_breakdown),
+            "coverage_score": round(self.coverage_score, 4),
+            "coverage_level": self.coverage_level,
+            "confidence_limitations": list(self.confidence_limitations),
         }
 
 
@@ -89,6 +106,60 @@ def _has_deployment_activity(graph_context: dict[str, Any] | None) -> bool:
         return False
     deployments = graph_context.get("related_deployments") or []
     return isinstance(deployments, list) and len(deployments) > 0
+
+
+def _parse_evidence_coverage(graph_context: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(graph_context, dict):
+        return {}
+    raw = graph_context.get("evidence_coverage")
+    if raw is None:
+        return {}
+    if hasattr(raw, "model_dump"):
+        return raw.model_dump()
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
+def _build_confidence_limitations(missing_sources: list[Any]) -> list[str]:
+    limitations: list[str] = []
+    for source in missing_sources:
+        key = str(source or "").strip().lower()
+        if not key:
+            continue
+        label = _PROVIDER_LABELS.get(key, key.replace("_", " ").title())
+        limitations.append(f"Missing {label}")
+    return limitations
+
+
+def _coverage_metadata(
+    graph_context: dict[str, Any] | None,
+) -> tuple[float, str, list[str]]:
+    coverage = _parse_evidence_coverage(graph_context)
+    if not coverage:
+        return 0.0, "low", []
+    score = float(coverage.get("coverage_score") or 0.0)
+    level = str(coverage.get("coverage_level") or "low")
+    missing = coverage.get("missing_sources") or []
+    if not isinstance(missing, list):
+        missing = []
+    return score, level, _build_confidence_limitations(missing)
+
+
+def build_confidence_graph_context(
+    mcp_graph_context: dict[str, Any] | None,
+    *,
+    unified_investigation_context: Any | None = None,
+) -> dict[str, Any] | None:
+    """Merge MCP graph context with evidence coverage for confidence assessment."""
+    merged: dict[str, Any] = dict(mcp_graph_context or {})
+    if unified_investigation_context is not None:
+        coverage = getattr(unified_investigation_context, "evidence_coverage", None)
+        if coverage is not None:
+            merged["evidence_coverage"] = (
+                coverage.model_dump() if hasattr(coverage, "model_dump") else coverage
+            )
+    return merged or None
 
 
 def compute_confidence_assessment(
@@ -223,6 +294,8 @@ def compute_confidence_assessment(
             if points > 0 and key not in breakdown:
                 breakdown[f"score_{key}"] = round(points / 100.0, 4)
 
+    coverage_score, coverage_level, confidence_limitations = _coverage_metadata(graph_context)
+
     final = round(_clamp(score), 4)
     return ConfidenceAssessment(
         candidate=candidate,
@@ -231,6 +304,9 @@ def compute_confidence_assessment(
         supporting_factors=supporting,
         contradicting_factors=contradicting,
         evidence_breakdown=breakdown,
+        coverage_score=coverage_score,
+        coverage_level=coverage_level,
+        confidence_limitations=confidence_limitations,
     )
 
 
@@ -266,6 +342,7 @@ def build_confidence_reasoning(assessment: ConfidenceAssessment | dict[str, Any]
     level = str(data.get("confidence_level") or "low")
     supporting = data.get("supporting_factors") or []
     contradicting = data.get("contradicting_factors") or []
+    limitations = data.get("confidence_limitations") or []
 
     parts = [
         f"Confidence for {candidate} is {confidence:.2f} ({level}).",
@@ -274,6 +351,8 @@ def build_confidence_reasoning(assessment: ConfidenceAssessment | dict[str, Any]
         parts.append("Supporting factors: " + "; ".join(str(s) for s in supporting[:6]) + ".")
     if contradicting:
         parts.append("Contradicting factors: " + "; ".join(str(c) for c in contradicting[:6]) + ".")
+    if limitations:
+        parts.append("Confidence limitations: " + "; ".join(str(item) for item in limitations[:6]) + ".")
     if not supporting and not contradicting:
         parts.append("Limited corroborating evidence available.")
     return " ".join(parts)

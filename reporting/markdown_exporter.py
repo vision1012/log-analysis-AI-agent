@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from reporting.report_builder import get_reports_dir
-from reporting.report_models import InvestigationReport
+from reporting.report_models import EvidenceCoverageSection, InvestigationReport
 
 
 def _section(title: str, body: str) -> str:
@@ -16,6 +16,23 @@ def _bullet_list(items: list[str]) -> str:
     if not items:
         return "_None recorded._"
     return "\n".join(f"- {item}" for item in items)
+
+
+def _format_evidence_coverage(section: EvidenceCoverageSection) -> str:
+    available = _bullet_list(section.available_sources) if section.available_sources else "_None recorded._"
+    missing = _bullet_list(section.missing_sources) if section.missing_sources else "_None recorded._"
+    limitations = (
+        _bullet_list(section.confidence_limitations)
+        if section.confidence_limitations
+        else "_None recorded._"
+    )
+    return (
+        f"**Coverage Score:** {section.coverage_score:.2f}\n\n"
+        f"**Coverage Level:** {section.coverage_level}\n\n"
+        f"**Available Sources:**\n{available}\n\n"
+        f"**Missing Sources:**\n{missing}\n\n"
+        f"**Confidence Limitations:**\n{limitations}"
+    )
 
 
 def render_markdown(report: InvestigationReport) -> str:
@@ -37,6 +54,7 @@ def render_markdown(report: InvestigationReport) -> str:
             "Confidence Assessment",
             report.confidence_reasoning or "No confidence reasoning available.",
         ),
+        _section("Evidence Coverage", _format_evidence_coverage(report.evidence_coverage)),
     ]
 
     similar_lines = []
