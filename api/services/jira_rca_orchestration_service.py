@@ -274,6 +274,7 @@ def _run_deterministic_rca_for_input(ctx: RcaInputContext) -> dict[str, object]:
             force=ctx.force,
             investigation_id=ctx.investigation_id,
             unified_investigation_context=ctx.mcp_context,
+            log_content=ctx.log_content,
         )
         if str(run.get("status") or "") == "completed":
             run["rca_view"] = get_rca_result_view(ctx.anomaly_id)

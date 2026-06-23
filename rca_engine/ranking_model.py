@@ -32,6 +32,7 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "spike_correlation_strength": 0.08,
     "trace_completeness": 0.10,
     "file_touch_sparsity": 0.07,
+    "keyword_alignment": 0.08,
 }
 
 MCP_DEFAULT_WEIGHTS: dict[str, float] = {
@@ -47,6 +48,7 @@ UNAVAILABLE_WHEN_ZERO = (
     "deploy_proximity",
     "deploy_recency_rank",
     "spike_correlation_strength",
+    "keyword_alignment",
     "deployment_proximity_mcp",
     "alert_correlation",
     "incident_severity",

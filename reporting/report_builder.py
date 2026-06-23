@@ -17,10 +17,12 @@ from graph.neo4j_client import Neo4jClient
 from graph.retrieval_models import GraphRunbookRecord, SimilarInvestigation
 from investigation.timeline_models import InvestigationTimelineEvent
 from rca_engine.confidence_engine import build_confidence_reasoning
+from rca_engine.signal_computation import KeywordSignal
 from reporting.report_models import (
     EvidenceCoverageSection,
     FeedbackHistoryEntry,
     InvestigationReport,
+    KeywordEvidenceSection,
     RunbookEntry,
     SimilarIncidentEntry,
 )
@@ -153,6 +155,52 @@ def _resolve_evidence_coverage(store_record: dict[str, Any]) -> EvidenceCoverage
         )
 
     return EvidenceCoverageSection()
+
+
+def _resolve_keyword_evidence(store_record: dict[str, Any], root_cause: str) -> KeywordEvidenceSection:
+    refs = (store_record.get("rca_result_ref") or {}).get("evidence_refs") or []
+    if isinstance(refs, list):
+        evidence_store = _get_evidence_store()
+        for ref in refs:
+            if not isinstance(ref, str):
+                continue
+            bundle = evidence_store.get_bundle(ref)
+            if not isinstance(bundle, dict):
+                continue
+            raw = bundle.get("keyword_signal")
+            if isinstance(raw, dict):
+                signal = KeywordSignal.from_dict(raw)
+                return KeywordEvidenceSection(
+                    candidate_path=root_cause or str(bundle.get("attributed_file_id") or ""),
+                    keyword_score=signal.keyword_score,
+                    matched_keywords=list(signal.matched_keywords),
+                    keyword_categories=list(signal.keyword_categories),
+                )
+
+    raw_store = store_record.get("keyword_signal")
+    if isinstance(raw_store, dict):
+        signal = KeywordSignal.from_dict(raw_store)
+        return KeywordEvidenceSection(
+            candidate_path=root_cause,
+            keyword_score=signal.keyword_score,
+            matched_keywords=list(signal.matched_keywords),
+            keyword_categories=list(signal.keyword_categories),
+        )
+
+    snapshot = store_record.get("derived_signals_snapshot") or {}
+    merged = snapshot.get("merged") if isinstance(snapshot, dict) else {}
+    keywords = []
+    if isinstance(merged, dict):
+        keywords = [str(k) for k in (merged.get("error_keywords") or []) if k]
+    if keywords:
+        return KeywordEvidenceSection(
+            candidate_path=root_cause,
+            keyword_score=min(1.0, len(keywords) / 6.0),
+            matched_keywords=keywords[:20],
+            keyword_categories=[],
+        )
+
+    return KeywordEvidenceSection(candidate_path=root_cause)
 
 
 def _resolve_confidence(store_record: dict[str, Any]) -> tuple[float, str]:
@@ -357,5 +405,6 @@ def build_investigation_report(
         ),
         multi_agent_summary=multi_agent_report.final_summary,
         evidence_coverage=_resolve_evidence_coverage(store_record),
+        keyword_evidence=_resolve_keyword_evidence(store_record, root_cause),
         generated_at=_utc_now_iso(),
     )

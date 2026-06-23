@@ -98,6 +98,28 @@ def _attach_confidence_explanation(output: dict[str, Any], context_pack: dict[st
     return output
 
 
+def _attach_supplementary_context(
+    output: dict[str, Any],
+    *,
+    context_pack: dict[str, Any],
+) -> dict[str, Any]:
+    """Expose packed supplementary context on the explanation output (additive)."""
+    for key in (
+        "jira_ticket_context",
+        "feedback_context",
+        "similar_incident_context",
+        "multi_agent_findings",
+    ):
+        value = context_pack.get(key)
+        if value:
+            output[key] = value
+    investigation_context = context_pack.get("investigation_context") or {}
+    previous = investigation_context.get("previous_investigations")
+    if previous:
+        output["previous_investigations"] = previous
+    return output
+
+
 def _finalize_explanation_output(
     output: dict[str, Any],
     *,
@@ -109,7 +131,8 @@ def _finalize_explanation_output(
         context_pack=context_pack,
         unified_investigation_context=unified_investigation_context,
     )
-    return _attach_confidence_explanation(with_narrative, context_pack)
+    with_confidence = _attach_confidence_explanation(with_narrative, context_pack)
+    return _attach_supplementary_context(with_confidence, context_pack=context_pack)
 
 
 def _attach_investigation_narrative(
@@ -124,6 +147,12 @@ def _attach_investigation_narrative(
             {"candidates": context_pack.get("candidates") or [], "ranked_hypotheses": output.get("ranked_hypotheses") or []},
             unified_context=unified_investigation_context,
             graph_context=context_pack.get("investigation_context") or {},
+            supplementary_context={
+                "jira_ticket_context": context_pack.get("jira_ticket_context") or {},
+                "feedback_context": context_pack.get("feedback_context") or {},
+                "similar_incident_context": context_pack.get("similar_incident_context") or {},
+                "multi_agent_findings": context_pack.get("multi_agent_findings") or {},
+            },
         )
         return attach_narrative_to_output(output, narrative)
     except Exception as exc:
@@ -262,6 +291,7 @@ def generate_explanation(
     service_name: Optional[str] = None,
     ticket_key: Optional[str] = None,
     alert_id: Optional[str] = None,
+    multi_agent_report: Any | None = None,
 ) -> dict[str, Any]:
     """
     Generate explanation for the latest deterministic RCA run (or provided run_id).
@@ -285,6 +315,8 @@ def generate_explanation(
         service_name=service_name,
         ticket_key=ticket_key,
         alert_id=alert_id,
+        unified_investigation_context=unified_investigation_context,
+        multi_agent_report=multi_agent_report,
         max_candidates=3,
     )
     summarized_evidence = summarize_evidence(context_pack)

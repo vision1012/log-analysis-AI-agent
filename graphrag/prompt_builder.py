@@ -9,6 +9,9 @@ MINIMAL_DETERMINISTIC_SYSTEM_PROMPT = (
     "You are an RCA explanation assistant. You receive ONLY the deterministic JSON block "
     "under deterministic_context. Do not invent files, commits, deployments, incidents, or candidates. "
     "Do not re-rank or change confidence. "
+    "When provided, you may reference Ticket Context, Historical Feedback, Historical Incidents, "
+    "and Multi-Agent Findings (Agent Findings) only as written in deterministic_context; "
+    "do not invent additional history. "
     "Write an assistive narrative that explains the top candidate in plain language. "
     "Output strict JSON only, with exactly these keys and no others: "
     "explanation_summary, evidence_highlights, confidence_alignment_note, optional_patch_direction, limitations. "
@@ -125,6 +128,126 @@ def _evidence_bullet_strings(summarized_evidence: list[Mapping[str, Any]] | list
     return out
 
 
+def _historical_feedback_lines(context_pack: Mapping[str, Any], *, limit: int = 6) -> list[str]:
+    lines: list[str] = []
+    feedback = context_pack.get("feedback_context") or {}
+    if isinstance(feedback, dict):
+        for item in feedback.get("confirmed_rcas") or []:
+            lines.append(
+                f"Confirmed RCA for candidate {item.get('candidate_id')}: {item.get('comments') or 'no comment'}"
+            )
+        for item in feedback.get("rejected_rcas") or []:
+            lines.append(
+                f"Rejected RCA for candidate {item.get('candidate_id')}: {item.get('comments') or 'no comment'}"
+            )
+        for item in feedback.get("overridden_rcas") or []:
+            lines.append(
+                "Overridden RCA "
+                f"{item.get('candidate_id')} -> {item.get('override_candidate_id')}: "
+                f"{item.get('comments') or 'no comment'}"
+            )
+
+    similar = context_pack.get("similar_incident_context") or {}
+    if isinstance(similar, dict):
+        for item in similar.get("historical_feedback") or []:
+            lines.append(
+                "Historical Feedback on similar incident "
+                f"{item.get('investigation_id')}: {item.get('feedback_type')} "
+                f"candidate {item.get('candidate_id')}"
+            )
+
+    deduped: list[str] = []
+    for line in lines:
+        text = str(line).strip()
+        if text and text not in deduped:
+            deduped.append(text)
+    return deduped[:limit]
+
+
+def _historical_incident_lines(context_pack: Mapping[str, Any], *, limit: int = 6) -> list[str]:
+    lines: list[str] = []
+    similar = context_pack.get("similar_incident_context") or {}
+    if not isinstance(similar, dict):
+        return lines
+
+    for item in similar.get("previous_investigation_summaries") or []:
+        explanation = str(item.get("match_explanation") or "").strip()
+        if explanation:
+            lines.append(explanation)
+        else:
+            lines.append(
+                "Historical incident "
+                f"{item.get('investigation_id')} (score {item.get('similarity_score')}): "
+                f"{item.get('resolution_summary') or 'prior investigation'}"
+            )
+    for item in similar.get("historical_root_causes") or []:
+        lines.append(
+            f"Historical root cause from {item.get('investigation_id')}: {item.get('root_cause')}"
+        )
+    for item in similar.get("historical_remediation_actions") or []:
+        lines.append(
+            f"Historical remediation from {item.get('investigation_id')}: {item.get('action')}"
+        )
+
+    # Also surface legacy previous_investigations when similar context is empty.
+    if not lines:
+        investigation_context = context_pack.get("investigation_context") or {}
+        for item in investigation_context.get("previous_investigations") or []:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                "Historical incident "
+                f"{item.get('investigation_id') or item.get('ticket_key')}: "
+                f"{item.get('match_reason') or 'similar investigation'}"
+            )
+
+    deduped: list[str] = []
+    for line in lines:
+        text = str(line).strip()
+        if text and text not in deduped:
+            deduped.append(text)
+    return deduped[:limit]
+
+
+def _multi_agent_prompt_block(context_pack: Mapping[str, Any]) -> dict[str, Any]:
+    findings = context_pack.get("multi_agent_findings") or {}
+    if not isinstance(findings, dict) or not findings:
+        return {}
+    compact: dict[str, Any] = {}
+    for key in (
+        "timeline_findings",
+        "deployment_findings",
+        "infrastructure_findings",
+        "incident_findings",
+        "knowledge_findings",
+        "rca_findings",
+    ):
+        value = findings.get(key)
+        if isinstance(value, dict) and value.get("summary"):
+            compact[key] = {
+                "summary": value.get("summary"),
+                "key_observations": list(value.get("key_observations") or [])[:3],
+                "confidence": value.get("confidence"),
+            }
+    if findings.get("final_summary"):
+        compact["final_summary"] = findings.get("final_summary")
+    return compact
+
+
+def _ticket_context_block(context_pack: Mapping[str, Any]) -> dict[str, Any]:
+    jira = context_pack.get("jira_ticket_context") or {}
+    if not isinstance(jira, dict) or not any(jira.get(key) for key in ("summary", "issue_key")):
+        return {}
+    return {
+        "issue_key": jira.get("issue_key"),
+        "summary": jira.get("summary"),
+        "description": jira.get("description"),
+        "priority": jira.get("priority"),
+        "status": jira.get("status"),
+        "labels": list(jira.get("labels") or [])[:8],
+    }
+
+
 def build_minimal_deterministic_prompt(
     context_pack: Mapping[str, Any],
     summarized_evidence: list[Mapping[str, Any]] | list[str],
@@ -141,6 +264,11 @@ def build_minimal_deterministic_prompt(
     primary_confidence = float(primary.get("confidence") or 0.0)
     bullets = _evidence_bullet_strings(summarized_evidence)
     limitations_context = str(context_pack.get("limitations_context") or "").strip()
+    jira_ticket_context = context_pack.get("jira_ticket_context") or {}
+    ticket_context = _ticket_context_block(context_pack)
+    historical_feedback = _historical_feedback_lines(context_pack)
+    historical_incidents = _historical_incident_lines(context_pack)
+    multi_agent_findings = _multi_agent_prompt_block(context_pack)
 
     payload = {
         "deterministic_context": {
@@ -149,6 +277,12 @@ def build_minimal_deterministic_prompt(
             "primary_confidence": primary_confidence,
             "evidence_highlights": bullets[:12],
             "limitations_context": limitations_context,
+            "jira_ticket_context": jira_ticket_context,
+            "Ticket Context": ticket_context,
+            "Historical Feedback": historical_feedback,
+            "Historical Incidents": historical_incidents,
+            "Multi-Agent Findings": multi_agent_findings,
+            "Agent Findings": multi_agent_findings,
         },
         "output_contract": {
             "json_only": True,

@@ -493,6 +493,121 @@ def _build_supporting_evidence(graph_context: dict[str, Any]) -> list[str]:
     return evidence[:12]
 
 
+def _build_supplementary_supporting_evidence(
+    supplementary_context: dict[str, Any] | None,
+) -> list[str]:
+    """Surface ticket, feedback, similar-incident, and multi-agent context in narrative."""
+    if not isinstance(supplementary_context, dict):
+        return []
+
+    evidence: list[str] = []
+    jira = supplementary_context.get("jira_ticket_context") or {}
+    if isinstance(jira, dict) and jira.get("summary"):
+        labels = ", ".join(str(label) for label in (jira.get("labels") or [])[:4])
+        status = str(jira.get("status") or "n/a")
+        priority = str(jira.get("priority") or "n/a")
+        issue_key = str(jira.get("issue_key") or "ticket")
+        ticket_line = (
+            f"Ticket Context — {issue_key}: {jira.get('summary')} "
+            f"(status {status}, priority {priority}"
+        )
+        if labels:
+            ticket_line += f", labels: {labels}"
+        ticket_line += ")."
+        evidence.append(ticket_line)
+
+    feedback = supplementary_context.get("feedback_context") or {}
+    if isinstance(feedback, dict):
+        for item in (feedback.get("confirmed_rcas") or [])[:2]:
+            evidence.append(
+                "Historical Feedback (confirmed RCA): candidate "
+                f"{_pick_first(item, 'candidate_id')} — {_truncate(str(item.get('comments') or 'no comment'))}"
+            )
+        for item in (feedback.get("rejected_rcas") or [])[:2]:
+            evidence.append(
+                "Historical Feedback (rejected RCA): candidate "
+                f"{_pick_first(item, 'candidate_id')} — {_truncate(str(item.get('comments') or 'no comment'))}"
+            )
+        for item in (feedback.get("overridden_rcas") or [])[:1]:
+            evidence.append(
+                "Historical Feedback (overridden RCA): "
+                f"{_pick_first(item, 'candidate_id')} -> {_pick_first(item, 'override_candidate_id')}"
+            )
+
+    similar = supplementary_context.get("similar_incident_context") or {}
+    if isinstance(similar, dict):
+        for item in (similar.get("previous_investigation_summaries") or [])[:2]:
+            evidence.append(
+                "Historical incident "
+                f"{_pick_first(item, 'investigation_id')} (score {item.get('similarity_score')}): "
+                f"{_truncate(str(item.get('resolution_summary') or 'prior investigation'))}"
+            )
+        for item in (similar.get("historical_root_causes") or [])[:2]:
+            evidence.append(
+                f"Historical root cause from {_pick_first(item, 'investigation_id')}: "
+                f"{_truncate(str(item.get('root_cause') or ''))}"
+            )
+        for item in (similar.get("historical_feedback") or [])[:2]:
+            evidence.append(
+                "Historical Feedback on similar incident "
+                f"{_pick_first(item, 'investigation_id')}: {_pick_first(item, 'feedback_type')} "
+                f"for candidate {_pick_first(item, 'candidate_id')}"
+            )
+
+    multi_agent = supplementary_context.get("multi_agent_findings") or {}
+    if isinstance(multi_agent, dict):
+        if multi_agent.get("final_summary"):
+            evidence.append(f"Agent Findings: {_truncate(str(multi_agent.get('final_summary')))}")
+        for key in (
+            "timeline_findings",
+            "deployment_findings",
+            "infrastructure_findings",
+            "incident_findings",
+            "knowledge_findings",
+            "rca_findings",
+        ):
+            finding = multi_agent.get(key) or {}
+            if isinstance(finding, dict) and finding.get("summary"):
+                label = key.replace("_findings", "").replace("_", " ").title()
+                evidence.append(f"Agent Findings ({label}): {_truncate(str(finding.get('summary')))}")
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in evidence:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out[:12]
+
+
+def _build_historical_remediation_candidates(
+    supplementary_context: dict[str, Any] | None,
+) -> list[str]:
+    if not isinstance(supplementary_context, dict):
+        return []
+    similar = supplementary_context.get("similar_incident_context") or {}
+    if not isinstance(similar, dict):
+        return []
+    candidates: list[str] = []
+    for item in similar.get("historical_remediation_actions") or []:
+        if not isinstance(item, dict):
+            continue
+        action = str(item.get("action") or "").strip()
+        if action:
+            candidates.append(
+                f"Historical remediation from {item.get('investigation_id')}: {_truncate(action, 200)}"
+            )
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in candidates:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out[:6]
+
+
 def _build_remediation_candidates(
     *,
     unified_context: UnifiedInvestigationContext | None,
@@ -590,6 +705,7 @@ def generate_investigation_narrative(
     *,
     unified_context: UnifiedInvestigationContext | None = None,
     graph_context: dict[str, Any] | None = None,
+    supplementary_context: dict[str, Any] | None = None,
 ) -> InvestigationNarrative:
     """
     Build a structured investigation narrative from RCA output and graph retrieval context.
@@ -606,10 +722,28 @@ def generate_investigation_narrative(
 
     causal_chain = _build_causal_chain(unified_context=unified_context, graph_context=graph_ctx)
     supporting_evidence = _build_supporting_evidence(graph_ctx)
+    supporting_evidence.extend(_build_supplementary_supporting_evidence(supplementary_context))
     remediation_candidates = _build_remediation_candidates(
         unified_context=unified_context,
         graph_context=graph_ctx,
     )
+    remediation_candidates.extend(_build_historical_remediation_candidates(supplementary_context))
+    seen_rem: set[str] = set()
+    deduped_rem: list[str] = []
+    for item in remediation_candidates:
+        if item in seen_rem:
+            continue
+        seen_rem.add(item)
+        deduped_rem.append(item)
+    remediation_candidates = deduped_rem[:8]
+    seen_evidence: set[str] = set()
+    deduped_evidence: list[str] = []
+    for item in supporting_evidence:
+        if item in seen_evidence:
+            continue
+        seen_evidence.add(item)
+        deduped_evidence.append(item)
+    supporting_evidence = deduped_evidence[:12]
     confidence_summary = _build_confidence_summary(rca_result)
 
     return InvestigationNarrative(

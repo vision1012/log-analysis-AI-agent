@@ -27,6 +27,8 @@ VISUALIZATION_NODE_TYPES = frozenset(
         "Service",
         "Pod",
         "Node",
+        "Feedback",
+        "RCACandidate",
     }
 )
 
@@ -48,6 +50,8 @@ RELATIONSHIP_TYPE_MAP: dict[str, str] = {
     "HAS_RUNBOOK": "HAS_RUNBOOK",
     "MATCHES_KNOWN_ISSUE": "MATCHES_KNOWN_ISSUE",
     "HAS_ARCHITECTURE_DOC": "RELATED_TO",
+    "HAS_FEEDBACK": "HAS_FEEDBACK",
+    "TARGETS_CANDIDATE": "TARGETS_CANDIDATE",
 }
 
 DEFAULT_EDGE_TYPE = "RELATED_TO"
@@ -84,11 +88,27 @@ def _node_key(node_type: str, props: dict[str, Any]) -> str:
         return str(props.get("sha") or "")
     if node_type == "Service":
         return str(props.get("name") or "")
+    if node_type == "Feedback":
+        return str(props.get("feedback_id") or props.get("id") or "")
+    if node_type == "RCACandidate":
+        return str(props.get("candidate_id") or props.get("id") or "")
     return str(props.get("id") or props.get("sha") or props.get("issue_key") or props.get("name") or "")
 
 
 def _node_label(props: dict[str, Any], node_type: str) -> str:
-    for key in ("title", "summary", "message", "name", "issue_key", "sha", "pod_name", "node_name"):
+    for key in (
+        "title",
+        "summary",
+        "message",
+        "name",
+        "issue_key",
+        "sha",
+        "pod_name",
+        "node_name",
+        "comments",
+        "feedback_type",
+        "candidate_id",
+    ):
         value = props.get(key)
         if value:
             text = str(value).strip()

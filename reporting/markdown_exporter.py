@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from reporting.report_builder import get_reports_dir
-from reporting.report_models import EvidenceCoverageSection, InvestigationReport
+from reporting.report_models import EvidenceCoverageSection, InvestigationReport, KeywordEvidenceSection
 
 
 def _section(title: str, body: str) -> str:
@@ -35,6 +35,18 @@ def _format_evidence_coverage(section: EvidenceCoverageSection) -> str:
     )
 
 
+def _format_keyword_evidence(section: KeywordEvidenceSection) -> str:
+    keywords = _bullet_list(section.matched_keywords) if section.matched_keywords else "_None matched._"
+    categories = _bullet_list(section.keyword_categories) if section.keyword_categories else "_None classified._"
+    path = section.candidate_path or "Not determined"
+    return (
+        f"**Candidate Path:** {path}\n\n"
+        f"**Keyword Score:** {section.keyword_score:.2f}\n\n"
+        f"**Matched Keywords:**\n{keywords}\n\n"
+        f"**Keyword Categories:**\n{categories}"
+    )
+
+
 def render_markdown(report: InvestigationReport) -> str:
     """Render an investigation report as Markdown."""
     lines = [
@@ -55,6 +67,7 @@ def render_markdown(report: InvestigationReport) -> str:
             report.confidence_reasoning or "No confidence reasoning available.",
         ),
         _section("Evidence Coverage", _format_evidence_coverage(report.evidence_coverage)),
+        _section("Keyword Evidence", _format_keyword_evidence(report.keyword_evidence)),
     ]
 
     similar_lines = []

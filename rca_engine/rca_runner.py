@@ -24,6 +24,13 @@ from rca_engine.signal_computation import (
 )
 
 
+def _keyword_context_from_signals(signal_scores_by_file: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    for raw in signal_scores_by_file.values():
+        if isinstance(raw, dict) and raw.get("keyword_context_available"):
+            return {"available": True}
+    return {"available": False}
+
+
 def run_deterministic_rca(
     anomaly_id: str,
     trigger_type: str,
@@ -39,6 +46,7 @@ def run_deterministic_rca(
     mcp_graph_context: Optional[dict[str, Any]] = None,
     unified_investigation_context: Any = None,
     investigation_id: str = "",
+    log_content: str = "",
 ) -> Optional["RCARunResult"]:
     """
     Execute deterministic RCA for one anomaly. Single transaction per anomaly.
@@ -91,9 +99,12 @@ def run_deterministic_rca(
         mcp_graph_context=mcp_graph_context,
         unified_investigation_context=unified_investigation_context,
         investigation_id=investigation_id,
+        log_content=log_content,
     )
     if not signal_scores_by_file:
         return None
+
+    keyword_context = _keyword_context_from_signals(signal_scores_by_file)
 
     # 4. Rank candidates
     ranked = rank_candidates(
@@ -111,6 +122,7 @@ def run_deterministic_rca(
             graph_context=build_confidence_graph_context(
                 mcp_graph_context,
                 unified_investigation_context=unified_investigation_context,
+                keyword_context=keyword_context,
             ),
         )
     ]
@@ -136,6 +148,8 @@ def run_deterministic_rca(
             continue
 
         confidence_payload = confidence_assessments[i] if i < len(confidence_assessments) else {}
+        raw_signals = signal_scores_by_file.get(r.file_id, {})
+        keyword_signal = raw_signals.get("keyword_signal") if isinstance(raw_signals, dict) else None
 
         bundle_payload: dict[str, Any] = {
             "anomaly_id": anomaly_id,
@@ -154,6 +168,8 @@ def run_deterministic_rca(
             "attributed_frame_id": r.frame_id,
             "frame_order": r.frame_order,
         }
+        if isinstance(keyword_signal, dict):
+            bundle_payload["keyword_signal"] = keyword_signal
         if meta.get("deployment_id"):
             bundle_payload["deployment_id"] = meta["deployment_id"]
 
@@ -213,6 +229,7 @@ def run_rca(
     mcp_graph_context: Optional[dict[str, Any]] = None,
     unified_investigation_context: Any = None,
     investigation_id: str = "",
+    log_content: str = "",
 ) -> Optional["RCARunResult"]:
     """
     Execute full RCA pipeline for one anomaly.
@@ -260,9 +277,12 @@ def run_rca(
         mcp_graph_context=mcp_graph_context,
         unified_investigation_context=unified_investigation_context,
         investigation_id=investigation_id,
+        log_content=log_content,
     )
     if not signal_scores_by_file:
         return None
+
+    keyword_context = _keyword_context_from_signals(signal_scores_by_file)
 
     # 4. Ranking
     ranked = rank_candidates(
@@ -280,6 +300,7 @@ def run_rca(
             graph_context=build_confidence_graph_context(
                 mcp_graph_context,
                 unified_investigation_context=unified_investigation_context,
+                keyword_context=keyword_context,
             ),
         )
     ]
@@ -306,6 +327,8 @@ def run_rca(
             continue
 
         confidence_payload = confidence_assessments[i] if i < len(confidence_assessments) else {}
+        raw_signals = signal_scores_by_file.get(r.file_id, {})
+        keyword_signal = raw_signals.get("keyword_signal") if isinstance(raw_signals, dict) else None
 
         bundle_payload: dict[str, Any] = {
             "anomaly_id": anomaly_id,
@@ -324,6 +347,8 @@ def run_rca(
             "attributed_frame_id": r.frame_id,
             "frame_order": r.frame_order,
         }
+        if isinstance(keyword_signal, dict):
+            bundle_payload["keyword_signal"] = keyword_signal
         if meta.get("deployment_id"):
             bundle_payload["deployment_id"] = meta["deployment_id"]
 

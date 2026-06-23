@@ -48,6 +48,15 @@ class EvidenceCoverageSection(BaseModel):
     confidence_limitations: List[str] = Field(default_factory=list)
 
 
+class KeywordEvidenceSection(BaseModel):
+    """Keyword alignment evidence for export."""
+
+    candidate_path: str = ""
+    keyword_score: float = 0.0
+    matched_keywords: List[str] = Field(default_factory=list)
+    keyword_categories: List[str] = Field(default_factory=list)
+
+
 class InvestigationReport(BaseModel):
     """Unified investigation report assembled from all data sources."""
 
@@ -65,6 +74,7 @@ class InvestigationReport(BaseModel):
     remediation_steps: List[str] = Field(default_factory=list)
     multi_agent_summary: str = ""
     evidence_coverage: EvidenceCoverageSection = Field(default_factory=EvidenceCoverageSection)
+    keyword_evidence: KeywordEvidenceSection = Field(default_factory=KeywordEvidenceSection)
     generated_at: str
 
     def to_export_dict(self) -> dict[str, Any]:

@@ -85,6 +85,9 @@ def _sample_context() -> AgentInvestigationContext:
                     ],
                 }
             ],
+            "derived_signals_snapshot": {
+                "merged": {"error_keywords": ["timeout", "auth", "error"]},
+            },
         },
     )
 
@@ -146,6 +149,8 @@ def test_build_investigation_report_assembles_fields(
     assert report.evidence_coverage.coverage_level == "partial"
     assert "jenkins" in report.evidence_coverage.missing_sources
     assert "Missing Jenkins" in report.evidence_coverage.confidence_limitations
+    assert report.keyword_evidence.matched_keywords
+    assert report.keyword_evidence.keyword_score > 0
     assert report.generated_at
 
 
@@ -163,7 +168,13 @@ def test_resolve_confidence_from_evidence_bundle(mock_get_store) -> None:
             "coverage_score": 0.25,
             "coverage_level": "partial",
             "confidence_limitations": ["Missing Datadog"],
-        }
+        },
+        "keyword_signal": {
+            "matched_keywords": ["timeout", "error"],
+            "keyword_score": 0.7,
+            "keyword_categories": ["Performance"],
+        },
+        "attributed_file_id": "/app/main.py",
     }
     store_record = {
         "rca_result_ref": {"evidence_refs": ["bundle-1"]},
@@ -177,3 +188,9 @@ def test_resolve_confidence_from_evidence_bundle(mock_get_store) -> None:
     assert coverage.coverage_level == "partial"
     assert coverage.confidence_limitations == ["Missing Datadog"]
     assert coverage.missing_sources == ["datadog"]
+
+    from reporting.report_builder import _resolve_keyword_evidence
+
+    keyword = _resolve_keyword_evidence(store_record, "/app/main.py")
+    assert keyword.keyword_score == pytest.approx(0.7)
+    assert "timeout" in keyword.matched_keywords

@@ -91,6 +91,25 @@ def _format_evidence_coverage(report: InvestigationReport) -> str:
     return "\n".join(lines)
 
 
+def _format_keyword_evidence(report: InvestigationReport) -> str:
+    section = report.keyword_evidence
+    lines = [
+        f"Candidate Path: {section.candidate_path or 'Not determined'}",
+        f"Keyword Score: {section.keyword_score:.2f}",
+        "Matched Keywords:",
+    ]
+    if section.matched_keywords:
+        lines.extend(f"- {kw}" for kw in section.matched_keywords)
+    else:
+        lines.append("- None matched.")
+    lines.append("Keyword Categories:")
+    if section.keyword_categories:
+        lines.extend(f"- {cat}" for cat in section.keyword_categories)
+    else:
+        lines.append("- None classified.")
+    return "\n".join(lines)
+
+
 def render_pdf_bytes(report: InvestigationReport) -> bytes:
     """Render an investigation report as PDF bytes."""
     pdf = _InvestigationPDF()
@@ -129,6 +148,7 @@ def render_pdf_bytes(report: InvestigationReport) -> bytes:
         report.confidence_reasoning or "No confidence reasoning available.",
     )
     _write_section(pdf, "5. Evidence Coverage", _format_evidence_coverage(report))
+    _write_section(pdf, "6. Keyword Evidence", _format_keyword_evidence(report))
 
     similar_lines = []
     for item in report.similar_incidents:
@@ -136,17 +156,17 @@ def render_pdf_bytes(report: InvestigationReport) -> bytes:
             f"{item.investigation_id} (score {item.similarity_score:.2f}): "
             f"{item.root_cause or 'unknown'} — {item.resolution_summary or 'no resolution'}"
         )
-    _write_bullets(pdf, "6. Similar Incidents", similar_lines)
+    _write_bullets(pdf, "7. Similar Incidents", similar_lines)
 
-    _write_section(pdf, "7. Multi-Agent Findings", report.multi_agent_summary or "No multi-agent summary.")
+    _write_section(pdf, "8. Multi-Agent Findings", report.multi_agent_summary or "No multi-agent summary.")
 
     runbook_lines = []
     for runbook in report.runbooks:
         detail = runbook.summary or "See linked runbook."
         runbook_lines.append(f"{runbook.title} [{runbook.service_name}]: {detail}")
-    _write_bullets(pdf, "8. Runbooks", runbook_lines)
+    _write_bullets(pdf, "9. Runbooks", runbook_lines)
 
-    _write_bullets(pdf, "9. Recommended Actions", report.remediation_steps)
+    _write_bullets(pdf, "10. Recommended Actions", report.remediation_steps)
 
     out = pdf.output()
     if isinstance(out, bytearray):

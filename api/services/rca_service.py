@@ -131,6 +131,7 @@ def trigger_manual_rca(
     investigation_id: str = "",
     unified_investigation_context: Any | None = None,
     mcp_graph_context: dict[str, Any] | None = None,
+    log_content: str = "",
 ) -> dict[str, Any]:
     """
     Trigger manual RCA with idempotency key.
@@ -180,6 +181,7 @@ def trigger_manual_rca(
             investigation_id=investigation_id,
             unified_investigation_context=unified_investigation_context,
             mcp_graph_context=mcp_graph_context,
+            log_content=log_content,
         )
         if result is None:
             return _run_summary(
@@ -213,6 +215,7 @@ def run_rca(
     investigation_id: str = "",
     unified_investigation_context: Any | None = None,
     mcp_graph_context: Optional[dict[str, Any]] = None,
+    log_content: str = "",
 ) -> Optional[dict[str, Any]]:
     """
     Run deterministic RCA for one anomaly.
@@ -268,6 +271,7 @@ def run_rca(
             mcp_graph_context=mcp_ctx,
             unified_investigation_context=unified_investigation_context,
             investigation_id=investigation_id,
+            log_content=log_content,
         )
         if result is None:
             return None

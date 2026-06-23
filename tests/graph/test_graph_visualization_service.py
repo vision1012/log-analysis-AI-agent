@@ -39,11 +39,53 @@ def test_clamp_depth_bounds() -> None:
     assert _clamp_depth(9) == 3
 
 
-def test_map_edge_types_to_visual_contract() -> None:
+def test_map_edge_types_includes_feedback_relationships() -> None:
+    assert _map_edge_type("HAS_FEEDBACK") == "HAS_FEEDBACK"
+    assert _map_edge_type("TARGETS_CANDIDATE") == "TARGETS_CANDIDATE"
     assert _map_edge_type("TRIGGERED_BUILD") == "TRIGGERED_BUILD"
     assert _map_edge_type("PRODUCED_DEPLOYMENT") == "DEPLOYED_AS"
     assert _map_edge_type("HAS_RUNBOOK") == "HAS_RUNBOOK"
     assert _map_edge_type("UNKNOWN_REL") == "RELATED_TO"
+
+
+def test_get_investigation_graph_includes_feedback_relationships() -> None:
+    client = _MockClient(
+        node_rows=[
+            {"labels": ["Investigation"], "props": {"id": "inv-1"}},
+            {
+                "labels": ["Feedback"],
+                "props": {
+                    "feedback_id": "fb-1",
+                    "feedback_type": "CONFIRMED",
+                    "comments": "Looks correct",
+                },
+            },
+            {"labels": ["RCACandidate"], "props": {"candidate_id": "cand-1"}},
+        ],
+        edge_rows=[
+            {
+                "rel_type": "HAS_FEEDBACK",
+                "src_labels": ["Investigation"],
+                "src_props": {"id": "inv-1"},
+                "tgt_labels": ["Feedback"],
+                "tgt_props": {"feedback_id": "fb-1"},
+            },
+            {
+                "rel_type": "TARGETS_CANDIDATE",
+                "src_labels": ["Feedback"],
+                "src_props": {"feedback_id": "fb-1"},
+                "tgt_labels": ["RCACandidate"],
+                "tgt_props": {"candidate_id": "cand-1"},
+            },
+        ],
+    )
+    result = get_investigation_graph(client, "inv-1", depth=2)
+    assert {n["type"] for n in result["nodes"]} == {"Investigation", "Feedback", "RCACandidate"}
+    edge_types = {edge["type"] for edge in result["edges"]}
+    assert "HAS_FEEDBACK" in edge_types
+    assert "TARGETS_CANDIDATE" in edge_types
+    assert any(edge["relationship"] == "HAS_FEEDBACK" for edge in result["edges"])
+    assert any(edge["relationship"] == "TARGETS_CANDIDATE" for edge in result["edges"])
 
 
 def test_get_investigation_graph_returns_nodes_and_edges() -> None:
@@ -85,6 +127,8 @@ def test_get_investigation_graph_returns_nodes_and_edges() -> None:
         "GENERATED",
         "HAS_RUNBOOK",
         "MATCHES_KNOWN_ISSUE",
+        "HAS_FEEDBACK",
+        "TARGETS_CANDIDATE",
     }
     assert "[*0..2]" in client.queries[0]
 

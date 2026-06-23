@@ -6,6 +6,7 @@ from reporting.markdown_exporter import export_markdown, render_markdown
 from reporting.report_models import (
     EvidenceCoverageSection,
     InvestigationReport,
+    KeywordEvidenceSection,
     RunbookEntry,
     SimilarIncidentEntry,
 )
@@ -45,6 +46,12 @@ def _sample_report() -> InvestigationReport:
             missing_sources=["jenkins", "pagerduty", "confluence"],
             confidence_limitations=["Missing Jenkins", "Missing PagerDuty", "Missing Confluence"],
         ),
+        keyword_evidence=KeywordEvidenceSection(
+            candidate_path="/srv/payment/processor.py",
+            keyword_score=0.82,
+            matched_keywords=["timeout", "error"],
+            keyword_categories=["Performance", "Application"],
+        ),
         generated_at="2024-01-01T12:00:00Z",
     )
 
@@ -57,6 +64,8 @@ def test_render_markdown_includes_all_sections() -> None:
     assert "## RCA Findings" in content
     assert "## Confidence Assessment" in content
     assert "## Evidence Coverage" in content
+    assert "## Keyword Evidence" in content
+    assert "**Keyword Score:** 0.82" in content
     assert "**Coverage Score:** 0.38" in content
     assert "**Coverage Level:** partial" in content
     assert "Missing Jenkins" in content

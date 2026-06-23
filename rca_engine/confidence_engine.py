@@ -150,6 +150,7 @@ def build_confidence_graph_context(
     mcp_graph_context: dict[str, Any] | None,
     *,
     unified_investigation_context: Any | None = None,
+    keyword_context: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Merge MCP graph context with evidence coverage for confidence assessment."""
     merged: dict[str, Any] = dict(mcp_graph_context or {})
@@ -159,6 +160,8 @@ def build_confidence_graph_context(
             merged["evidence_coverage"] = (
                 coverage.model_dump() if hasattr(coverage, "model_dump") else coverage
             )
+    if isinstance(keyword_context, dict) and keyword_context:
+        merged["keyword_context"] = keyword_context
     return merged or None
 
 
@@ -232,6 +235,24 @@ def compute_confidence_assessment(
         score += delta
         breakdown["alert_correlation"] = delta
         supporting.append("Warning alert correlation")
+
+    keyword_align = _signal(signals, "keyword_alignment")
+    keyword_available = False
+    if isinstance(graph_context, dict):
+        keyword_ctx = graph_context.get("keyword_context") or {}
+        if isinstance(keyword_ctx, dict):
+            keyword_available = bool(keyword_ctx.get("available"))
+    if keyword_available:
+        if keyword_align >= _env_float("RCA_CONFIDENCE_KEYWORD_STRONG_THRESHOLD", 0.5):
+            delta = _env_float("RCA_CONFIDENCE_KEYWORD_STRONG", 0.06)
+            score += delta
+            breakdown["keyword_alignment"] = delta
+            supporting.append("Strong keyword alignment")
+        else:
+            delta = _env_float("RCA_CONFIDENCE_KEYWORD_WEAK_PENALTY", 0.04)
+            score -= delta
+            breakdown["keyword_alignment"] = -delta
+            contradicting.append("No keyword alignment")
 
     top_frame = _signal(signals, "top_frame_presence")
     trace_complete = _signal(signals, "trace_completeness")

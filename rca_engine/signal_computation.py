@@ -6,7 +6,8 @@ Uses Neo4j queries only. Returns {file_id: signal_scores}.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional, Union
 
@@ -27,6 +28,49 @@ DECAY_WINDOW_SEC = 7 * 24 * 3600  # 7 days
 MAX_RECURRENCE_CAP = 5
 VALID_RESOLUTIONS = ("exact", "probable", "resolved")
 
+KEYWORD_ALIGNMENT_SIGNAL = "keyword_alignment"
+
+KEYWORD_CATEGORIES: tuple[str, ...] = (
+    "Authentication",
+    "Database",
+    "Deployment",
+    "Infrastructure",
+    "Performance",
+    "Networking",
+    "Application",
+)
+
+KEYWORD_CATEGORY_PATTERNS: dict[str, tuple[str, ...]] = {
+    "Authentication": (
+        "auth",
+        "token",
+        "otp",
+        "login",
+        "password",
+        "jwt",
+        "oauth",
+        "unauthorized",
+        "forbidden",
+        "invalid token",
+    ),
+    "Database": (
+        "database",
+        "sql",
+        "deadlock",
+        "postgres",
+        "mysql",
+        "redis",
+        "mongodb",
+        "connection pool",
+        "query",
+    ),
+    "Deployment": ("deploy", "rollout", "release", "rollback", "canary"),
+    "Infrastructure": ("pod", "oom", "kubernetes", "k8s", "restart", "crashloop", "node", "container"),
+    "Performance": ("timeout", "latency", "slow", "throttle", "backpressure"),
+    "Networking": ("connection refused", "503", "502", "504", "network", "dns", "socket", "unreachable"),
+    "Application": ("error", "exception", "failed", "panic", "stacktrace", "traceback"),
+}
+
 # Signal names
 SIGNAL_NAMES = (
     "top_frame_presence",
@@ -39,6 +83,7 @@ SIGNAL_NAMES = (
     "spike_correlation_strength",
     "trace_completeness",
     "file_touch_sparsity",
+    KEYWORD_ALIGNMENT_SIGNAL,
 )
 
 MCP_SIGNAL_NAMES = (
@@ -50,16 +95,165 @@ MCP_SIGNAL_NAMES = (
 )
 
 
+@dataclass
+class KeywordSignal:
+    """Structured keyword evidence extracted from logs and aligned to a candidate."""
+
+    matched_keywords: list[str] = field(default_factory=list)
+    keyword_score: float = 0.0
+    keyword_categories: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "matched_keywords": list(self.matched_keywords),
+            "keyword_score": round(float(self.keyword_score), 4),
+            "keyword_categories": list(self.keyword_categories),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "KeywordSignal":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            matched_keywords=[str(k) for k in (data.get("matched_keywords") or []) if k],
+            keyword_score=float(data.get("keyword_score") or 0.0),
+            keyword_categories=[str(c) for c in (data.get("keyword_categories") or []) if c],
+        )
+
+
+def _keyword_categories_for_text(text: str) -> set[str]:
+    lowered = (text or "").lower()
+    categories: set[str] = set()
+    for category, patterns in KEYWORD_CATEGORY_PATTERNS.items():
+        if any(pattern in lowered for pattern in patterns):
+            categories.add(category)
+    return categories
+
+
+def _collect_keyword_hits(text: str) -> list[str]:
+    lowered = (text or "").lower()
+    hits: list[str] = []
+    seen: set[str] = set()
+    for patterns in KEYWORD_CATEGORY_PATTERNS.values():
+        for pattern in patterns:
+            if pattern in lowered and pattern not in seen:
+                seen.add(pattern)
+                hits.append(pattern)
+    return hits
+
+
+def compute_log_keyword_signal(
+    log_content: str,
+    *,
+    extra_keywords: Optional[list[str]] = None,
+) -> KeywordSignal:
+    """Extract global keyword evidence from log text and optional ticket hints."""
+    content = (log_content or "").strip()
+    if not content and not extra_keywords:
+        return KeywordSignal()
+
+    base = extract_signals(content)
+    matched: list[str] = []
+    seen: set[str] = set()
+    categories: set[str] = set()
+
+    for kw in extra_keywords or []:
+        token = str(kw or "").strip().lower()
+        if token and token not in seen:
+            seen.add(token)
+            matched.append(token)
+            categories.update(_keyword_categories_for_text(token))
+
+    for line in (base.get("errors") or [])[:30]:
+        for hit in _collect_keyword_hits(str(line)):
+            if hit not in seen:
+                seen.add(hit)
+                matched.append(hit)
+        categories.update(_keyword_categories_for_text(str(line)))
+
+    for hit in _collect_keyword_hits(content):
+        if hit not in seen:
+            seen.add(hit)
+            matched.append(hit)
+
+    categories.update(_keyword_categories_for_text(content))
+
+    for exc in base.get("exceptions") or []:
+        token = str(exc).strip().lower()
+        if token and token not in seen:
+            seen.add(token)
+            matched.append(token)
+            categories.update(_keyword_categories_for_text(token))
+
+    if int(base.get("timeout_count") or 0) > 0 and "timeout" not in seen:
+        matched.append("timeout")
+        categories.add("Performance")
+
+    density = min(1.0, len(matched) / 6.0)
+    category_bonus = min(0.35, 0.05 * len(categories))
+    score = _clamp(density + category_bonus) if matched else 0.0
+
+    return KeywordSignal(
+        matched_keywords=matched[:40],
+        keyword_score=score,
+        keyword_categories=sorted(categories),
+    )
+
+
+def align_keyword_signal_for_path(
+    path: str,
+    log_signal: KeywordSignal,
+    *,
+    extra_keywords: Optional[list[str]] = None,
+    log_files: Optional[list[str]] = None,
+) -> tuple[float, KeywordSignal]:
+    """Score how well a candidate path aligns with extracted keyword evidence."""
+    if not log_signal.matched_keywords and not (extra_keywords or []) and not (log_files or []):
+        return 0.0, KeywordSignal()
+
+    path_l = (path or "").lower()
+    basename = os.path.basename(path_l)
+    all_keywords = list(
+        dict.fromkeys([*(log_signal.matched_keywords or []), *(extra_keywords or [])])
+    )
+
+    path_keyword_hits = [kw for kw in all_keywords if kw.lower() in path_l]
+    file_hits = [
+        f for f in (log_files or [])
+        if basename and (basename in str(f).lower() or str(f).lower() in path_l)
+    ]
+
+    alignment = 0.0
+    if path_keyword_hits:
+        alignment = min(
+            1.0,
+            0.45 + (len(path_keyword_hits) / max(1, min(4, len(all_keywords)))) * 0.55,
+        )
+    elif file_hits:
+        alignment = 0.75
+
+    path_categories = set()
+    for category in log_signal.keyword_categories:
+        if any(pattern in path_l for pattern in KEYWORD_CATEGORY_PATTERNS.get(category, ())):
+            path_categories.add(category)
+
+    keyword_score = _clamp(alignment * max(log_signal.keyword_score, 0.25)) if alignment > 0 else 0.0
+    return keyword_score, KeywordSignal(
+        matched_keywords=path_keyword_hits or log_signal.matched_keywords[:8],
+        keyword_score=keyword_score,
+        keyword_categories=sorted(path_categories or log_signal.keyword_categories),
+    )
+
+
 def extract_keyword_signals(log_content: str) -> dict[str, Any]:
     """
     Lightweight keyword-based signal extraction for log-only RCA fallback.
 
-    This is intentionally independent from stack-trace/file traversal so RCA can
-    still produce a useful hypothesis when traces are absent.
+    Backward-compatible dict shape used by existing jira/log RCA fallback code.
     """
+    signal = compute_log_keyword_signal(log_content)
     lines = [ln.strip() for ln in (log_content or "").splitlines() if ln.strip()]
     base = extract_signals(lines)
-    # Backward-compatible shape used by existing jira/log RCA fallback code.
     return {
         "error_count": int(base.get("error_count") or 0),
         "timeout": int(base.get("timeout_count") or 0),
@@ -68,6 +262,9 @@ def extract_keyword_signals(log_content: str) -> dict[str, Any]:
         "service": str(base.get("service") or ""),
         "patterns": list(base.get("patterns") or []),
         "exception_types": {},
+        "matched_keywords": signal.matched_keywords,
+        "keyword_score": signal.keyword_score,
+        "keyword_categories": signal.keyword_categories,
     }
 
 
@@ -152,6 +349,27 @@ def _zero_scores() -> dict[str, float]:
     return {name: 0.0 for name in SIGNAL_NAMES}
 
 
+def _collect_ticket_keywords(unified_investigation_context: Any | None) -> list[str]:
+    if unified_investigation_context is None:
+        return []
+    keywords: list[str] = []
+    ticket = getattr(unified_investigation_context, "ticket_context", None)
+    if ticket is not None:
+        for label in getattr(ticket, "labels", []) or []:
+            token = str(label or "").strip().lower()
+            if token:
+                keywords.append(token)
+        for field_name in ("summary", "description"):
+            text = str(getattr(ticket, field_name, "") or "")
+            keywords.extend(_collect_keyword_hits(text))
+    for doc in getattr(unified_investigation_context, "known_issue_documents", []) or []:
+        for kw in getattr(doc, "error_keywords", []) or []:
+            token = str(kw or "").strip().lower()
+            if token:
+                keywords.append(token)
+    return list(dict.fromkeys(keywords))
+
+
 def compute_signals(
     client: Neo4jClient,
     anomaly_id: str,
@@ -162,6 +380,7 @@ def compute_signals(
     mcp_graph_context: Optional[dict[str, Any]] = None,
     unified_investigation_context: Any | None = None,
     investigation_id: str = "",
+    log_content: str = "",
 ) -> dict[str, dict[str, float]]:
     """
     Compute signals for each candidate file. Neo4j queries only.
@@ -211,6 +430,22 @@ def compute_signals(
         fd = file_data.get(fid, {})
         frame_order = frame_order_by_file.get(fid, 999)
         result[fid] = _compute_one(fid, frame_order, ctx, fd)
+
+    ticket_keywords = _collect_ticket_keywords(unified_investigation_context)
+    log_signal = compute_log_keyword_signal(log_content, extra_keywords=ticket_keywords)
+    log_files = extract_signals(log_content).get("files") or [] if log_content.strip() else []
+    keyword_context_available = bool(log_signal.matched_keywords or ticket_keywords or log_content.strip())
+
+    for fid in file_ids:
+        alignment, candidate_signal = align_keyword_signal_for_path(
+            path_by_file.get(fid, ""),
+            log_signal,
+            extra_keywords=ticket_keywords,
+            log_files=log_files,
+        )
+        result[fid][KEYWORD_ALIGNMENT_SIGNAL] = alignment
+        result[fid]["keyword_signal"] = candidate_signal.to_dict()
+        result[fid]["keyword_context_available"] = 1.0 if keyword_context_available else 0.0
 
     if mcp_rca_signals_enabled():
         mcp_signals, mcp_breakdowns = compute_mcp_signals(
