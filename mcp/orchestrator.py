@@ -16,6 +16,7 @@ from mcp.context.deployment_observability_correlator import (
 from mcp.context.knowledge_context_correlator import correlate_knowledge_and_attach_metadata
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.evidence_coverage import attach_evidence_coverage
+from mcp.integration_resolver import resolve_runtime_connection
 from mcp.registry import get_provider_class, registered_sources
 from mcp.schemas.common import ProviderHealth
 
@@ -41,7 +42,8 @@ class MCPOrchestrator:
                 logger.warning("mcp.orchestrator.skip unknown source=%s", source)
                 continue
             provider_cls = get_provider_class(source)
-            provider = provider_cls()
+            runtime_connection = resolve_runtime_connection(params, source)
+            provider = provider_cls(runtime_connection=runtime_connection)
             if not provider.is_enabled():
                 continue
             try:
@@ -58,9 +60,9 @@ class MCPOrchestrator:
                 )
             )
         )
-        return attach_evidence_coverage(context)
+        return attach_evidence_coverage(context, workspace_id=params.workspace_id)
 
-    def health_status(self) -> list[ProviderHealth]:
+    def health_status(self, *, workspace_id: str = "") -> list[ProviderHealth]:
         if not mcp_enabled():
             return [
                 ProviderHealth(
@@ -73,8 +75,14 @@ class MCPOrchestrator:
                 for src in registered_sources()
             ]
         out: list[ProviderHealth] = []
+        ws = (workspace_id or "").strip()
         for source in registered_sources():
-            provider = get_provider_class(source)()
+            runtime_connection = None
+            if ws:
+                from mcp.integration_resolver import resolve_runtime_connection_for_workspace
+
+                runtime_connection = resolve_runtime_connection_for_workspace(ws, source)
+            provider = get_provider_class(source)(runtime_connection=runtime_connection)
             out.append(provider.health_check())
         return out
 

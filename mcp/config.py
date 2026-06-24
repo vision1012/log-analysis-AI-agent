@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from mcp.schemas.common import MCPSourceName
 
@@ -78,6 +78,8 @@ class MCPFetchParams:
     ticket_key: str
     service_name: str = ""
     repo_name: str = ""
+    workspace_id: str = ""
+    provider_connection_ids: Dict[str, str] = field(default_factory=dict)
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     enabled_sources: List[MCPSourceName] = field(default_factory=default_enabled_sources)

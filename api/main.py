@@ -19,6 +19,7 @@ from api.middleware.observability import ObservabilityMiddleware
 from api.middleware.rate_limit_context import RateLimitContextMiddleware
 from api.rate_limit.config import load_rate_limit_settings
 from api.rate_limit.redis_window import set_redis_client
+from api.routes import integration_connections as integration_connections_routes
 from api.routes import demo_routes
 from api.routes import feedback_learning as feedback_learning_routes
 from api.routes import investigation_graph as investigation_graph_routes
@@ -37,6 +38,9 @@ logger = logging.getLogger("api.main")
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
+    from integrations.credential_encryption import ensure_encryption_key_configured
+
+    ensure_encryption_key_configured()
     _log_cors_startup()
     log_llm_runtime_snapshot()
     settings = load_rate_limit_settings()
@@ -138,6 +142,11 @@ app.include_router(users_routes.router, prefix="/api/v1", tags=["users"])
 app.include_router(auth_routes.router, prefix="/api/v1", tags=["auth"])
 app.include_router(jira_routes.router, prefix="/api/v1", tags=["jira"])
 app.include_router(mcp_routes.router, prefix="/api/v1", tags=["mcp"])
+app.include_router(
+    integration_connections_routes.router,
+    prefix="/api/v1",
+    tags=["integrations"],
+)
 app.include_router(demo_routes.router, prefix="/api/v1", tags=["demo"])
 
 

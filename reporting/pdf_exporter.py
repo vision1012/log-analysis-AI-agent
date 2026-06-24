@@ -166,7 +166,16 @@ def render_pdf_bytes(report: InvestigationReport) -> bytes:
         runbook_lines.append(f"{runbook.title} [{runbook.service_name}]: {detail}")
     _write_bullets(pdf, "9. Runbooks", runbook_lines)
 
-    _write_bullets(pdf, "10. Recommended Actions", report.remediation_steps)
+    architecture_lines = []
+    for arch in report.architecture_references:
+        subsystem = f" / {arch.subsystem}" if arch.subsystem else ""
+        detail = arch.summary or "See linked architecture document."
+        architecture_lines.append(
+            f"{arch.title} [{arch.service}{subsystem}] relevance={arch.relevance:.2f}: {detail}"
+        )
+    _write_bullets(pdf, "10. Architecture References", architecture_lines)
+
+    _write_bullets(pdf, "11. Recommended Actions", report.remediation_steps)
 
     out = pdf.output()
     if isinstance(out, bytearray):

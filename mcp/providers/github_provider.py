@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib import error as urlerror
@@ -14,10 +15,20 @@ from mcp.config import MCPFetchParams, github_mcp_enabled
 from mcp.context.context_builder import merge_context
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.providers.base import BaseMCPProvider
+from mcp.runtime_connection import ProviderRuntimeConnection
 from mcp.schemas.common import ProviderHealth, SourceMetadata
 from mcp.schemas.github_models import McpCommit, McpPullRequest
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _GitHubClientConfig:
+    token: str
+    api_base: str
+    owner: str
+    repo: str
+    connection_id: str = ""
 
 
 class GitHubProvider(BaseMCPProvider):
@@ -27,7 +38,11 @@ class GitHubProvider(BaseMCPProvider):
         return github_mcp_enabled()
 
     def is_configured(self) -> bool:
-        return bool(_github_token()) and bool(_default_owner_repo()[0])
+        try:
+            _github_client_config(self._runtime_connection, MCPFetchParams(ticket_key=""))
+            return True
+        except RuntimeError:
+            return False
 
     def health_check(self) -> ProviderHealth:
         enabled = self.is_enabled()
@@ -45,29 +60,37 @@ class GitHubProvider(BaseMCPProvider):
                 detail="missing GITHUB_TOKEN or repo",
             )
         try:
-            _github_get("/user")
-            return ProviderHealth(source="github", enabled=True, configured=True, reachable=True, detail="ok")
+            client = _github_client_config(self._runtime_connection, MCPFetchParams(ticket_key=""))
+            _github_get("/user", client=client)
+            detail = "ok"
+            if client.connection_id:
+                detail = f"ok:connection={client.connection_id}"
+            return ProviderHealth(source="github", enabled=True, configured=True, reachable=True, detail=detail)
         except Exception as exc:
             return ProviderHealth(
                 source="github", enabled=True, configured=True, reachable=False, detail=str(exc)[:200]
             )
 
     def fetch(self, params: MCPFetchParams) -> UnifiedInvestigationContext:
-        owner, repo = _resolve_repo(params.resolved_repo_name())
-        if not owner or not repo:
+        try:
+            client = _github_client_config(self._runtime_connection, params)
+        except RuntimeError:
             return UnifiedInvestigationContext()
 
         since = (params.start_time or "").strip() or None
         until = (params.end_time or "").strip() or None
 
-        commits = _fetch_commits(owner, repo, since=since, until=until)
-        prs = _fetch_pull_requests(owner, repo, since=since)
+        commits = _fetch_commits(client, since=since, until=until)
+        prs = _fetch_pull_requests(client, since=since)
 
+        detail = f"repo={client.owner}/{client.repo} commits={len(commits)} prs={len(prs)}"
+        if client.connection_id:
+            detail = f"{detail} connection={client.connection_id}"
         meta = SourceMetadata(
             source="github",
             fetched_at=datetime.now(timezone.utc),
             ok=True,
-            detail=f"repo={owner}/{repo} commits={len(commits)} prs={len(prs)}",
+            detail=detail,
         )
         return merge_context(
             UnifiedInvestigationContext(),
@@ -77,7 +100,11 @@ class GitHubProvider(BaseMCPProvider):
         )
 
 
-def _github_token() -> str:
+def _github_token(runtime: ProviderRuntimeConnection | None) -> str:
+    if runtime is not None and runtime.source == "database":
+        token = str((runtime.credentials or {}).get("token") or "").strip()
+        if token:
+            return token
     return (os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_API_TOKEN") or "").strip()
 
 
@@ -98,26 +125,60 @@ def _split_repo(repo_name: str) -> tuple[str, str]:
     return owner.strip(), repo.strip()
 
 
-def _resolve_repo(repo_name: str) -> tuple[str, str]:
-    explicit = _split_repo(repo_name)
+def _resolve_repo_from_runtime(runtime: ProviderRuntimeConnection) -> tuple[str, str]:
+    org = (runtime.org_name or "").strip()
+    repo_field = (runtime.repo_name or "").strip()
+    if repo_field and "/" in repo_field:
+        return _split_repo(repo_field)
+    if org and repo_field:
+        return org, repo_field
+    if repo_field:
+        return _split_repo(repo_field)
+    return "", ""
+
+
+def _resolve_repo(params: MCPFetchParams) -> tuple[str, str]:
+    explicit = _split_repo(params.resolved_repo_name())
     if explicit[0] and explicit[1]:
         return explicit
     return _default_owner_repo()
 
 
-def _github_get(path: str, query: dict[str, str] | None = None) -> Any:
-    token = _github_token()
+def _github_client_config(
+    runtime: ProviderRuntimeConnection | None,
+    params: MCPFetchParams,
+) -> _GitHubClientConfig:
+    token = _github_token(runtime)
     if not token:
         raise RuntimeError("GITHUB_TOKEN not set")
+    owner, repo = "", ""
+    connection_id = ""
+    if runtime is not None and runtime.source == "database":
+        owner, repo = _resolve_repo_from_runtime(runtime)
+        connection_id = runtime.connection_id
+    if not owner or not repo:
+        owner, repo = _resolve_repo(params)
+    if not owner or not repo:
+        raise RuntimeError("GitHub repo not configured")
+    return _GitHubClientConfig(
+        token=token,
+        api_base=_github_api_base(),
+        owner=owner,
+        repo=repo,
+        connection_id=connection_id,
+    )
+
+
+def _github_get(path: str, *, client: _GitHubClientConfig, query: dict[str, str] | None = None) -> Any:
     q = ""
     if query:
         q = "?" + parse.urlencode({k: v for k, v in query.items() if v})
-    url = f"{_github_api_base()}{path}{q}"
+    url = f"{client.api_base}{path}{q}"
     req = request.Request(
         url,
         headers={
             "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {client.token}",
             "X-GitHub-Api-Version": "2022-11-28",
         },
         method="GET",
@@ -128,8 +189,7 @@ def _github_get(path: str, query: dict[str, str] | None = None) -> Any:
 
 
 def _fetch_commits(
-    owner: str,
-    repo: str,
+    client: _GitHubClientConfig,
     *,
     since: str | None,
     until: str | None,
@@ -140,7 +200,7 @@ def _fetch_commits(
     if until:
         query["until"] = until
     try:
-        payload = _github_get(f"/repos/{owner}/{repo}/commits", query)
+        payload = _github_get(f"/repos/{client.owner}/{client.repo}/commits", client=client, query=query)
     except urlerror.HTTPError:
         return []
     if not isinstance(payload, list):
@@ -160,7 +220,7 @@ def _fetch_commits(
         changed_files: list[str] = []
         if sha:
             try:
-                detail = _github_get(f"/repos/{owner}/{repo}/commits/{sha}")
+                detail = _github_get(f"/repos/{client.owner}/{client.repo}/commits/{sha}", client=client)
                 files = detail.get("files") if isinstance(detail, dict) else []
                 if isinstance(files, list):
                     changed_files = [str(f.get("filename") or "") for f in files if isinstance(f, dict) and f.get("filename")]
@@ -178,11 +238,12 @@ def _fetch_commits(
     return out
 
 
-def _fetch_pull_requests(owner: str, repo: str, *, since: str | None) -> list[McpPullRequest]:
+def _fetch_pull_requests(client: _GitHubClientConfig, *, since: str | None) -> list[McpPullRequest]:
     try:
         payload = _github_get(
-            f"/repos/{owner}/{repo}/pulls",
-            {"state": "all", "per_page": "30", "sort": "updated", "direction": "desc"},
+            f"/repos/{client.owner}/{client.repo}/pulls",
+            client=client,
+            query={"state": "all", "per_page": "30", "sort": "updated", "direction": "desc"},
         )
     except urlerror.HTTPError:
         return []
@@ -200,7 +261,11 @@ def _fetch_pull_requests(owner: str, repo: str, *, since: str | None) -> list[Mc
         changed_files: list[str] = []
         if number:
             try:
-                files_payload = _github_get(f"/repos/{owner}/{repo}/pulls/{number}/files", {"per_page": "100"})
+                files_payload = _github_get(
+                    f"/repos/{client.owner}/{client.repo}/pulls/{number}/files",
+                    client=client,
+                    query={"per_page": "100"},
+                )
                 if isinstance(files_payload, list):
                     changed_files = [
                         str(f.get("filename") or "") for f in files_payload if isinstance(f, dict) and f.get("filename")

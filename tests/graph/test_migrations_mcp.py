@@ -40,6 +40,14 @@ def test_schema_includes_gap_node_labels() -> None:
     ):
         assert label in labels
 
+    props = {label: prop for _, label, prop in MCP_CONSTRAINTS}
+    assert props["JiraTicket"] == "ticket_key"
+    assert props["PullRequest"] == "pr_id"
+    assert props["MergeRequest"] == "mr_id"
+    assert props["MetricEvent"] == "metric_id"
+    assert props["TraceEvent"] == "trace_id"
+    assert props["ArchitectureDocument"] == "document_id"
+
     indexed_labels = {label for _, label, _ in MCP_INDEXES}
     for label in (
         "JiraTicket",
@@ -60,7 +68,8 @@ def test_apply_mcp_migrations_is_idempotent() -> None:
     migrations_mcp._apply_indexes(client)  # type: ignore[arg-type]
 
     assert all("IF NOT EXISTS" in query for query in client.writes)
-    assert any("JiraTicket" in query and "issue_key" in query for query in client.writes)
+    assert any("JiraTicket" in query and "ticket_key" in query for query in client.writes)
+    assert any("PullRequest" in query and "pr_id" in query for query in client.writes)
     assert any("CREATE INDEX" in query and "MetricEvent" in query for query in client.writes)
     assert len(client.writes) == len(MCP_CONSTRAINTS) + len(MCP_INDEXES)
 

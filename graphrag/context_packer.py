@@ -162,6 +162,7 @@ def _pack_investigation_retrieval_context(
         "related_incidents": [],
         "runbooks": [],
         "known_issues": [],
+        "architecture_documents": [],
         "previous_investigations": [],
     }
     if not investigation_id and not service_name and not ticket_key and not alert_id:
@@ -200,6 +201,13 @@ def _pack_investigation_retrieval_context(
         if service:
             runbooks = retriever.get_runbooks_for_service(service, limit=max_items)
 
+        architecture_documents: list[Any] = []
+        architecture_documents = retriever.get_architecture_documents(
+            investigation_id=(investigation_id or "").strip(),
+            service_name=service,
+            limit=max_items,
+        )
+
         known_issues: list[Any] = []
         alert_ids = [alert_id] if alert_id else [a.alert_id for a in alerts[:max_items] if a.alert_id]
         seen_known: set[str] = set()
@@ -229,6 +237,7 @@ def _pack_investigation_retrieval_context(
             "related_incidents": [_compact_record(i) for i in incidents[:max_items]],
             "runbooks": [_compact_record(r) for r in runbooks[:max_items]],
             "known_issues": [_compact_record(k) for k in known_issues[:max_items]],
+            "architecture_documents": [_compact_record(a) for a in architecture_documents[:max_items]],
             "previous_investigations": [_compact_record(p) for p in previous[:max_items]],
         }
     except Exception as exc:
@@ -376,6 +385,9 @@ def _pack_similar_incident_context(
                 "investigation_id": str(data.get("investigation_id") or ""),
                 "similarity_score": _to_float(data.get("similarity_score")),
                 "kubernetes_similarity_score": _to_float(data.get("kubernetes_similarity_score")),
+                "trace_similarity_score": _to_float(data.get("trace_similarity_score")),
+                "metric_similarity_score": _to_float(data.get("metric_similarity_score")),
+                "architecture_similarity_score": _to_float(data.get("architecture_similarity_score")),
                 "matched_factors": list(data.get("matched_factors") or [])[:6],
                 "match_explanation": _truncate_text(data.get("match_explanation"), 240),
                 "resolution_summary": _truncate_text(data.get("resolution_summary"), 240),
@@ -497,6 +509,50 @@ def _resolve_multi_agent_report(
             exc,
         )
         return None
+
+
+def _merge_unified_architecture_documents(
+    investigation_context: dict[str, Any],
+    unified_investigation_context: Any | None,
+    *,
+    max_items: int,
+) -> None:
+    """Append MCP unified architecture docs when graph retrieval returned none."""
+    if unified_investigation_context is None:
+        return
+    arch_docs = getattr(unified_investigation_context, "architecture_documents", None) or []
+    if not arch_docs:
+        return
+
+    existing_ids = {
+        str(item.get("document_id") or "")
+        for item in (investigation_context.get("architecture_documents") or [])
+        if isinstance(item, dict)
+    }
+    merged = list(investigation_context.get("architecture_documents") or [])
+    for arch in arch_docs:
+        data = _model_to_dict(arch)
+        doc_id = str(data.get("document_id") or "").strip()
+        if doc_id and doc_id in existing_ids:
+            continue
+        components = list(data.get("components") or [])
+        subsystem = str(components[0]).strip() if components else ""
+        merged.append(
+            {
+                "document_id": doc_id,
+                "title": _truncate_text(data.get("title"), 120),
+                "summary": _truncate_text(data.get("summary"), 240),
+                "service": str(data.get("service_name") or ""),
+                "subsystem": subsystem,
+                "document_url": str(data.get("url") or ""),
+                "relevance": 0.7,
+            }
+        )
+        if doc_id:
+            existing_ids.add(doc_id)
+        if len(merged) >= max_items:
+            break
+    investigation_context["architecture_documents"] = merged[:max_items]
 
 
 def pack_context(
@@ -624,6 +680,11 @@ def pack_context(
         service_name=resolved_service,
         ticket_key=(ticket_key or "").strip(),
         alert_id=(alert_id or "").strip(),
+        max_items=max_investigation_items,
+    )
+    _merge_unified_architecture_documents(
+        investigation_context,
+        unified_investigation_context,
         max_items=max_investigation_items,
     )
 

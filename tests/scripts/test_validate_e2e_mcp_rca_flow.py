@@ -110,3 +110,71 @@ def test_extract_evidence_coverage_from_preview_payload() -> None:
     coverage = mod._extract_evidence_coverage(payload)
     assert coverage["coverage_level"] == "good"
     assert coverage["available_sources"] == ["jira"]
+
+
+def test_workspace_has_provider_enabled_only() -> None:
+    mod = _load_module()
+    connections = [
+        {"provider": "jira", "is_enabled": True},
+        {"provider": "github", "is_enabled": False},
+    ]
+    assert mod._workspace_has_provider(connections, "jira") is True
+    assert mod._workspace_has_provider(connections, "github") is False
+    assert mod._workspace_has_provider(connections, "datadog") is False
+
+
+def test_list_workspace_connections_without_postgres(monkeypatch) -> None:
+    mod = _load_module()
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
+    assert mod._list_workspace_connections("team-a") == []
+
+
+def test_postgres_configured_reads_env(monkeypatch) -> None:
+    mod = _load_module()
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
+    assert mod._postgres_configured() is False
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://localhost/test")
+    assert mod._postgres_configured() is True
+
+
+def test_build_parser_includes_db_live_mode() -> None:
+    mod = _load_module()
+    parser = mod.build_parser()
+    args = parser.parse_args(
+        ["--mode", "db-live", "--workspace-id", "team-a", "--ticket-key", "PROJ-1"]
+    )
+    assert args.mode == "db-live"
+    assert args.workspace_id == "team-a"
+    assert args.ticket_key == "PROJ-1"
+
+
+def test_run_db_live_validation_requires_workspace_id(monkeypatch) -> None:
+    mod = _load_module()
+    monkeypatch.setenv("POSTGRES_URL", "postgresql://localhost/test")
+    args = mod.build_parser().parse_args(["--mode", "db-live", "--workspace-id", ""])
+    assert mod.run_db_live_validation(args) == 1
+
+
+def test_run_db_live_validation_skips_without_postgres(monkeypatch) -> None:
+    mod = _load_module()
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
+    args = mod.build_parser().parse_args(
+        ["--mode", "db-live", "--workspace-id", "team-a", "--ticket-key", "PROJ-1"]
+    )
+    assert mod.run_db_live_validation(args) == 0
+
+
+def test_run_validation_delegates_db_live(monkeypatch) -> None:
+    mod = _load_module()
+    called: list[str] = []
+
+    def fake_db_live(args):
+        called.append(args.workspace_id)
+        return 0
+
+    monkeypatch.setattr(mod, "run_db_live_validation", fake_db_live)
+    args = mod.build_parser().parse_args(
+        ["--mode", "db-live", "--workspace-id", "ws-123"]
+    )
+    assert mod.run_validation(args) == 0
+    assert called == ["ws-123"]

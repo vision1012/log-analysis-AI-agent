@@ -64,11 +64,11 @@ _MAX_SEARCH_TEXT_LEN = 200
 _MAX_SEARCH_RESULTS = 50
 
 
-def fetch_ticket_context(ticket_key: str) -> JiraTicketFetchResponse:
+def fetch_ticket_context(ticket_key: str, *, workspace_id: str | None = None) -> JiraTicketFetchResponse:
     """Fetch JIRA issue by key and return normalized ticket context + hints."""
     normalized_key = _normalize_ticket_key(ticket_key)
     logger.info("jira.ticket_fetch.start ticket_key=%s", normalized_key)
-    cfg = _jira_config_from_env()
+    cfg = _jira_config(workspace_id=workspace_id)
     try:
         raw_issue = _fetch_issue_from_jira(cfg, normalized_key)
         ticket = _normalize_issue(raw_issue, cfg["base_url"])
@@ -94,6 +94,7 @@ def search_tickets(
     q: str | None = None,
     jql: str | None = None,
     max_results: int = 25,
+    workspace_id: str | None = None,
 ) -> JiraTicketSearchResponse:
     """
     Search JIRA issues via ``POST /rest/api/3/search``.
@@ -116,7 +117,7 @@ def search_tickets(
     else:
         raise JiraInvalidSearchError("provide query parameter q (text) or jql")
 
-    cfg = _jira_config_from_env()
+    cfg = _jira_config(workspace_id=workspace_id)
     n = max(1, min(int(max_results), _MAX_SEARCH_RESULTS))
 
     logger.info(
@@ -172,6 +173,32 @@ def _normalize_ticket_key(ticket_key: str) -> str:
     if not _TICKET_KEY_RE.fullmatch(key):
         raise JiraInvalidTicketKeyError("ticket key must match format PROJECT-123")
     return key
+
+
+def _jira_config(*, workspace_id: str | None = None) -> dict[str, str]:
+    """Resolve Jira config from workspace connection or fall back to environment."""
+    if workspace_id:
+        try:
+            from integrations.connection_service import resolve_connection_for_provider
+
+            resolved = resolve_connection_for_provider(workspace_id, "jira")
+            if resolved:
+                credentials = resolved.get("credentials") or {}
+                base_url = str(resolved.get("base_url") or "").strip().rstrip("/")
+                email = str(credentials.get("email") or "").strip()
+                api_token = str(credentials.get("api_token") or "").strip()
+                if base_url and email and api_token:
+                    parsed = parse.urlparse(base_url)
+                    if parsed.scheme in {"http", "https"} and parsed.netloc:
+                        if _EMAIL_RE.fullmatch(email):
+                            return {
+                                "base_url": base_url,
+                                "email": email,
+                                "api_token": api_token,
+                            }
+        except Exception:
+            logger.debug("jira.config.db_resolution_failed workspace_id=%s", workspace_id, exc_info=True)
+    return _jira_config_from_env()
 
 
 def _jira_config_from_env() -> dict[str, str]:

@@ -29,34 +29,41 @@ if TYPE_CHECKING:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Uniqueness constraints: (constraint_name, label, property)
+# Recommended semantic keys (ticket_key, pr_id, mr_id, ...) mirror MERGE keys set in investigation_writer.
 MCP_CONSTRAINTS: tuple[tuple[str, str, str], ...] = (
     ("constraint_investigation_id", "Investigation", "id"),
-    ("constraint_jira_ticket_issue_key", "JiraTicket", "issue_key"),
-    ("constraint_pull_request_id", "PullRequest", "id"),
-    ("constraint_merge_request_id", "MergeRequest", "id"),
+    ("constraint_jira_ticket_ticket_key", "JiraTicket", "ticket_key"),
+    ("constraint_pull_request_pr_id", "PullRequest", "pr_id"),
+    ("constraint_merge_request_mr_id", "MergeRequest", "mr_id"),
     ("constraint_mcp_commit_sha", "Commit", "sha"),
     ("constraint_mcp_build_id", "Build", "id"),
     ("constraint_mcp_deployment_id", "Deployment", "id"),
-    ("constraint_metric_event_id", "MetricEvent", "id"),
-    ("constraint_trace_event_id", "TraceEvent", "id"),
+    ("constraint_metric_event_metric_id", "MetricEvent", "metric_id"),
+    ("constraint_trace_event_trace_id", "TraceEvent", "trace_id"),
     ("constraint_mcp_alert_id", "AlertEvent", "id"),
     ("constraint_pagerduty_incident_id", "PagerDutyIncident", "id"),
     ("constraint_runbook_id", "Runbook", "id"),
     ("constraint_known_issue_id", "KnownIssue", "id"),
-    ("constraint_architecture_document_id", "ArchitectureDocument", "id"),
+    ("constraint_architecture_document_id", "ArchitectureDocument", "document_id"),
     ("constraint_feedback_id", "Feedback", "feedback_id"),
     ("constraint_rca_candidate_id", "RCACandidate", "candidate_id"),
 )
 
 # Non-constraint indexes: (index_name, label, property)
 MCP_INDEXES: tuple[tuple[str, str, str], ...] = (
+    ("index_jira_ticket_ticket_key", "JiraTicket", "ticket_key"),
     ("index_jira_ticket_issue_key", "JiraTicket", "issue_key"),
+    ("index_pull_request_pr_id", "PullRequest", "pr_id"),
     ("index_pull_request_number", "PullRequest", "number"),
+    ("index_merge_request_mr_id", "MergeRequest", "mr_id"),
     ("index_merge_request_iid", "MergeRequest", "iid"),
+    ("index_metric_event_metric_id", "MetricEvent", "metric_id"),
     ("index_metric_event_timestamp", "MetricEvent", "timestamp"),
     ("index_metric_event_service", "MetricEvent", "service"),
+    ("index_trace_event_trace_id", "TraceEvent", "trace_id"),
     ("index_trace_event_timestamp", "TraceEvent", "timestamp"),
     ("index_trace_event_service", "TraceEvent", "service"),
+    ("index_architecture_document_document_id", "ArchitectureDocument", "document_id"),
     ("index_architecture_document_service_name", "ArchitectureDocument", "service_name"),
     ("index_architecture_document_updated_at", "ArchitectureDocument", "updated_at"),
     ("index_deployment_timestamp", "Deployment", "timestamp"),
@@ -159,7 +166,8 @@ def render_migration_report_markdown(report: MCPMigrationReport) -> str:
             "",
             "## Path Verification",
             "",
-            "- **Write path:** `graph/investigation_writer.py` MERGE keys align with constraint properties",
+            "- **Write path:** `graph/investigation_writer.py` MERGE keys align with constraint properties "
+            "(semantic aliases: ticket_key, pr_id, mr_id, metric_id, trace_id, document_id)",
             "- **Read path:** `graph/investigation_retriever.py` and timeline/graph services query by `id` / `issue_key`",
             "- **Retrieval path:** `graph/similar_incident_service.py` traverses investigation subgraph nodes",
             "",

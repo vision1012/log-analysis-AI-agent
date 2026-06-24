@@ -152,6 +152,9 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         ticket=ticket,
         ticket_hints=ticket_hints,
         log_signals=log_signals,
+        workspace_id=(request.workspace_id or "").strip(),
+        repo_name=(request.repo_name or "").strip(),
+        provider_connection_ids=dict(request.provider_connection_ids or {}),
     )
     if mcp_context is not None:
         _persist_mcp_investigation_graph(
@@ -486,6 +489,9 @@ def _fetch_mcp_context_and_enrich_hints(
     ticket: JiraNormalizedTicket,
     ticket_hints: JiraExtractedHints,
     log_signals: LogSignals,
+    workspace_id: str = "",
+    repo_name: str = "",
+    provider_connection_ids: dict[str, str] | None = None,
 ) -> tuple[JiraExtractedHints, object | None]:
     """
     Optionally fetch MCP investigation context, persist graph, and enrich ticket hints.
@@ -512,7 +518,9 @@ def _fetch_mcp_context_and_enrich_hints(
     params = MCPFetchParams(
         ticket_key=ticket.ticket_key,
         service_name=service,
-        repo_name="",
+        repo_name=repo_name,
+        workspace_id=workspace_id,
+        provider_connection_ids=dict(provider_connection_ids or {}),
         start_time=tw.get("start"),
         end_time=tw.get("end"),
         enabled_sources=default_enabled_sources(),
@@ -574,7 +582,10 @@ def _resolve_ticket_context(request: JiraRcaRunRequest) -> tuple[JiraNormalizedT
         hints = request.ticket_hints or _extract_hints_from_ticket_text(request.ticket)
         return request.ticket, hints
     if request.ticket_key:
-        fetched = fetch_ticket_context(request.ticket_key)
+        fetched = fetch_ticket_context(
+            request.ticket_key,
+            workspace_id=(request.workspace_id or "").strip() or None,
+        )
         return fetched.ticket, fetched.hints
     raise MissingTicketContextError("missing ticket context: provide ticket or ticket_key")
 

@@ -78,9 +78,11 @@ class InvestigationGraphWriter:
         ticket_id = (ticket.issue_key or "").strip() or _stable_id("jira", ticket.summary)
         q = """
         MERGE (n:JiraTicket {issue_key: $issue_key})
-        ON CREATE SET n.summary = $summary, n.status = $status, n.priority = $priority,
+        ON CREATE SET n.ticket_key = $issue_key,
+                      n.summary = $summary, n.status = $status, n.priority = $priority,
                       n.url = $url, n.description = $description
-        ON MATCH SET n.summary = COALESCE($summary, n.summary),
+        ON MATCH SET n.ticket_key = COALESCE(n.ticket_key, $issue_key),
+                     n.summary = COALESCE($summary, n.summary),
                      n.status = COALESCE($status, n.status),
                      n.priority = COALESCE($priority, n.priority),
                      n.url = COALESCE($url, n.url),
@@ -106,9 +108,11 @@ class InvestigationGraphWriter:
         pr_id = _stable_id("pr", str(pr.number), pr.url, pr.title)
         q = """
         MERGE (n:PullRequest {id: $id})
-        ON CREATE SET n.number = $number, n.title = $title, n.state = $state,
+        ON CREATE SET n.pr_id = $id,
+                      n.number = $number, n.title = $title, n.state = $state,
                       n.merged = $merged, n.author = $author, n.url = $url
-        ON MATCH SET n.title = COALESCE($title, n.title),
+        ON MATCH SET n.pr_id = COALESCE(n.pr_id, $id),
+                     n.title = COALESCE($title, n.title),
                      n.state = COALESCE($state, n.state),
                      n.merged = COALESCE($merged, n.merged)
         """
@@ -133,9 +137,11 @@ class InvestigationGraphWriter:
         mr_id = _stable_id("mr", str(mr.iid), mr.url, mr.title)
         q = """
         MERGE (n:MergeRequest {id: $id})
-        ON CREATE SET n.iid = $iid, n.title = $title, n.state = $state,
+        ON CREATE SET n.mr_id = $id,
+                      n.iid = $iid, n.title = $title, n.state = $state,
                       n.author = $author, n.url = $url
-        ON MATCH SET n.title = COALESCE($title, n.title),
+        ON MATCH SET n.mr_id = COALESCE(n.mr_id, $id),
+                     n.title = COALESCE($title, n.title),
                      n.state = COALESCE($state, n.state)
         """
         self._run_or_batch(
@@ -262,10 +268,12 @@ class InvestigationGraphWriter:
         metric_id = _stable_id("metric", metric.metric_name, metric.service, metric.timestamp or "")
         q = """
         MERGE (n:MetricEvent {id: $id})
-        ON CREATE SET n.metric_name = $metric_name, n.service = $service,
+        ON CREATE SET n.metric_id = $id,
+                      n.metric_name = $metric_name, n.service = $service,
                       n.value = $value, n.unit = $unit, n.severity = $severity,
                       n.timestamp = $timestamp
-        ON MATCH SET n.value = COALESCE($value, n.value),
+        ON MATCH SET n.metric_id = COALESCE(n.metric_id, $id),
+                     n.value = COALESCE($value, n.value),
                      n.severity = COALESCE($severity, n.severity)
         """
         self._run_or_batch(
@@ -317,10 +325,12 @@ class InvestigationGraphWriter:
         trace_id = (trace.trace_id or "").strip() or _stable_id("trace", trace.service, trace.endpoint, trace.timestamp or "")
         q = """
         MERGE (n:TraceEvent {id: $id})
-        ON CREATE SET n.service = $service, n.endpoint = $endpoint,
+        ON CREATE SET n.trace_id = $id,
+                      n.service = $service, n.endpoint = $endpoint,
                       n.latency_ms = $latency_ms, n.error_count = $error_count,
                       n.timestamp = $timestamp
-        ON MATCH SET n.latency_ms = COALESCE($latency_ms, n.latency_ms),
+        ON MATCH SET n.trace_id = COALESCE(n.trace_id, $id),
+                     n.latency_ms = COALESCE($latency_ms, n.latency_ms),
                      n.error_count = COALESCE($error_count, n.error_count)
         """
         self._run_or_batch(
@@ -521,13 +531,22 @@ class InvestigationGraphWriter:
         self, doc: ArchitectureDocument, *, _batch: Optional[List[_Op]] = None
     ) -> str:
         doc_id = (doc.document_id or "").strip() or _stable_id("architecture", doc.title, doc.service_name)
+        components = [str(c).strip() for c in (doc.components or []) if str(c).strip()]
+        subsystem = components[0] if components else ""
+        architecture_pattern = "|".join(components[:5]) if components else (doc.space_key or "").strip()
         q = """
         MERGE (n:ArchitectureDocument {id: $id})
-        ON CREATE SET n.title = $title, n.space_key = $space_key, n.url = $url,
+        ON CREATE SET n.document_id = $id,
+                      n.title = $title, n.space_key = $space_key, n.url = $url,
                       n.service_name = $service_name, n.summary = $summary,
-                      n.updated_at = $updated_at
-        ON MATCH SET n.title = COALESCE($title, n.title),
+                      n.subsystem = $subsystem, n.architecture_pattern = $architecture_pattern,
+                      n.components = $components, n.updated_at = $updated_at
+        ON MATCH SET n.document_id = COALESCE(n.document_id, $id),
+                     n.title = COALESCE($title, n.title),
                      n.summary = COALESCE($summary, n.summary),
+                     n.subsystem = COALESCE($subsystem, n.subsystem),
+                     n.architecture_pattern = COALESCE($architecture_pattern, n.architecture_pattern),
+                     n.components = COALESCE($components, n.components),
                      n.updated_at = COALESCE($updated_at, n.updated_at)
         """
         self._run_or_batch(
@@ -540,6 +559,9 @@ class InvestigationGraphWriter:
                     "url": doc.url,
                     "service_name": doc.service_name,
                     "summary": doc.summary,
+                    "subsystem": subsystem,
+                    "architecture_pattern": architecture_pattern,
+                    "components": ",".join(components),
                     "updated_at": doc.updated_at,
                 },
             ),

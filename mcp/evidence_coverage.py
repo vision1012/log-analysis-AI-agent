@@ -55,9 +55,9 @@ def _coverage_level(score: float) -> CoverageLevel:
     return "high"
 
 
-def _connection_status_map() -> dict[MCPSourceName, MCPConnectionStatus]:
+def _connection_status_map(workspace_id: str = "") -> dict[MCPSourceName, MCPConnectionStatus]:
     try:
-        statuses = validate_all_connections()
+        statuses = validate_all_connections(workspace_id=workspace_id or None)
         return {status.provider: status for status in statuses}
     except Exception as exc:
         logger.warning("mcp.evidence_coverage.connection_status_failed err=%s", exc)
@@ -138,13 +138,14 @@ def compute_evidence_coverage(
     context: UnifiedInvestigationContext,
     *,
     connection_statuses: dict[MCPSourceName, MCPConnectionStatus] | None = None,
+    workspace_id: str = "",
 ) -> EvidenceCoverage:
     """
     Compute evidence coverage for a unified investigation context.
 
     Uses provider contribution rules and optional connection health metadata.
     """
-    statuses = connection_statuses if connection_statuses is not None else _connection_status_map()
+    statuses = connection_statuses if connection_statuses is not None else _connection_status_map(workspace_id)
     sources = registered_sources()
 
     source_details: dict[str, SourceDetail] = {}
@@ -175,9 +176,13 @@ def compute_evidence_coverage(
     )
 
 
-def attach_evidence_coverage(context: UnifiedInvestigationContext) -> UnifiedInvestigationContext:
+def attach_evidence_coverage(
+    context: UnifiedInvestigationContext,
+    *,
+    workspace_id: str = "",
+) -> UnifiedInvestigationContext:
     """Return context with evidence_coverage populated."""
-    coverage = compute_evidence_coverage(context)
+    coverage = compute_evidence_coverage(context, workspace_id=workspace_id)
     return context.model_copy(update={"evidence_coverage": coverage})
 
 

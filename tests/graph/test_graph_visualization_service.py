@@ -42,6 +42,7 @@ def test_clamp_depth_bounds() -> None:
 def test_map_edge_types_includes_feedback_relationships() -> None:
     assert _map_edge_type("HAS_FEEDBACK") == "HAS_FEEDBACK"
     assert _map_edge_type("TARGETS_CANDIDATE") == "TARGETS_CANDIDATE"
+    assert _map_edge_type("HAS_ARCHITECTURE_DOC") == "HAS_ARCHITECTURE_DOC"
     assert _map_edge_type("TRIGGERED_BUILD") == "TRIGGERED_BUILD"
     assert _map_edge_type("PRODUCED_DEPLOYMENT") == "DEPLOYED_AS"
     assert _map_edge_type("HAS_RUNBOOK") == "HAS_RUNBOOK"
@@ -86,6 +87,35 @@ def test_get_investigation_graph_includes_feedback_relationships() -> None:
     assert "TARGETS_CANDIDATE" in edge_types
     assert any(edge["relationship"] == "HAS_FEEDBACK" for edge in result["edges"])
     assert any(edge["relationship"] == "TARGETS_CANDIDATE" for edge in result["edges"])
+
+
+def test_get_investigation_graph_includes_architecture_document() -> None:
+    client = _MockClient(
+        node_rows=[
+            {"labels": ["Investigation"], "props": {"id": "inv-1"}},
+            {
+                "labels": ["ArchitectureDocument"],
+                "props": {
+                    "document_id": "arch-1",
+                    "title": "Auth Architecture",
+                    "summary": "Service topology",
+                },
+            },
+            {"labels": ["Service"], "props": {"name": "auth-service"}},
+        ],
+        edge_rows=[
+            {
+                "rel_type": "HAS_ARCHITECTURE_DOC",
+                "src_labels": ["Service"],
+                "src_props": {"name": "auth-service"},
+                "tgt_labels": ["ArchitectureDocument"],
+                "tgt_props": {"document_id": "arch-1"},
+            },
+        ],
+    )
+    result = get_investigation_graph(client, "inv-1", depth=2)
+    assert "ArchitectureDocument" in {n["type"] for n in result["nodes"]}
+    assert any(edge["relationship"] == "HAS_ARCHITECTURE_DOC" for edge in result["edges"])
 
 
 def test_get_investigation_graph_returns_nodes_and_edges() -> None:

@@ -26,6 +26,18 @@ class JiraRcaRunRequest(BaseModel):
     log_content: str = Field(..., min_length=1)
     idempotency_key: Optional[str] = None
     force: bool = False
+    workspace_id: str = Field(
+        default="",
+        description="Workspace identifier for database-backed integration connections",
+    )
+    repo_name: str = Field(
+        default="",
+        description="Optional GitHub repo (owner/repo) override for MCP fetch",
+    )
+    provider_connection_ids: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional per-provider integration connection id overrides",
+    )
 
     @field_validator("log_content")
     @classmethod

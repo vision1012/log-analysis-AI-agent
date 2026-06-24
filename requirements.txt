@@ -32,6 +32,9 @@ neo4j>=5.0.0
 # Investigation report export
 fpdf2>=2.7.0
 
+# Integration credential encryption (Fernet)
+cryptography>=42.0.0
+
 # Optional: For data analysis (uncomment when needed)
 # numpy>=1.24.0                # Numerical computing
 # pandas>=2.0.0                # Data analysis

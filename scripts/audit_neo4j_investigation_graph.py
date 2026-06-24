@@ -506,8 +506,7 @@ NODE_RULES: dict[str, dict[str, dict[str, Any]]] = {
         },
         "timeline": {
             "files": ["investigation/timeline_service.py"],
-            "patterns_any": ["KnownIssue"],
-            "partial_detail": "no timeline event mapper for KnownIssue nodes",
+            "patterns_any": ["KnownIssue", "KNOWN_ISSUE_MATCHED", "_events_from_known_issue"],
         },
         "reports": {
             "files": ["reporting/report_builder.py", "agents/knowledge_agent.py"],

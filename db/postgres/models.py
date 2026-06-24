@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import Boolean, DateTime, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -43,3 +44,35 @@ class User(Base):
         server_default=func.current_timestamp(),
         nullable=False,
     )
+
+
+class IntegrationConnection(Base):
+    """Workspace integration connection row (``integration_connections`` table)."""
+
+    __tablename__ = "integration_connections"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    base_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    org_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    project_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    repo_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    encrypted_credentials: Mapped[str] = mapped_column(Text, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        server_default=func.current_timestamp(),
+        nullable=False,
+    )
+    last_validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
+    last_validation_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_validation_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

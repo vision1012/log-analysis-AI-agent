@@ -490,6 +490,17 @@ def _build_supporting_evidence(graph_context: dict[str, Any]) -> list[str]:
             f"Known issue '{_pick_first(known, 'title')}' affects {_pick_first(known, 'affected_service')}"
         )
 
+    for arch in graph_context.get("architecture_documents") or []:
+        if not isinstance(arch, dict):
+            continue
+        summary = _truncate(_pick_first(arch, "summary"))
+        title = _pick_first(arch, "title") or "Architecture document"
+        subsystem = _pick_first(arch, "subsystem")
+        if subsystem:
+            evidence.append(f"Architecture reference '{title}' ({subsystem}): {summary}")
+        else:
+            evidence.append(f"Architecture reference '{title}': {summary}")
+
     return evidence[:12]
 
 

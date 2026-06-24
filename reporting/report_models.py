@@ -38,6 +38,17 @@ class RunbookEntry(BaseModel):
     url: str = ""
 
 
+class ArchitectureReferenceEntry(BaseModel):
+    """Architecture document summary for export."""
+
+    title: str = ""
+    summary: str = ""
+    service: str = ""
+    subsystem: str = ""
+    relevance: float = 0.0
+    document_url: str = ""
+
+
 class EvidenceCoverageSection(BaseModel):
     """MCP evidence coverage summary for export."""
 
@@ -71,6 +82,7 @@ class InvestigationReport(BaseModel):
     similar_incidents: List[SimilarIncidentEntry] = Field(default_factory=list)
     feedback_history: List[FeedbackHistoryEntry] = Field(default_factory=list)
     runbooks: List[RunbookEntry] = Field(default_factory=list)
+    architecture_references: List[ArchitectureReferenceEntry] = Field(default_factory=list)
     remediation_steps: List[str] = Field(default_factory=list)
     multi_agent_summary: str = ""
     evidence_coverage: EvidenceCoverageSection = Field(default_factory=EvidenceCoverageSection)

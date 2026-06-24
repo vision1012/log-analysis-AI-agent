@@ -522,8 +522,7 @@ NODE_RULES: dict[str, dict[str, dict[str, Any]]] = {
         },
         "similar_incidents": {
             "files": ["graph/similar_incident_service.py"],
-            "patterns_any": ["MetricEvent"],
-            "partial_detail": "not a dedicated similar-incident shared-entity factor",
+            "patterns_any": ["MetricEvent", "metric_similarity_score", "metric_match", "MetricSignal"],
         },
     },
     "AlertEvent": {
@@ -578,8 +577,15 @@ NODE_RULES: dict[str, dict[str, dict[str, Any]]] = {
         },
         "similar_incidents": {
             "files": ["graph/similar_incident_service.py"],
-            "patterns_any": ["TraceEvent"],
-            "partial_detail": "not a scored shared-entity factor in similar incident traversal",
+            "patterns_any": [
+                "TraceEvent",
+                "trace_similarity_score",
+                "trace_match",
+                "TraceSignal",
+                "TraceFailure",
+                "ErrorCount",
+                "HighLatency",
+            ],
         },
     },
     "PagerDutyIncident": {
@@ -649,8 +655,7 @@ NODE_RULES: dict[str, dict[str, dict[str, Any]]] = {
         },
         "timeline": {
             "files": ["investigation/timeline_service.py"],
-            "patterns_any": ["KnownIssue"],
-            "partial_detail": "no timeline event mapper for KnownIssue nodes",
+            "patterns_any": ["KnownIssue", "KNOWN_ISSUE_MATCHED", "_events_from_known_issue"],
         },
         "reports": {
             "files": ["reporting/report_builder.py", "agents/knowledge_agent.py"],
@@ -667,29 +672,32 @@ NODE_RULES: dict[str, dict[str, dict[str, Any]]] = {
             "patterns_any": ["upsert_architecture_document", "architecture_documents"],
         },
         "read_path": {
-            "files": ["graph/investigation_writer.py"],
-            "patterns_any": ["ArchitectureDocument", "link_service_architecture_document"],
-            "partial_detail": "no dedicated retriever method; write/link path only",
+            "files": ["graph/investigation_retriever.py"],
+            "patterns_any": ["get_architecture_documents", "GraphArchitectureDocumentRecord"],
         },
         "graph_visualization": {
             "files": ["graph/graph_visualization_service.py"],
-            "patterns_any": ["HAS_ARCHITECTURE_DOC"],
-            "partial_detail": "ArchitectureDocument not in VISUALIZATION_NODE_TYPES; edge type mapped only",
+            "patterns_any": ["ArchitectureDocument", "HAS_ARCHITECTURE_DOC"],
         },
         "timeline": {
             "files": ["investigation/timeline_service.py"],
-            "patterns_any": ["ArchitectureDocument"],
-            "partial_detail": "no timeline event mapper for ArchitectureDocument nodes",
+            "patterns_any": ["ARCHITECTURE_REFERENCE", "_events_from_architecture_document"],
         },
         "reports": {
-            "files": ["reporting/report_builder.py", "reporting/markdown_exporter.py"],
-            "patterns_any": ["architecture", "ArchitectureDocument"],
-            "partial_detail": "no dedicated ArchitectureDocument section in investigation reports",
+            "files": [
+                "reporting/report_builder.py",
+                "reporting/markdown_exporter.py",
+                "reporting/pdf_exporter.py",
+            ],
+            "patterns_any": ["architecture_references", "Architecture References"],
         },
         "similar_incidents": {
             "files": ["graph/similar_incident_service.py"],
-            "patterns_any": ["ArchitectureDocument"],
-            "partial_detail": "not a scored shared-entity factor in similar incident traversal",
+            "patterns_any": [
+                "architecture_similarity_score",
+                "architecture_match",
+                "ArchSignal:Subsystem:",
+            ],
         },
     },
     "Feedback": {

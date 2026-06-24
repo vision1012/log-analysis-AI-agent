@@ -74,9 +74,10 @@ def _is_cache_valid() -> bool:
     return (time.monotonic() - _cache_monotonic) < ttl
 
 
-def _store_cache(status: MCPConnectionStatus) -> None:
+def _store_cache(status: MCPConnectionStatus, *, cache_key: str | None = None) -> None:
     global _cache_monotonic
-    _cache[status.provider] = status
+    key = cache_key or status.provider
+    _cache[key] = status
     _cache_monotonic = time.monotonic()
 
 
@@ -87,23 +88,42 @@ def clear_connection_cache() -> None:
     _cache_monotonic = 0.0
 
 
-def validate_provider(provider_name: str, *, force_refresh: bool = False) -> MCPConnectionStatus:
+def validate_provider(
+    provider_name: str,
+    *,
+    workspace_id: str | None = None,
+    force_refresh: bool = False,
+) -> MCPConnectionStatus:
     """Validate one MCP provider connection."""
     name = _normalize_provider(provider_name)
-    if not force_refresh and _is_cache_valid() and name in _cache:
-        return _cache[name]
+    cache_scope = (workspace_id or "env").strip() or "env"
+    cache_key = f"{cache_scope}:{name}"
+    if not force_refresh and _is_cache_valid() and cache_key in _cache:
+        return _cache[cache_key]
 
-    provider = get_provider_class(name)()
+    runtime_connection = None
+    ws = (workspace_id or "").strip()
+    if ws:
+        from mcp.integration_resolver import resolve_runtime_connection_for_workspace
+
+        runtime_connection = resolve_runtime_connection_for_workspace(ws, name, repo_name=None)
+
+    provider = get_provider_class(name)(runtime_connection=runtime_connection)
     status = _health_to_connection_status(provider.health_check())
-    _store_cache(status)
+    _store_cache(status, cache_key=cache_key)
     return status
 
 
-def validate_all_connections(*, force_refresh: bool = False) -> list[MCPConnectionStatus]:
+def validate_all_connections(
+    *,
+    workspace_id: str | None = None,
+    force_refresh: bool = False,
+) -> list[MCPConnectionStatus]:
     """Validate all registered MCP provider connections."""
     sources = registered_sources()
-    if not force_refresh and _is_cache_valid() and all(source in _cache for source in sources):
-        return [_cache[source] for source in sources]
+    cache_scope = (workspace_id or "env").strip() or "env"
+    if not force_refresh and _is_cache_valid() and all(f"{cache_scope}:{source}" in _cache for source in sources):
+        return [_cache[f"{cache_scope}:{source}"] for source in sources]
 
-    statuses = [validate_provider(source, force_refresh=True) for source in sources]
+    statuses = [validate_provider(source, workspace_id=workspace_id, force_refresh=True) for source in sources]
     return statuses

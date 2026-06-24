@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from reporting.markdown_exporter import export_markdown, render_markdown
 from reporting.report_models import (
+    ArchitectureReferenceEntry,
     EvidenceCoverageSection,
     InvestigationReport,
     KeywordEvidenceSection,
@@ -35,6 +36,16 @@ def _sample_report() -> InvestigationReport:
                 title="Payment Rollback",
                 service_name="payment-service",
                 summary="Rollback to previous deployment.",
+            )
+        ],
+        architecture_references=[
+            ArchitectureReferenceEntry(
+                title="Payment Architecture",
+                summary="Queue and worker topology.",
+                service="payment-service",
+                subsystem="worker-pool",
+                relevance=0.9,
+                document_url="https://wiki.example/arch",
             )
         ],
         remediation_steps=["Follow runbook 'Payment Rollback': Rollback to previous deployment."],
@@ -72,6 +83,8 @@ def test_render_markdown_includes_all_sections() -> None:
     assert "## Similar Incidents" in content
     assert "## Multi-Agent Findings" in content
     assert "## Runbooks" in content
+    assert "## Architecture References" in content
+    assert "worker-pool" in content
     assert "## Recommended Actions" in content
     assert "/srv/payment/processor.py" in content
 

@@ -144,6 +144,63 @@ def test_build_timeline_includes_feedback_and_rca(monkeypatch, tmp_path) -> None
     assert events[-1].event_type == "FEEDBACK_SUBMITTED"
 
 
+def test_build_timeline_includes_known_issue_matched() -> None:
+    client = _MockClient(
+        graph_nodes=[
+            {
+                "labels": ["KnownIssue"],
+                "props": {
+                    "id": "ki-42",
+                    "title": "Auth timeout regression",
+                    "workaround": "Increase connection pool timeout",
+                    "severity": "high",
+                    "affected_service": "auth-service",
+                    "updated_at": "2024-01-01T10:30:00Z",
+                    "url": "https://confluence.example.com/ki-42",
+                },
+            }
+        ]
+    )
+    events = build_investigation_timeline(client, "inv-1")
+    assert len(events) == 1
+    event = events[0]
+    assert event.event_type == "KNOWN_ISSUE_MATCHED"
+    assert event.source == "Confluence"
+    assert event.title == "Auth timeout regression"
+    assert event.description == "Increase connection pool timeout"
+    assert event.severity == "high"
+    assert event.metadata["known_issue_id"] == "ki-42"
+
+
+def test_build_timeline_maps_architecture_document() -> None:
+    client = _MockClient(
+        graph_nodes=[
+            {
+                "labels": ["ArchitectureDocument"],
+                "props": {
+                    "document_id": "arch-42",
+                    "title": "Payment service architecture",
+                    "summary": "Async queue and worker pool",
+                    "service_name": "payment-service",
+                    "subsystem": "worker-pool",
+                    "updated_at": "2024-01-01T10:30:00Z",
+                    "url": "https://confluence.example.com/arch-42",
+                },
+            }
+        ]
+    )
+    events = build_investigation_timeline(client, "inv-1")
+    assert len(events) == 1
+    event = events[0]
+    assert event.event_type == "ARCHITECTURE_REFERENCE"
+    assert event.source == "Confluence"
+    assert event.title == "Payment service architecture"
+    assert event.description == "Async queue and worker pool"
+    assert event.metadata["document_url"] == "https://confluence.example.com/arch-42"
+    assert event.metadata["service"] == "payment-service"
+    assert event.metadata["subsystem"] == "worker-pool"
+
+
 def test_build_timeline_filters_by_time_window() -> None:
     client = _MockClient(
         graph_nodes=[

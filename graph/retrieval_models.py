@@ -87,6 +87,18 @@ class GraphRunbookRecord(BaseModel):
     updated_at: Optional[str] = None
 
 
+class GraphArchitectureDocumentRecord(BaseModel):
+    """Architecture document retrieved from the investigation graph."""
+
+    document_id: str = ""
+    title: str = ""
+    summary: str = ""
+    service: str = ""
+    subsystem: str = ""
+    document_url: str = ""
+    relevance: float = 0.0
+
+
 class GraphInvestigationRecord(BaseModel):
     """Prior investigation retrieved for similarity lookup."""
 
@@ -105,6 +117,9 @@ class SimilarInvestigation(BaseModel):
     investigation_id: str
     similarity_score: float = 0.0
     kubernetes_similarity_score: float = 0.0
+    trace_similarity_score: float = 0.0
+    metric_similarity_score: float = 0.0
+    architecture_similarity_score: float = 0.0
     matched_factors: List[str] = Field(default_factory=list)
     match_explanation: str = ""
     root_cause: str = ""
