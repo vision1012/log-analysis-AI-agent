@@ -82,7 +82,10 @@ class MCPOrchestrator:
                 from mcp.integration_resolver import resolve_runtime_connection_for_workspace
 
                 runtime_connection = resolve_runtime_connection_for_workspace(ws, source)
-            provider = get_provider_class(source)(runtime_connection=runtime_connection)
+            provider = get_provider_class(source)(
+                runtime_connection=runtime_connection,
+                database_only=bool(ws),
+            )
             out.append(provider.health_check())
         return out
 

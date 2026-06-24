@@ -15,6 +15,11 @@ from mcp.schemas.common import MCPSourceName
 logger = logging.getLogger(__name__)
 
 
+def runtime_connection_from_row(row: object, *, provider: str) -> ProviderRuntimeConnection:
+    """Build a decrypted runtime connection from an integration_connections row."""
+    return _row_to_runtime(row, provider=provider)
+
+
 def _row_to_runtime(row: object, *, provider: str) -> ProviderRuntimeConnection:
     credentials = decrypt_credentials(getattr(row, "encrypted_credentials"))
     return ProviderRuntimeConnection(

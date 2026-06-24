@@ -39,7 +39,11 @@ class GitHubProvider(BaseMCPProvider):
 
     def is_configured(self) -> bool:
         try:
-            _github_client_config(self._runtime_connection, MCPFetchParams(ticket_key=""))
+            _github_client_config(
+                self._runtime_connection,
+                MCPFetchParams(ticket_key=""),
+                database_only=self._database_only,
+            )
             return True
         except RuntimeError:
             return False
@@ -52,15 +56,22 @@ class GitHubProvider(BaseMCPProvider):
                 source="github", enabled=False, configured=configured, reachable=False, detail="disabled"
             )
         if not configured:
+            detail = "no integration connection configured"
+            if not self._database_only:
+                detail = "missing GITHUB_TOKEN or repo"
             return ProviderHealth(
                 source="github",
                 enabled=True,
                 configured=False,
                 reachable=False,
-                detail="missing GITHUB_TOKEN or repo",
+                detail=detail,
             )
         try:
-            client = _github_client_config(self._runtime_connection, MCPFetchParams(ticket_key=""))
+            client = _github_client_config(
+                self._runtime_connection,
+                MCPFetchParams(ticket_key=""),
+                database_only=self._database_only,
+            )
             _github_get("/user", client=client)
             detail = "ok"
             if client.connection_id:
@@ -73,7 +84,11 @@ class GitHubProvider(BaseMCPProvider):
 
     def fetch(self, params: MCPFetchParams) -> UnifiedInvestigationContext:
         try:
-            client = _github_client_config(self._runtime_connection, params)
+            client = _github_client_config(
+                self._runtime_connection,
+                params,
+                database_only=self._database_only,
+            )
         except RuntimeError:
             return UnifiedInvestigationContext()
 
@@ -100,11 +115,15 @@ class GitHubProvider(BaseMCPProvider):
         )
 
 
-def _github_token(runtime: ProviderRuntimeConnection | None) -> str:
+def _github_token(runtime: ProviderRuntimeConnection | None, *, database_only: bool = False) -> str:
     if runtime is not None and runtime.source == "database":
         token = str((runtime.credentials or {}).get("token") or "").strip()
         if token:
             return token
+        if database_only:
+            return ""
+    if database_only:
+        return ""
     return (os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_API_TOKEN") or "").strip()
 
 
@@ -147,9 +166,13 @@ def _resolve_repo(params: MCPFetchParams) -> tuple[str, str]:
 def _github_client_config(
     runtime: ProviderRuntimeConnection | None,
     params: MCPFetchParams,
+    *,
+    database_only: bool = False,
 ) -> _GitHubClientConfig:
-    token = _github_token(runtime)
+    token = _github_token(runtime, database_only=database_only)
     if not token:
+        if database_only:
+            raise RuntimeError("integration connection missing GitHub token")
         raise RuntimeError("GITHUB_TOKEN not set")
     owner, repo = "", ""
     connection_id = ""
@@ -157,6 +180,8 @@ def _github_client_config(
         owner, repo = _resolve_repo_from_runtime(runtime)
         connection_id = runtime.connection_id
     if not owner or not repo:
+        if database_only:
+            raise RuntimeError("integration connection missing GitHub org/repo")
         owner, repo = _resolve_repo(params)
     if not owner or not repo:
         raise RuntimeError("GitHub repo not configured")

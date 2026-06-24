@@ -40,7 +40,7 @@ class JiraProvider(BaseMCPProvider):
 
     def is_configured(self) -> bool:
         try:
-            _jira_cfg(self._runtime_connection)
+            _jira_cfg(self._runtime_connection, database_only=self._database_only)
             return True
         except JiraConfigError:
             return False
@@ -53,11 +53,14 @@ class JiraProvider(BaseMCPProvider):
                 source="jira", enabled=False, configured=configured, reachable=False, detail="disabled"
             )
         if not configured:
+            detail = "no integration connection configured"
+            if not self._database_only:
+                detail = "missing JIRA config"
             return ProviderHealth(
-                source="jira", enabled=True, configured=False, reachable=False, detail="missing JIRA config"
+                source="jira", enabled=True, configured=False, reachable=False, detail=detail
             )
         try:
-            cfg = _jira_cfg(self._runtime_connection)
+            cfg = _jira_cfg(self._runtime_connection, database_only=self._database_only)
             _jira_get_json(cfg, "/rest/api/3/myself")
             detail = "ok"
             if self._runtime_connection and self._runtime_connection.source == "database":
@@ -73,13 +76,13 @@ class JiraProvider(BaseMCPProvider):
         if not key or key == "UNKNOWN" or not _TICKET_KEY_RE.fullmatch(key):
             return UnifiedInvestigationContext()
 
-        cfg = _jira_cfg(self._runtime_connection)
+        cfg = _jira_cfg(self._runtime_connection, database_only=self._database_only)
         workspace_id = (params.workspace_id or "").strip() or None
         if self._runtime_connection:
             fetched = _fetch_ticket_context_with_cfg(key, cfg)
         else:
             fetched = fetch_ticket_context(key, workspace_id=workspace_id)
-            cfg = _jira_cfg(None)
+            cfg = _jira_cfg(None, database_only=self._database_only)
         ticket = fetched.ticket
         raw_issue = _fetch_issue_with_links(key, cfg)
         comments = _parse_comments(raw_issue)
@@ -112,13 +115,21 @@ class JiraProvider(BaseMCPProvider):
         )
 
 
-def _jira_cfg(runtime: ProviderRuntimeConnection | None) -> dict[str, str]:
+def _jira_cfg(
+    runtime: ProviderRuntimeConnection | None,
+    *,
+    database_only: bool = False,
+) -> dict[str, str]:
     if runtime is not None and runtime.source == "database":
         base_url = (runtime.base_url or "").strip().rstrip("/")
         email = str((runtime.credentials or {}).get("email") or "").strip()
         api_token = str((runtime.credentials or {}).get("api_token") or "").strip()
         if base_url and email and api_token:
             return {"base_url": base_url, "email": email, "api_token": api_token}
+        if database_only:
+            raise JiraConfigError("integration connection missing JIRA credentials")
+    if database_only:
+        raise JiraConfigError("no integration connection configured")
     base_url = os.environ.get("JIRA_BASE_URL", "").strip().rstrip("/")
     email = os.environ.get("JIRA_EMAIL", "").strip()
     api_token = os.environ.get("JIRA_API_TOKEN", "").strip()

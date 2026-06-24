@@ -17,3 +17,5 @@ class MCPConnectionStatus(BaseModel):
     healthy: bool
     last_checked: str
     error_message: Optional[str] = None
+    connection_id: Optional[str] = None
+    display_name: Optional[str] = None
