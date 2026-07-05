@@ -26,6 +26,18 @@ class JiraRcaRunRequest(BaseModel):
     log_content: str = Field(..., min_length=1)
     idempotency_key: Optional[str] = None
     force: bool = False
+    workspace_id: str = Field(
+        default="",
+        description="Workspace identifier for database-backed integration connections",
+    )
+    repo_name: str = Field(
+        default="",
+        description="Optional GitHub repo (owner/repo) override for MCP fetch",
+    )
+    provider_connection_ids: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional per-provider integration connection id overrides",
+    )
 
     @field_validator("log_content")
     @classmethod
@@ -88,6 +100,11 @@ class JiraRcaExplanationPayload(BaseModel):
     explanation: str = ""
     remediation_suggestions: List[str] = Field(default_factory=list)
     confidence_note: str = ""
+    mcp_context_summary: Dict[str, object] = Field(default_factory=dict)
+    signal_contributions: List[Dict[str, object]] = Field(
+        default_factory=list,
+        description="MCP Signal Engine v2 contributions (value, weight, contribution, evidence)",
+    )
 
 
 class RelationshipReadyBundle(BaseModel):

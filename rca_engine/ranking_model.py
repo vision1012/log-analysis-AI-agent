@@ -16,6 +16,8 @@ from typing import Any, Optional
 from rca_engine.candidate_generator import Candidate
 from rca_engine.mcp_signal_config import mcp_point_scale, mcp_rca_signals_enabled
 from rca_engine.signal_computation import MCP_SIGNAL_NAMES, SIGNAL_NAMES
+from rca_engine.mcp_context_signals import MCP_CONTEXT_SIGNAL_NAMES
+from rca_engine.mcp_signal_v2_config import MCP_SIGNAL_V2_NAMES
 
 N_CANDIDATES = 3
 TRACE_COMPLETENESS_CAP_THRESHOLD = 0.5
@@ -43,6 +45,28 @@ MCP_DEFAULT_WEIGHTS: dict[str, float] = {
     "historical_investigation": 0.02,
 }
 
+MCP_CONTEXT_WEIGHTS: dict[str, float] = {
+    "recent_commit_match": 0.03,
+    "recent_pr_match": 0.025,
+    "changed_file_match": 0.035,
+    "jira_ticket_match": 0.02,
+    "jira_label_match": 0.015,
+    "author_activity_match": 0.025,
+}
+
+MCP_SIGNAL_V2_WEIGHTS: dict[str, float] = {
+    "code_ownership": 0.025,
+    "code_churn": 0.03,
+    "deployment_proximity_v2": 0.03,
+    "rollback": 0.025,
+    "build_failure": 0.025,
+    "service_dependency": 0.02,
+    "incident_recurrence": 0.025,
+    "alert_correlation_v2": 0.03,
+    "reviewer": 0.02,
+    "author_expertise": 0.025,
+}
+
 UNAVAILABLE_WHEN_ZERO = (
     "last_touch_recency",
     "deploy_proximity",
@@ -54,6 +78,8 @@ UNAVAILABLE_WHEN_ZERO = (
     "incident_severity",
     "known_issue_match",
     "historical_investigation",
+    *MCP_CONTEXT_SIGNAL_NAMES,
+    *MCP_SIGNAL_V2_NAMES,
 )
 
 
@@ -91,6 +117,11 @@ def effective_weights() -> dict[str, float]:
     base = _env_weights("RCA_WEIGHT", DEFAULT_WEIGHTS)
     if mcp_rca_signals_enabled():
         base.update(_env_weights("MCP_RCA_WEIGHT", MCP_DEFAULT_WEIGHTS))
+        base.update(_env_weights("MCP_CTX_WEIGHT", MCP_CONTEXT_WEIGHTS))
+        from rca_engine.mcp_signal_v2_config import mcp_signal_v2_enabled
+
+        if mcp_signal_v2_enabled():
+            base.update(_env_weights("MCP_V2_WEIGHT", MCP_SIGNAL_V2_WEIGHTS))
     total = sum(base.values()) or 1.0
     if abs(total - 1.0) > 0.001:
         base = {k: v / total for k, v in base.items()}
@@ -168,7 +199,7 @@ def _score_one(
     mcp_breakdown = _extract_score_breakdown(raw_signals)
     signal_values = {
         k: float(raw_signals.get(k, 0.0))
-        for k in (*SIGNAL_NAMES, *MCP_SIGNAL_NAMES)
+        for k in (*SIGNAL_NAMES, *MCP_SIGNAL_NAMES, *MCP_CONTEXT_SIGNAL_NAMES, *MCP_SIGNAL_V2_NAMES)
         if k in raw_signals and not isinstance(raw_signals.get(k), dict)
     }
     used_weights = _redistribute_weights(signal_values, weights)

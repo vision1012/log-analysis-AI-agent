@@ -76,15 +76,22 @@ class InvestigationGraphWriter:
 
     def upsert_jira_ticket(self, ticket: McpTicketContext, *, _batch: Optional[List[_Op]] = None) -> str:
         ticket_id = (ticket.issue_key or "").strip() or _stable_id("jira", ticket.summary)
+        labels = list(ticket.labels or [])
+        comments_count = len(ticket.comments or [])
         q = """
         MERGE (n:JiraTicket {issue_key: $issue_key})
-        ON CREATE SET n.summary = $summary, n.status = $status, n.priority = $priority,
-                      n.url = $url, n.description = $description
-        ON MATCH SET n.summary = COALESCE($summary, n.summary),
+        ON CREATE SET n.ticket_key = $issue_key,
+                      n.summary = $summary, n.status = $status, n.priority = $priority,
+                      n.url = $url, n.description = $description,
+                      n.labels = $labels, n.comments_count = $comments_count
+        ON MATCH SET n.ticket_key = COALESCE(n.ticket_key, $issue_key),
+                     n.summary = COALESCE($summary, n.summary),
                      n.status = COALESCE($status, n.status),
                      n.priority = COALESCE($priority, n.priority),
                      n.url = COALESCE($url, n.url),
-                     n.description = COALESCE($description, n.description)
+                     n.description = COALESCE($description, n.description),
+                     n.labels = COALESCE($labels, n.labels),
+                     n.comments_count = COALESCE($comments_count, n.comments_count)
         """
         self._run_or_batch(
             (
@@ -96,6 +103,8 @@ class InvestigationGraphWriter:
                     "priority": ticket.priority,
                     "url": ticket.url,
                     "description": ticket.description,
+                    "labels": labels,
+                    "comments_count": comments_count,
                 },
             ),
             _batch,
@@ -104,13 +113,19 @@ class InvestigationGraphWriter:
 
     def upsert_pull_request(self, pr: McpPullRequest, *, _batch: Optional[List[_Op]] = None) -> str:
         pr_id = _stable_id("pr", str(pr.number), pr.url, pr.title)
+        changed_files = list(pr.changed_files or [])
         q = """
         MERGE (n:PullRequest {id: $id})
-        ON CREATE SET n.number = $number, n.title = $title, n.state = $state,
-                      n.merged = $merged, n.author = $author, n.url = $url
-        ON MATCH SET n.title = COALESCE($title, n.title),
+        ON CREATE SET n.pr_id = $id,
+                      n.number = $number, n.title = $title, n.state = $state,
+                      n.merged = $merged, n.author = $author, n.url = $url,
+                      n.changed_files = $changed_files
+        ON MATCH SET n.pr_id = COALESCE(n.pr_id, $id),
+                     n.title = COALESCE($title, n.title),
                      n.state = COALESCE($state, n.state),
-                     n.merged = COALESCE($merged, n.merged)
+                     n.merged = COALESCE($merged, n.merged),
+                     n.author = COALESCE($author, n.author),
+                     n.changed_files = COALESCE($changed_files, n.changed_files)
         """
         self._run_or_batch(
             (
@@ -123,6 +138,7 @@ class InvestigationGraphWriter:
                     "merged": pr.merged,
                     "author": pr.author,
                     "url": pr.url,
+                    "changed_files": changed_files,
                 },
             ),
             _batch,
@@ -133,9 +149,11 @@ class InvestigationGraphWriter:
         mr_id = _stable_id("mr", str(mr.iid), mr.url, mr.title)
         q = """
         MERGE (n:MergeRequest {id: $id})
-        ON CREATE SET n.iid = $iid, n.title = $title, n.state = $state,
+        ON CREATE SET n.mr_id = $id,
+                      n.iid = $iid, n.title = $title, n.state = $state,
                       n.author = $author, n.url = $url
-        ON MATCH SET n.title = COALESCE($title, n.title),
+        ON MATCH SET n.mr_id = COALESCE(n.mr_id, $id),
+                     n.title = COALESCE($title, n.title),
                      n.state = COALESCE($state, n.state)
         """
         self._run_or_batch(
@@ -162,17 +180,21 @@ class InvestigationGraphWriter:
         author: str = "",
         committed_at: str | None = None,
         repo_ref: str = "",
+        changed_files: Optional[List[str]] = None,
         _batch: Optional[List[_Op]] = None,
     ) -> str:
         commit_sha = (sha or "").strip() or _stable_id("commit", message, author)
+        files = list(changed_files or [])
         q = """
         MERGE (n:Commit {sha: $sha})
         ON CREATE SET n.message = $message, n.author = $author,
-                      n.committed_at = $committed_at, n.repo_ref = $repo_ref
+                      n.committed_at = $committed_at, n.repo_ref = $repo_ref,
+                      n.changed_files = $changed_files
         ON MATCH SET n.message = COALESCE($message, n.message),
                      n.author = COALESCE($author, n.author),
                      n.committed_at = COALESCE($committed_at, n.committed_at),
-                     n.repo_ref = COALESCE($repo_ref, n.repo_ref)
+                     n.repo_ref = COALESCE($repo_ref, n.repo_ref),
+                     n.changed_files = COALESCE($changed_files, n.changed_files)
         """
         self._run_or_batch(
             (
@@ -183,6 +205,7 @@ class InvestigationGraphWriter:
                     "author": author,
                     "committed_at": committed_at,
                     "repo_ref": repo_ref,
+                    "changed_files": files,
                 },
             ),
             _batch,
@@ -262,10 +285,12 @@ class InvestigationGraphWriter:
         metric_id = _stable_id("metric", metric.metric_name, metric.service, metric.timestamp or "")
         q = """
         MERGE (n:MetricEvent {id: $id})
-        ON CREATE SET n.metric_name = $metric_name, n.service = $service,
+        ON CREATE SET n.metric_id = $id,
+                      n.metric_name = $metric_name, n.service = $service,
                       n.value = $value, n.unit = $unit, n.severity = $severity,
                       n.timestamp = $timestamp
-        ON MATCH SET n.value = COALESCE($value, n.value),
+        ON MATCH SET n.metric_id = COALESCE(n.metric_id, $id),
+                     n.value = COALESCE($value, n.value),
                      n.severity = COALESCE($severity, n.severity)
         """
         self._run_or_batch(
@@ -317,10 +342,12 @@ class InvestigationGraphWriter:
         trace_id = (trace.trace_id or "").strip() or _stable_id("trace", trace.service, trace.endpoint, trace.timestamp or "")
         q = """
         MERGE (n:TraceEvent {id: $id})
-        ON CREATE SET n.service = $service, n.endpoint = $endpoint,
+        ON CREATE SET n.trace_id = $id,
+                      n.service = $service, n.endpoint = $endpoint,
                       n.latency_ms = $latency_ms, n.error_count = $error_count,
                       n.timestamp = $timestamp
-        ON MATCH SET n.latency_ms = COALESCE($latency_ms, n.latency_ms),
+        ON MATCH SET n.trace_id = COALESCE(n.trace_id, $id),
+                     n.latency_ms = COALESCE($latency_ms, n.latency_ms),
                      n.error_count = COALESCE($error_count, n.error_count)
         """
         self._run_or_batch(
@@ -521,13 +548,22 @@ class InvestigationGraphWriter:
         self, doc: ArchitectureDocument, *, _batch: Optional[List[_Op]] = None
     ) -> str:
         doc_id = (doc.document_id or "").strip() or _stable_id("architecture", doc.title, doc.service_name)
+        components = [str(c).strip() for c in (doc.components or []) if str(c).strip()]
+        subsystem = components[0] if components else ""
+        architecture_pattern = "|".join(components[:5]) if components else (doc.space_key or "").strip()
         q = """
         MERGE (n:ArchitectureDocument {id: $id})
-        ON CREATE SET n.title = $title, n.space_key = $space_key, n.url = $url,
+        ON CREATE SET n.document_id = $id,
+                      n.title = $title, n.space_key = $space_key, n.url = $url,
                       n.service_name = $service_name, n.summary = $summary,
-                      n.updated_at = $updated_at
-        ON MATCH SET n.title = COALESCE($title, n.title),
+                      n.subsystem = $subsystem, n.architecture_pattern = $architecture_pattern,
+                      n.components = $components, n.updated_at = $updated_at
+        ON MATCH SET n.document_id = COALESCE(n.document_id, $id),
+                     n.title = COALESCE($title, n.title),
                      n.summary = COALESCE($summary, n.summary),
+                     n.subsystem = COALESCE($subsystem, n.subsystem),
+                     n.architecture_pattern = COALESCE($architecture_pattern, n.architecture_pattern),
+                     n.components = COALESCE($components, n.components),
                      n.updated_at = COALESCE($updated_at, n.updated_at)
         """
         self._run_or_batch(
@@ -540,6 +576,9 @@ class InvestigationGraphWriter:
                     "url": doc.url,
                     "service_name": doc.service_name,
                     "summary": doc.summary,
+                    "subsystem": subsystem,
+                    "architecture_pattern": architecture_pattern,
+                    "components": ",".join(components),
                     "updated_at": doc.updated_at,
                 },
             ),
@@ -568,6 +607,90 @@ class InvestigationGraphWriter:
         MERGE (i)-[:HAS_JIRA_TICKET]->(t)
         """
         self._run_or_batch((q, {"investigation_id": investigation_id, "issue_key": issue_key}), _batch)
+
+    def link_investigation_references_ticket(
+        self, investigation_id: str, issue_key: str, *, _batch: Optional[List[_Op]] = None
+    ) -> None:
+        q = """
+        MATCH (i:Investigation {id: $investigation_id})
+        MATCH (t:JiraTicket {issue_key: $issue_key})
+        MERGE (i)-[:REFERENCES_TICKET]->(t)
+        """
+        self._run_or_batch((q, {"investigation_id": investigation_id, "issue_key": issue_key}), _batch)
+
+    def upsert_investigation_signal(
+        self,
+        investigation_id: str,
+        *,
+        signal_name: str,
+        candidate_path: str,
+        value: float,
+        weight: float,
+        contribution: float,
+        evidence: dict[str, Any] | None = None,
+        _batch: Optional[List[_Op]] = None,
+    ) -> str:
+        """Persist one MCP Signal Engine v2 contribution on the investigation graph."""
+        import json
+
+        signal_id = _stable_id("rca-signal", investigation_id, candidate_path, signal_name)
+        q = """
+        MERGE (s:InvestigationSignal {id: $id})
+        ON CREATE SET s.created_at = $created_at
+        SET s.signal_name = $signal_name,
+            s.candidate_path = $candidate_path,
+            s.value = $value,
+            s.weight = $weight,
+            s.contribution = $contribution,
+            s.evidence_json = $evidence_json,
+            s.engine_version = $engine_version,
+            s.updated_at = $created_at
+        WITH s
+        MATCH (i:Investigation {id: $investigation_id})
+        MERGE (i)-[:HAS_RCA_SIGNAL]->(s)
+        """
+        self._run_or_batch(
+            (
+                q,
+                {
+                    "id": signal_id,
+                    "investigation_id": investigation_id,
+                    "signal_name": signal_name,
+                    "candidate_path": candidate_path,
+                    "value": float(value),
+                    "weight": float(weight),
+                    "contribution": float(contribution),
+                    "evidence_json": json.dumps(evidence or {}, default=str)[:4000],
+                    "engine_version": "v2",
+                    "created_at": _utc_now(),
+                },
+            ),
+            _batch,
+        )
+        return signal_id
+
+    def link_investigation_commit(
+        self, investigation_id: str, commit_sha: str, *, _batch: Optional[List[_Op]] = None
+    ) -> None:
+        q = """
+        MATCH (i:Investigation {id: $investigation_id})
+        MATCH (c:Commit {sha: $commit_sha})
+        MERGE (i)-[:INVESTIGATED_COMMIT]->(c)
+        """
+        self._run_or_batch(
+            (q, {"investigation_id": investigation_id, "commit_sha": commit_sha}),
+            _batch,
+        )
+
+    def link_investigation_pull_request(
+        self, investigation_id: str, pr_id: str, *, _batch: Optional[List[_Op]] = None
+    ) -> None:
+        q = """
+        MATCH (i:Investigation {id: $investigation_id})
+        MATCH (pr:PullRequest {id: $pr_id})
+        MERGE (i)-[:INVESTIGATED_PR]->(pr)
+        """
+        self._run_or_batch((q, {"investigation_id": investigation_id, "pr_id": pr_id}), _batch)
 
     def link_pull_request_commit(
         self, pr_id: str, commit_sha: str, *, _batch: Optional[List[_Op]] = None
@@ -695,7 +818,8 @@ class InvestigationGraphWriter:
             ticket_key_ref = self.upsert_jira_ticket(context.ticket_context, _batch=batch)
             counts["nodes"] += 1
             self.link_investigation_jira_ticket(investigation_id, ticket_key_ref, _batch=batch)
-            counts["relationships"] += 1
+            self.link_investigation_references_ticket(investigation_id, ticket_key_ref, _batch=batch)
+            counts["relationships"] += 2
 
         commit_shas: list[str] = []
         for commit in context.commits:
@@ -705,6 +829,7 @@ class InvestigationGraphWriter:
                     message=commit.message,
                     author=commit.author,
                     committed_at=commit.committed_at,
+                    changed_files=list(commit.changed_files or []),
                     _batch=batch,
                 )
             else:
@@ -713,16 +838,21 @@ class InvestigationGraphWriter:
                     message=commit.title,
                     author=commit.author,
                     committed_at=commit.committed_at,
+                    changed_files=list(getattr(commit, "changed_files", None) or []),
                     _batch=batch,
                 )
             commit_shas.append(sha)
             counts["nodes"] += 1
+            self.link_investigation_commit(investigation_id, sha, _batch=batch)
+            counts["relationships"] += 1
 
         pr_ids: list[str] = []
         for pr in context.pull_requests:
             pr_id = self.upsert_pull_request(pr, _batch=batch)
             pr_ids.append(pr_id)
             counts["nodes"] += 1
+            self.link_investigation_pull_request(investigation_id, pr_id, _batch=batch)
+            counts["relationships"] += 1
             for sha in commit_shas[:3]:
                 self.link_pull_request_commit(pr_id, sha, _batch=batch)
                 counts["relationships"] += 1

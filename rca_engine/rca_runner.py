@@ -173,6 +173,30 @@ def run_deterministic_rca(
         if meta.get("deployment_id"):
             bundle_payload["deployment_id"] = meta["deployment_id"]
 
+        mcp_refs = raw_signals.get("mcp_artifact_refs") if isinstance(raw_signals, dict) else None
+        if isinstance(mcp_refs, dict) and mcp_refs:
+            from rca_engine.mcp_context_signals import build_mcp_evidence_bundle_fields
+
+            mcp_signal_scores = {
+                k: float(v)
+                for k, v in (r.signal_scores or {}).items()
+                if k in {
+                    "recent_commit_match",
+                    "recent_pr_match",
+                    "changed_file_match",
+                    "jira_ticket_match",
+                    "jira_label_match",
+                    "author_activity_match",
+                }
+            }
+            bundle_payload.update(
+                build_mcp_evidence_bundle_fields(mcp_refs, mcp_signal_scores=mcp_signal_scores)
+            )
+
+        mcp_v2 = raw_signals.get("mcp_v2_contributions") if isinstance(raw_signals, dict) else None
+        if isinstance(mcp_v2, dict) and mcp_v2:
+            bundle_payload.update(mcp_v2)
+
         bundle_id = evidence_store.create_bundle(bundle_payload)
         bundle_ids.append(bundle_id)
 
@@ -351,6 +375,30 @@ def run_rca(
             bundle_payload["keyword_signal"] = keyword_signal
         if meta.get("deployment_id"):
             bundle_payload["deployment_id"] = meta["deployment_id"]
+
+        mcp_refs = raw_signals.get("mcp_artifact_refs") if isinstance(raw_signals, dict) else None
+        if isinstance(mcp_refs, dict) and mcp_refs:
+            from rca_engine.mcp_context_signals import build_mcp_evidence_bundle_fields
+
+            mcp_signal_scores = {
+                k: float(v)
+                for k, v in (r.signal_scores or {}).items()
+                if k in {
+                    "recent_commit_match",
+                    "recent_pr_match",
+                    "changed_file_match",
+                    "jira_ticket_match",
+                    "jira_label_match",
+                    "author_activity_match",
+                }
+            }
+            bundle_payload.update(
+                build_mcp_evidence_bundle_fields(mcp_refs, mcp_signal_scores=mcp_signal_scores)
+            )
+
+        mcp_v2 = raw_signals.get("mcp_v2_contributions") if isinstance(raw_signals, dict) else None
+        if isinstance(mcp_v2, dict) and mcp_v2:
+            bundle_payload.update(mcp_v2)
 
         bundle_id = evidence_store.create_bundle(bundle_payload)
         bundle_ids.append(bundle_id)

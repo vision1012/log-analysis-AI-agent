@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 
 from mcp.config import MCPFetchParams
 from mcp.context.investigation_context import UnifiedInvestigationContext
+from mcp.runtime_connection import ProviderRuntimeConnection
 from mcp.schemas.common import ProviderHealth
 
 
@@ -13,6 +14,15 @@ class BaseMCPProvider(ABC):
     """Fetch normalized investigation slices from one external source."""
 
     source: str
+
+    def __init__(
+        self,
+        runtime_connection: ProviderRuntimeConnection | None = None,
+        *,
+        database_only: bool = False,
+    ) -> None:
+        self._runtime_connection = runtime_connection
+        self._database_only = database_only
 
     @abstractmethod
     def is_enabled(self) -> bool:

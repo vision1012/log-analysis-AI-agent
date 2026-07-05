@@ -9,7 +9,8 @@ import pytest
 
 from agents.agent_models import AgentFinding, AgentInvestigationContext, MultiAgentInvestigationReport
 from feedback.feedback_models import FeedbackRecord
-from graph.retrieval_models import GraphRunbookRecord, SimilarInvestigation
+from graph.retrieval_models import GraphArchitectureDocumentRecord, GraphRunbookRecord, SimilarInvestigation
+from reporting.report_models import ArchitectureReferenceEntry
 from investigation.timeline_models import InvestigationTimelineEvent
 from reporting.report_builder import build_investigation_report
 
@@ -42,6 +43,17 @@ def _sample_context() -> AgentInvestigationContext:
                 service_name="auth-service",
                 summary="Restart pods and verify login flow.",
                 url="https://wiki.example/runbook",
+            )
+        ],
+        architecture_documents=[
+            GraphArchitectureDocumentRecord(
+                document_id="arch-1",
+                title="Auth Architecture",
+                summary="Gateway and auth DB topology.",
+                service="auth-service",
+                subsystem="api-gateway",
+                document_url="https://wiki.example/arch",
+                relevance=0.95,
             )
         ],
         similar_investigations=[
@@ -143,6 +155,9 @@ def test_build_investigation_report_assembles_fields(
     assert report.feedback_history[0].feedback_type == "CONFIRMED"
     assert len(report.runbooks) == 1
     assert report.runbooks[0].title == "Auth Recovery"
+    assert len(report.architecture_references) == 1
+    assert report.architecture_references[0].title == "Auth Architecture"
+    assert report.architecture_references[0].subsystem == "api-gateway"
     assert report.remediation_steps
     assert report.multi_agent_summary
     assert report.evidence_coverage.coverage_score == pytest.approx(0.375)

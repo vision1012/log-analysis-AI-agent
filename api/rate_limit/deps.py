@@ -1,7 +1,5 @@
 """FastAPI rate limits via Redis fixed-window backend."""
 
-from __future__ import annotations
-
 import logging
 
 from fastapi import HTTPException, Request, status

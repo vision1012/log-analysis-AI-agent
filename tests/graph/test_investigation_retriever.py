@@ -6,9 +6,10 @@ from typing import Any
 
 import pytest
 
-from graph.investigation_retriever import InvestigationGraphRetriever
+from graph.investigation_retriever import InvestigationGraphRetriever, get_architecture_documents
 from graph.retrieval_models import (
     GraphAlertRecord,
+    GraphArchitectureDocumentRecord,
     GraphCommitRecord,
     GraphDeploymentRecord,
     GraphIncidentRecord,
@@ -57,6 +58,12 @@ def _query_key(query: str) -> str:
         return "deployments_by_service"
     if "MATCH (d:Deployment)" in normalized and "ORDER BY d.deployed_at" in normalized:
         return "deployments_all"
+    if "HAS_ARCHITECTURE_DOC" in normalized:
+        return "architecture_service_link"
+    if "ArchitectureDocument" in normalized and "Investigation" in normalized:
+        return "architecture_by_investigation"
+    if "MATCH (a:ArchitectureDocument)" in normalized and "toLower" in normalized:
+        return "architecture_direct"
     return "unknown"
 
 
@@ -132,6 +139,19 @@ def mock_client() -> _MockReadClient:
                     "similarity_score": 0.7,
                     "shared_service": "auth-service",
                     "match_reason": "same_project",
+                }
+            ],
+            "architecture_service_link": [
+                {
+                    "document_id": "arch-1",
+                    "title": "Auth Architecture",
+                    "summary": "Auth service topology",
+                    "service_name": "auth-service",
+                    "subsystem": "api-gateway",
+                    "components": "api-gateway,auth-db",
+                    "url": "https://wiki/arch-1",
+                    "relevance": 1.0,
+                    "updated_at": "2024-01-01T09:00:00Z",
                 }
             ],
         }
@@ -216,3 +236,21 @@ def test_get_previous_similar_investigations(mock_client: _MockReadClient) -> No
     assert isinstance(results[0], GraphInvestigationRecord)
     assert results[0].investigation_id == "inv-old"
     assert results[0].match_reason == "same_project"
+
+
+def test_get_architecture_documents_for_service(mock_client: _MockReadClient) -> None:
+    retriever = InvestigationGraphRetriever(mock_client)
+    results = retriever.get_architecture_documents(service_name="auth-service")
+    assert len(results) == 1
+    assert isinstance(results[0], GraphArchitectureDocumentRecord)
+    assert results[0].document_id == "arch-1"
+    assert results[0].service == "auth-service"
+    assert results[0].subsystem == "api-gateway"
+    assert results[0].document_url == "https://wiki/arch-1"
+    assert results[0].relevance == pytest.approx(1.0)
+
+
+def test_get_architecture_documents_module_helper(mock_client: _MockReadClient) -> None:
+    results = get_architecture_documents(mock_client, service_name="auth-service")  # type: ignore[arg-type]
+    assert len(results) == 1
+    assert results[0].title == "Auth Architecture"

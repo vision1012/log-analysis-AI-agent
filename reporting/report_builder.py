@@ -14,11 +14,12 @@ from agents.investigation_coordinator import build_multi_agent_report, run_agent
 from feedback.feedback_models import FeedbackRecord
 from graph.graph_visualization_service import get_investigation_graph
 from graph.neo4j_client import Neo4jClient
-from graph.retrieval_models import GraphRunbookRecord, SimilarInvestigation
+from graph.retrieval_models import GraphArchitectureDocumentRecord, GraphRunbookRecord, SimilarInvestigation
 from investigation.timeline_models import InvestigationTimelineEvent
 from rca_engine.confidence_engine import build_confidence_reasoning
 from rca_engine.signal_computation import KeywordSignal
 from reporting.report_models import (
+    ArchitectureReferenceEntry,
     EvidenceCoverageSection,
     FeedbackHistoryEntry,
     InvestigationReport,
@@ -332,6 +333,17 @@ def _runbook_to_entry(record: GraphRunbookRecord) -> RunbookEntry:
     )
 
 
+def _architecture_to_entry(record: GraphArchitectureDocumentRecord) -> ArchitectureReferenceEntry:
+    return ArchitectureReferenceEntry(
+        title=record.title,
+        summary=record.summary,
+        service=record.service,
+        subsystem=record.subsystem,
+        relevance=record.relevance,
+        document_url=record.document_url,
+    )
+
+
 def _build_remediation_steps(
     runbooks: list[GraphRunbookRecord],
     known_issues: list,
@@ -398,6 +410,9 @@ def build_investigation_report(
         similar_incidents=[_similar_to_entry(item) for item in context.similar_investigations],
         feedback_history=[_feedback_to_entry(item) for item in context.feedback],
         runbooks=[_runbook_to_entry(item) for item in context.runbooks],
+        architecture_references=[
+            _architecture_to_entry(item) for item in context.architecture_documents
+        ],
         remediation_steps=_build_remediation_steps(
             context.runbooks,
             context.known_issues,

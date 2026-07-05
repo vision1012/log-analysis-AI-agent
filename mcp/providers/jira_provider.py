@@ -23,6 +23,7 @@ from mcp.config import MCPFetchParams, jira_mcp_enabled
 from mcp.context.context_builder import merge_context
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.providers.base import BaseMCPProvider
+from mcp.runtime_connection import ProviderRuntimeConnection
 from mcp.schemas.common import ProviderHealth, SourceMetadata
 from mcp.schemas.jira_models import McpJiraComment, McpLinkedIssue, McpTicketContext
 
@@ -39,7 +40,7 @@ class JiraProvider(BaseMCPProvider):
 
     def is_configured(self) -> bool:
         try:
-            _jira_cfg()
+            _jira_cfg(self._runtime_connection, database_only=self._database_only)
             return True
         except JiraConfigError:
             return False
@@ -52,13 +53,19 @@ class JiraProvider(BaseMCPProvider):
                 source="jira", enabled=False, configured=configured, reachable=False, detail="disabled"
             )
         if not configured:
+            detail = "no integration connection configured"
+            if not self._database_only:
+                detail = "missing JIRA config"
             return ProviderHealth(
-                source="jira", enabled=True, configured=False, reachable=False, detail="missing JIRA config"
+                source="jira", enabled=True, configured=False, reachable=False, detail=detail
             )
         try:
-            cfg = _jira_cfg()
+            cfg = _jira_cfg(self._runtime_connection, database_only=self._database_only)
             _jira_get_json(cfg, "/rest/api/3/myself")
-            return ProviderHealth(source="jira", enabled=True, configured=True, reachable=True, detail="ok")
+            detail = "ok"
+            if self._runtime_connection and self._runtime_connection.source == "database":
+                detail = f"ok:connection={self._runtime_connection.connection_id}"
+            return ProviderHealth(source="jira", enabled=True, configured=True, reachable=True, detail=detail)
         except Exception as exc:
             return ProviderHealth(
                 source="jira", enabled=True, configured=True, reachable=False, detail=str(exc)[:200]
@@ -69,9 +76,15 @@ class JiraProvider(BaseMCPProvider):
         if not key or key == "UNKNOWN" or not _TICKET_KEY_RE.fullmatch(key):
             return UnifiedInvestigationContext()
 
-        fetched = fetch_ticket_context(key)
+        cfg = _jira_cfg(self._runtime_connection, database_only=self._database_only)
+        workspace_id = (params.workspace_id or "").strip() or None
+        if self._runtime_connection:
+            fetched = _fetch_ticket_context_with_cfg(key, cfg)
+        else:
+            fetched = fetch_ticket_context(key, workspace_id=workspace_id)
+            cfg = _jira_cfg(None, database_only=self._database_only)
         ticket = fetched.ticket
-        raw_issue = _fetch_issue_with_links(key)
+        raw_issue = _fetch_issue_with_links(key, cfg)
         comments = _parse_comments(raw_issue)
         linked = _parse_linked_issues(raw_issue)
 
@@ -86,11 +99,14 @@ class JiraProvider(BaseMCPProvider):
             linked_issues=linked,
             url=ticket.url,
         )
+        detail = f"ticket={key}"
+        if self._runtime_connection and self._runtime_connection.connection_id:
+            detail = f"{detail} connection={self._runtime_connection.connection_id}"
         meta = SourceMetadata(
             source="jira",
             fetched_at=datetime.now(timezone.utc),
             ok=True,
-            detail=f"ticket={key}",
+            detail=detail,
         )
         return merge_context(
             UnifiedInvestigationContext(),
@@ -99,7 +115,21 @@ class JiraProvider(BaseMCPProvider):
         )
 
 
-def _jira_cfg() -> dict[str, str]:
+def _jira_cfg(
+    runtime: ProviderRuntimeConnection | None,
+    *,
+    database_only: bool = False,
+) -> dict[str, str]:
+    if runtime is not None and runtime.source == "database":
+        base_url = (runtime.base_url or "").strip().rstrip("/")
+        email = str((runtime.credentials or {}).get("email") or "").strip()
+        api_token = str((runtime.credentials or {}).get("api_token") or "").strip()
+        if base_url and email and api_token:
+            return {"base_url": base_url, "email": email, "api_token": api_token}
+        if database_only:
+            raise JiraConfigError("integration connection missing JIRA credentials")
+    if database_only:
+        raise JiraConfigError("no integration connection configured")
     base_url = os.environ.get("JIRA_BASE_URL", "").strip().rstrip("/")
     email = os.environ.get("JIRA_EMAIL", "").strip()
     api_token = os.environ.get("JIRA_API_TOKEN", "").strip()
@@ -132,12 +162,26 @@ def _jira_get_json(cfg: dict[str, str], path: str) -> dict[str, Any]:
         raise JiraError(f"JIRA HTTP {exc.code}") from exc
 
 
-def _fetch_issue_with_links(ticket_key: str) -> dict[str, Any]:
-    cfg = _jira_cfg()
+def _fetch_issue_with_links(ticket_key: str, cfg: dict[str, str]) -> dict[str, Any]:
     fields = parse.quote(
         "summary,description,comment,status,priority,labels,created,updated,issuelinks"
     )
     return _jira_get_json(cfg, f"/rest/api/3/issue/{parse.quote(ticket_key)}?fields={fields}")
+
+
+def _fetch_ticket_context_with_cfg(ticket_key: str, cfg: dict[str, str]):
+    """Fetch normalized ticket using an explicit Jira config (runtime DB connection)."""
+    from api.services.jira_service import _extract_hints, _normalize_issue
+
+    raw_issue = _jira_get_json(
+        cfg,
+        f"/rest/api/3/issue/{parse.quote(ticket_key)}?fields=summary,description,comment,status,priority,labels,created,updated",
+    )
+    ticket = _normalize_issue(raw_issue, cfg["base_url"])
+    hints = _extract_hints(ticket.cleaned_text_body, ticket.labels)
+    from schemas.jira import JiraTicketFetchResponse
+
+    return JiraTicketFetchResponse(ticket=ticket, hints=hints)
 
 
 def _parse_comments(issue: dict[str, Any]) -> list[McpJiraComment]:

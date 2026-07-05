@@ -1,43 +1,41 @@
 # Log Analysis AI Agent - Requirements
-# Python 3.8+ required
-#
-# Optional JS toolchain (frontend / tooling — not installed via pip; use nvm, fnm, or nodejs.org):
-#   node: >=20.18.0 (LTS)
-#   npm:  >=10.8.0  (ships with Node 20+)
+# Python 3.10+ recommended
 
 # Core Dependencies
-pydantic>=2.6.0              # Schema validation
-pydantic-settings>=2.0.0     # Settings management (optional)
-python-dateutil>=2.8.0        # Flexible date/time parsing for log timestamps
+pydantic==2.11.7
+pydantic-settings==2.10.1
+python-dateutil==2.9.0.post0
 
 # Web API
-fastapi>=0.104.0             # FastAPI web framework
-uvicorn>=0.24.0              # ASGI server for FastAPI
-python-multipart>=0.0.9      # Required for FastAPI Form/File request parsing
-# streamlit>=1.28.0            # Streamlit for quick UI prototyping
+fastapi==0.116.1
+starlette==0.47.2
+uvicorn==0.35.0
+python-multipart==0.0.20
 
-# PostgreSQL (user data; any standard connection string, e.g. Supabase)
-sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.0
-bcrypt>=4.0.0
-PyJWT>=2.8.0
-email-validator>=2.0.0
-redis>=5.0.0
-fastapi-limiter>=0.2.0
-pyrate-limiter>=3.0.0
+# HTTP client / TestClient
+httpx==0.28.1
+httpx2==2.5.0
 
-# Neo4j (job data, graph layer)
-neo4j>=5.0.0
+# PostgreSQL
+sqlalchemy==2.0.43
+psycopg2-binary==2.9.10
+bcrypt==4.3.0
+PyJWT==2.10.1
+email-validator==2.2.0
+
+# Redis
+redis==6.2.0
+fastapi-limiter==0.1.6
+pyrate-limiter==3.9.0
+
+# Neo4j
+neo4j==5.28.2
 
 # Investigation report export
-fpdf2>=2.7.0
+fpdf2==2.8.4
 
-# Optional: For data analysis (uncomment when needed)
-# numpy>=1.24.0                # Numerical computing
-# pandas>=2.0.0                # Data analysis
+# Integration credential encryption
+cryptography==45.0.6
 
-# Development Dependencies (optional, for contributors)
-pytest>=7.4.0                # Testing framework (users API validation tests)
-# black>=23.0.0                # Code formatter
-# flake8>=6.1.0                # Linter
-# mypy>=1.5.0                  # Type checker
+# Development / Testing
+pytest==8.4.1

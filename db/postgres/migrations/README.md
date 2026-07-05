@@ -12,6 +12,8 @@ If you already have a `users` table, apply migrations in order:
 
 4. **`004_enable_rls_users.sql`** — Enables Row Level Security on `users` and revokes all privileges from the Supabase `anon` and `authenticated` roles. The backend's `postgres` role bypasses RLS as owner, so SQLAlchemy queries are unaffected.
 
+5. **`005_integration_connections.sql`** — Creates `integration_connections` for workspace-scoped encrypted Jira/GitHub (and other provider) credentials.
+
 Run against your database (example):
 
 ```bash
@@ -19,6 +21,7 @@ psql "$POSTGRES_URL" -f db/postgres/migrations/001_add_password_hash.sql
 psql "$POSTGRES_URL" -f db/postgres/migrations/002_user_email_verification_and_password_reset.sql
 psql "$POSTGRES_URL" -f db/postgres/migrations/003_user_first_last_name.sql
 psql "$POSTGRES_URL" -f db/postgres/migrations/004_enable_rls_users.sql
+psql "$POSTGRES_URL" -f db/postgres/migrations/005_integration_connections.sql
 ```
 
 After migration, signup sends a verification email; login requires `is_email_verified` unless you use seeded/dev users with verification already set.

@@ -87,6 +87,10 @@ def load_agent_investigation_context(
     alerts = retriever.get_related_alerts(investigation_id=investigation_id)
     incidents = retriever.get_related_incidents(investigation_id=investigation_id)
     runbooks = retriever.get_runbooks_for_service(service_name) if service_name else []
+    architecture_documents = retriever.get_architecture_documents(
+        investigation_id=investigation_id,
+        service_name=service_name,
+    )
     known_issues: list = []
     for alert in alerts[:3]:
         known_issues.extend(retriever.get_known_issues_for_alert(alert.alert_id))
@@ -106,6 +110,7 @@ def load_agent_investigation_context(
         alerts=alerts,
         incidents=incidents,
         runbooks=runbooks,
+        architecture_documents=architecture_documents,
         known_issues=known_issues,
         similar_investigations=similar,
         feedback=feedback,

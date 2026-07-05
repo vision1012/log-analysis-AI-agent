@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from graph.retrieval_models import (
     GraphAlertRecord,
+    GraphArchitectureDocumentRecord,
     GraphCommitRecord,
     GraphDeploymentRecord,
     GraphIncidentRecord,
@@ -76,6 +77,17 @@ def test_pack_context_includes_investigation_retrieval(mock_retriever_cls) -> No
     retriever.get_runbooks_for_service.return_value = [
         GraphRunbookRecord(runbook_id="RB1", title="Runbook", service_name="auth-service")
     ]
+    retriever.get_architecture_documents.return_value = [
+        GraphArchitectureDocumentRecord(
+            document_id="arch-1",
+            title="Auth Architecture",
+            summary="Topology overview",
+            service="auth-service",
+            subsystem="api-gateway",
+            document_url="https://wiki/arch-1",
+            relevance=1.0,
+        )
+    ]
     retriever.get_known_issues_for_alert.return_value = [
         GraphKnownIssueRecord(known_issue_id="KI1", title="Known OOM", affected_service="auth-service")
     ]
@@ -101,6 +113,8 @@ def test_pack_context_includes_investigation_retrieval(mock_retriever_cls) -> No
     assert len(ctx["related_incidents"]) == 1
     assert len(ctx["related_commits"]) == 1
     assert len(ctx["runbooks"]) == 1
+    assert len(ctx["architecture_documents"]) == 1
+    assert ctx["architecture_documents"][0]["title"] == "Auth Architecture"
     assert len(ctx["known_issues"]) == 1
     assert len(ctx["previous_investigations"]) == 1
     assert pack["candidates"]

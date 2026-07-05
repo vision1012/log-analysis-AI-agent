@@ -87,6 +87,21 @@ def render_markdown(report: InvestigationReport) -> str:
         runbook_lines.append(f"- **{runbook.title}** [{runbook.service_name}]{url}: {detail}")
     lines.append(_section("Runbooks", "\n".join(runbook_lines) if runbook_lines else "_None matched._"))
 
+    architecture_lines = []
+    for arch in report.architecture_references:
+        url = f" ({arch.document_url})" if arch.document_url else ""
+        subsystem = f" / {arch.subsystem}" if arch.subsystem else ""
+        detail = arch.summary or "See linked architecture document."
+        architecture_lines.append(
+            f"- **{arch.title}** [{arch.service}{subsystem}] (relevance {arch.relevance:.2f}){url}: {detail}"
+        )
+    lines.append(
+        _section(
+            "Architecture References",
+            "\n".join(architecture_lines) if architecture_lines else "_None matched._",
+        )
+    )
+
     lines.append(_section("Recommended Actions", _bullet_list(report.remediation_steps)))
 
     if report.feedback_history:

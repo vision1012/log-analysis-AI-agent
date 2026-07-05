@@ -13,6 +13,9 @@ credentials required on the API host.
 
 Live mode uses CLI/env values and reports SKIPPED for providers without credentials.
 
+Db-live mode uses Postgres ``integration_connections`` for the given ``--workspace-id``
+(Jira + GitHub); ``.env`` provider tokens are not required when DB connections exist.
+
 Prerequisites (mock):
   - API running: uvicorn api.main:app --port 8000
   - Neo4j with migrations (for anomaly RCA + confidence): NEO4J_URI/USER/PASSWORD
@@ -21,11 +24,20 @@ Prerequisites (mock):
 Prerequisites (live):
   - Same as mock, plus provider credentials in API .env for integrations under test
 
+Prerequisites (db-live):
+  - POSTGRES_URL with ``integration_connections`` rows for ``--workspace-id``
+  - INTEGRATION_ENCRYPTION_KEY (or dev fallback) on validator + API hosts
+  - MCP_ENABLED=true on API host; Jira/GitHub MCP flags enabled
+  - Neo4j for graph RCA + persistence (optional but recommended)
+  - Real ``--ticket-key`` and ``--repo-name`` (owner/repo) for the workspace connections
+
 Usage::
 
     python scripts/validate_e2e_mcp_rca_flow.py --mode mock
     python scripts/validate_e2e_mcp_rca_flow.py --mode live --ticket-key PROJ-123 \\
         --service-name auth-service --repo-name org/auth-service
+    python scripts/validate_e2e_mcp_rca_flow.py --mode db-live \\
+        --workspace-id team-a --ticket-key PROJ-123 --repo-name org/auth-service
 """
 
 from __future__ import annotations
@@ -404,9 +416,97 @@ def _validate_coverage_generation(run: ValidationRun, coverage: dict[str, Any]) 
     run.record("Coverage generated", "PASS", f"score={score} level={level}")
 
 
-def _validate_provider_health(run: ValidationRun, client: HttpClient, *, mode: str) -> None:
+def _postgres_configured() -> bool:
+    return bool((os.environ.get("POSTGRES_URL") or "").strip())
+
+
+def _list_workspace_connections(workspace_id: str) -> list[dict[str, Any]]:
+    """Return enabled integration connection summaries for a workspace."""
+    ws = (workspace_id or "").strip()
+    if not ws or not _postgres_configured():
+        return []
+    from db.postgres.connection import get_db_session_readonly
+    from integrations.connection_repository import list_connections
+
+    with get_db_session_readonly() as session:
+        rows = list_connections(session, ws)
+    return [
+        {
+            "id": str(row.id),
+            "provider": str(row.provider),
+            "display_name": str(row.display_name),
+            "is_enabled": bool(row.is_enabled),
+            "repo_name": str(row.repo_name or ""),
+            "base_url": str(row.base_url or ""),
+        }
+        for row in rows
+    ]
+
+
+def _workspace_has_provider(connections: list[dict[str, Any]], provider: str) -> bool:
+    return any(
+        c.get("provider") == provider and c.get("is_enabled")
+        for c in connections
+        if isinstance(c, dict)
+    )
+
+
+def _validate_db_provider_health(
+    workspace_id: str,
+    provider: str,
+    *,
+    repo_name: str = "",
+) -> tuple[CheckStatus, str]:
+    from mcp.integration_resolver import resolve_runtime_connection_for_workspace
+    from mcp.providers.github_provider import GitHubProvider
+    from mcp.providers.jira_provider import JiraProvider
+
+    runtime = resolve_runtime_connection_for_workspace(
+        workspace_id,
+        provider,  # type: ignore[arg-type]
+        repo_name=repo_name or None,
+    )
+    if runtime is None:
+        return "SKIPPED", f"no enabled {provider} connection for workspace"
+
+    provider_cls = JiraProvider if provider == "jira" else GitHubProvider
+    health = provider_cls(runtime_connection=runtime).health_check()
+    if health.reachable:
+        return "PASS", health.detail or "healthy"
+    if health.configured:
+        return "FAIL", str(health.detail or "unreachable")
+    return "SKIPPED", str(health.detail or "not configured")
+
+
+def _fetch_db_live_context(args: argparse.Namespace) -> tuple[dict[str, Any], str]:
+    """Build UnifiedInvestigationContext in-process using workspace DB connections."""
+    from mcp.config import MCPFetchParams, mcp_enabled
+    from mcp.orchestrator import MCPOrchestrator
+
+    if not mcp_enabled():
+        return {}, "MCP_ENABLED=false"
+
+    params = MCPFetchParams(
+        ticket_key=args.ticket_key,
+        service_name=args.service_name,
+        repo_name=args.repo_name,
+        workspace_id=args.workspace_id,
+        enabled_sources=["jira", "github"],
+    )
+    context = MCPOrchestrator().fetch_context(params)
+    return context.model_dump(), ""
+
+
+def _validate_provider_health(
+    run: ValidationRun,
+    client: HttpClient,
+    *,
+    mode: str,
+    workspace_id: str = "",
+) -> None:
+    query = f"?workspace_id={workspace_id}" if workspace_id else ""
     try:
-        response = client.get("/api/v1/mcp/connections", timeout=30.0)
+        response = client.get(f"/api/v1/mcp/connections{query}", timeout=30.0)
     except HTTPError as exc:
         run.record("MCP provider health", "FAIL", f"HTTP {exc.code}")
         return
@@ -430,6 +530,8 @@ def _validate_provider_health(run: ValidationRun, client: HttpClient, *, mode: s
         if mode == "live" and not _provider_env_configured(provider):
             run.record(f"MCP health: {name}", "SKIPPED", "credentials not configured")
             continue
+        if mode == "db-live" and provider not in {"jira", "github"}:
+            continue
         checked += 1
         if conn.get("healthy"):
             run.record(f"MCP health: {name}", "PASS", "healthy")
@@ -439,8 +541,180 @@ def _validate_provider_health(run: ValidationRun, client: HttpClient, *, mode: s
         else:
             run.record(f"MCP health: {name}", "SKIPPED", "not configured")
 
-    if checked == 0 and mode == "mock":
+    if checked == 0 and mode in {"mock", "db-live"}:
         run.record("MCP provider health", "PASS", f"connections endpoint ok ({len(connections)} providers)")
+
+
+def run_db_live_validation(args: argparse.Namespace) -> int:
+    """Validate MCP RCA using Postgres-stored Jira/GitHub integration connections."""
+    run = ValidationRun(mode=args.mode, base_url=args.base_url.rstrip("/"))
+    print("=== MCP RCA E2E validation (db-live) ===")
+    print(f"workspace_id={args.workspace_id} ticket_key={args.ticket_key} repo={args.repo_name}")
+    print()
+
+    workspace_id = (args.workspace_id or "").strip()
+    if not workspace_id:
+        run.record("Workspace integrations loaded", "FAIL", "--workspace-id is required for db-live mode")
+        run.summary()
+        return 1
+
+    if not _postgres_configured():
+        run.record("Workspace integrations loaded", "SKIPPED", "POSTGRES_URL not set on validator host")
+        run.record("Jira DB connection healthy", "SKIPPED", "POSTGRES_URL not set")
+        run.record("GitHub DB connection healthy", "SKIPPED", "POSTGRES_URL not set")
+        run.record("Real Jira ticket fetched", "SKIPPED", "POSTGRES_URL not set")
+        run.record("GitHub commits fetched", "SKIPPED", "POSTGRES_URL not set")
+        run.record("Evidence coverage generated", "SKIPPED", "POSTGRES_URL not set")
+        run.record("RCA completed", "SKIPPED", "POSTGRES_URL not set")
+        run.record("Report generated", "SKIPPED", "POSTGRES_URL not set")
+        run.summary()
+        return 0
+
+    connections = _list_workspace_connections(workspace_id)
+    has_jira = _workspace_has_provider(connections, "jira")
+    has_github = _workspace_has_provider(connections, "github")
+    if connections:
+        providers = ", ".join(
+            f"{c['provider']}:{c['id'][:8]}" for c in connections if c.get("is_enabled")
+        )
+        run.record("Workspace integrations loaded", "PASS", providers or "connections present")
+    else:
+        run.record(
+            "Workspace integrations loaded",
+            "SKIPPED",
+            f"no integration_connections rows for workspace_id={workspace_id}",
+        )
+
+    jira_status, jira_detail = (
+        _validate_db_provider_health(workspace_id, "jira")
+        if has_jira
+        else ("SKIPPED", "no enabled Jira connection in workspace")
+    )
+    run.record("Jira DB connection healthy", jira_status, jira_detail)
+
+    github_status, github_detail = (
+        _validate_db_provider_health(workspace_id, "github", repo_name=args.repo_name)
+        if has_github
+        else ("SKIPPED", "no enabled GitHub connection in workspace")
+    )
+    run.record("GitHub DB connection healthy", github_status, github_detail)
+
+    context_preview: dict[str, Any] = {}
+    fetch_error = ""
+    try:
+        context_preview, fetch_error = _fetch_db_live_context(args)
+    except Exception as exc:
+        fetch_error = str(exc)
+
+    ticket_ctx = context_preview.get("ticket_context")
+    if ticket_ctx:
+        issue_key = ""
+        if isinstance(ticket_ctx, dict):
+            issue_key = str(ticket_ctx.get("issue_key") or "")
+        run.record("Real Jira ticket fetched", "PASS", issue_key or args.ticket_key)
+    elif has_jira and jira_status == "PASS":
+        run.record("Real Jira ticket fetched", "FAIL", fetch_error or "ticket_context missing")
+    else:
+        run.record("Real Jira ticket fetched", "SKIPPED", fetch_error or "Jira connection unavailable")
+
+    commits = context_preview.get("commits") or []
+    prs = context_preview.get("pull_requests") or []
+    if (isinstance(commits, list) and commits) or (isinstance(prs, list) and prs):
+        run.record(
+            "GitHub commits fetched",
+            "PASS",
+            f"commits={len(commits)} prs={len(prs)}",
+        )
+    elif has_github and github_status == "PASS":
+        run.record("GitHub commits fetched", "FAIL", "no commits or pull_requests in context")
+    else:
+        run.record("GitHub commits fetched", "SKIPPED", "GitHub connection unavailable")
+
+    preview_coverage = _extract_evidence_coverage(context_preview)
+    if preview_coverage:
+        score = preview_coverage.get("coverage_score")
+        level = preview_coverage.get("coverage_level")
+        run.record("Evidence coverage generated", "PASS", f"score={score} level={level}")
+    else:
+        run.record("Evidence coverage generated", "SKIPPED", "evidence_coverage missing from context")
+
+    client = HttpClient(args.base_url)
+    token = _resolve_bearer_token(client)
+    if not token:
+        run.record("RCA completed", "SKIPPED", "API auth unavailable (API_BEARER_TOKEN or seeded user)")
+        run.record("Report generated", "SKIPPED", "RCA not run")
+        run.summary()
+        return 0 if not run.failed() else 1
+    client.bearer_token = token
+
+    logs_path = Path(args.logs_file)
+    try:
+        log_content = _load_logs(logs_path)
+    except (OSError, ValueError) as exc:
+        run.record("RCA completed", "FAIL", f"logs: {exc}")
+        run.record("Report generated", "SKIPPED", "RCA not run")
+        run.summary()
+        return 1
+
+    anomaly_id = (args.anomaly_id or "").strip() or f"e2e-db-live-{uuid.uuid4().hex[:10]}"
+    if args.bootstrap_anomaly:
+        ok, detail = _bootstrap_neo4j_anomaly(
+            anomaly_id=anomaly_id,
+            service_name=args.service_name,
+            repo_name=args.repo_name,
+        )
+        if not ok:
+            print(f"neo4j bootstrap skipped: {detail}")
+
+    rca_body: dict[str, Any] = {
+        "anomaly_id": anomaly_id,
+        "ticket_key": args.ticket_key,
+        "log_content": log_content,
+        "workspace_id": workspace_id,
+        "repo_name": args.repo_name,
+        "idempotency_key": f"e2e-db-live-{uuid.uuid4().hex[:12]}",
+        "force": True,
+    }
+    rca_payload: dict[str, Any] = {}
+    try:
+        rca_payload = client.post("/api/v1/jira/rca/run", rca_body, timeout=600.0)
+        status = str((rca_payload.get("rca") or {}).get("run_status") or rca_payload.get("status") or "")
+        if status and status not in {"completed", "ok"}:
+            run.record("RCA completed", "FAIL", f"run_status={status}")
+        else:
+            run.record("RCA completed", "PASS", f"run_id={(rca_payload.get('rca') or {}).get('run_id', '')}")
+    except HTTPError as exc:
+        run.record("RCA completed", "FAIL", f"HTTP {exc.code}: {exc.read().decode()[:240]}")
+    except (URLError, TimeoutError, OSError) as exc:
+        run.record("RCA completed", "FAIL", str(exc))
+
+    evidence_summary = (rca_payload.get("rca") or {}).get("evidence_summary") or {}
+    investigation_id = str(evidence_summary.get("investigation_id") or "")
+    if investigation_id:
+        found, detail = _investigation_node_exists(investigation_id)
+        if not found:
+            print(f"neo4j investigation graph: {detail}")
+
+    if investigation_id:
+        try:
+            response = client.get(f"/api/v1/investigations/{investigation_id}/report", timeout=120.0)
+            report = response.get("report") if isinstance(response, dict) else {}
+            if isinstance(report, dict) and report.get("investigation_id"):
+                run.record("Report generated", "PASS", f"investigation_id={investigation_id}")
+            else:
+                run.record("Report generated", "FAIL", "report payload missing investigation_id")
+        except HTTPError as exc:
+            if exc.code == 404:
+                run.record("Report generated", "SKIPPED", "investigation graph not found for report API")
+            else:
+                run.record("Report generated", "FAIL", f"HTTP {exc.code}")
+        except (URLError, TimeoutError, OSError) as exc:
+            run.record("Report generated", "FAIL", str(exc))
+    else:
+        run.record("Report generated", "SKIPPED", "investigation_id not returned from RCA")
+
+    run.summary()
+    return 1 if run.failed() else 0
 
 
 def _validate_confidence_limitations(run: ValidationRun, assessments: list[dict[str, Any]]) -> None:
@@ -540,6 +814,9 @@ def _validate_coverage_suite(
 
 
 def run_validation(args: argparse.Namespace) -> int:
+    if args.mode == "db-live":
+        return run_db_live_validation(args)
+
     run = ValidationRun(mode=args.mode, base_url=args.base_url.rstrip("/"))
     print("=== MCP RCA E2E validation ===")
     print(f"mode={args.mode} base_url={args.base_url}")
@@ -607,6 +884,8 @@ def run_validation(args: argparse.Namespace) -> int:
         "service_name": args.service_name,
         "repo_name": args.repo_name,
     }
+    if getattr(args, "workspace_id", ""):
+        preview_body["workspace_id"] = args.workspace_id
     if args.mode == "mock":
         preview_body["enabled_sources"] = []
     context_preview: dict[str, Any] = {}
@@ -623,7 +902,12 @@ def run_validation(args: argparse.Namespace) -> int:
         run.record("Context preview", "FAIL", str(exc))
 
     preview_coverage = _extract_evidence_coverage(context_preview)
-    _validate_provider_health(run, client, mode=args.mode)
+    _validate_provider_health(
+        run,
+        client,
+        mode=args.mode,
+        workspace_id=getattr(args, "workspace_id", "") or "",
+    )
 
     if args.mode == "mock":
         mock_coverage = _mock_coverage_context()
@@ -666,6 +950,11 @@ def run_validation(args: argparse.Namespace) -> int:
         "idempotency_key": f"e2e-mcp-rca-{uuid.uuid4().hex[:12]}",
         "force": True,
     }
+    if getattr(args, "workspace_id", ""):
+        rca_body["workspace_id"] = args.workspace_id
+        rca_body["repo_name"] = args.repo_name
+        rca_body.pop("ticket", None)
+        rca_body.pop("ticket_hints", None)
     rca_payload: dict[str, Any] = {}
     try:
         rca_payload = client.post("/api/v1/jira/rca/run", rca_body, timeout=600.0)
@@ -801,7 +1090,12 @@ def run_validation(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate MCP-powered RCA end-to-end flow.")
     parser.add_argument("--base-url", default=os.environ.get("API_BASE", "http://127.0.0.1:8000"))
-    parser.add_argument("--mode", choices=("mock", "live"), default="mock")
+    parser.add_argument("--mode", choices=("mock", "live", "db-live"), default="mock")
+    parser.add_argument(
+        "--workspace-id",
+        default=os.environ.get("E2E_WORKSPACE_ID", ""),
+        help="Workspace id for db-live mode (integration_connections.workspace_id)",
+    )
     parser.add_argument("--ticket-key", default="MOCK-1001")
     parser.add_argument("--service-name", default="auth-service")
     parser.add_argument("--repo-name", default="org/auth-service")

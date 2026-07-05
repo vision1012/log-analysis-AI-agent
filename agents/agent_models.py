@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from feedback.feedback_models import FeedbackRecord
 from graph.retrieval_models import (
     GraphAlertRecord,
+    GraphArchitectureDocumentRecord,
     GraphDeploymentRecord,
     GraphIncidentRecord,
     GraphKnownIssueRecord,
@@ -30,6 +31,7 @@ class AgentInvestigationContext(BaseModel):
     alerts: List[GraphAlertRecord] = Field(default_factory=list)
     incidents: List[GraphIncidentRecord] = Field(default_factory=list)
     runbooks: List[GraphRunbookRecord] = Field(default_factory=list)
+    architecture_documents: List[GraphArchitectureDocumentRecord] = Field(default_factory=list)
     known_issues: List[GraphKnownIssueRecord] = Field(default_factory=list)
     similar_investigations: List[SimilarInvestigation] = Field(default_factory=list)
     feedback: List[FeedbackRecord] = Field(default_factory=list)

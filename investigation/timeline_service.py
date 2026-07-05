@@ -467,6 +467,54 @@ def _events_from_runbook(props: dict[str, Any]) -> list[InvestigationTimelineEve
     return [event] if event else []
 
 
+def _events_from_architecture_document(props: dict[str, Any]) -> list[InvestigationTimelineEvent]:
+    title = _text(props.get("title"), "Architecture reference")
+    subsystem = _text(props.get("subsystem"))
+    if not subsystem:
+        components = _text(props.get("components"))
+        if components:
+            subsystem = components.split(",")[0].strip()
+    event = _event(
+        event_type="ARCHITECTURE_REFERENCE",
+        source=SOURCE_CONFLUENCE,
+        title=title,
+        timestamp=_text(props.get("updated_at")),
+        description=_text(props.get("summary")),
+        metadata={
+            "document_id": _text(props.get("document_id") or props.get("id")),
+            "summary": _text(props.get("summary")),
+            "document_url": _text(props.get("url")),
+            "service": _text(props.get("service_name")),
+            "subsystem": subsystem,
+            "space_key": _text(props.get("space_key")),
+        },
+    )
+    return [event] if event else []
+
+
+def _events_from_known_issue(props: dict[str, Any]) -> list[InvestigationTimelineEvent]:
+    title = _text(props.get("title"), "Known issue matched")
+    description = _text(props.get("workaround"))
+    if not description:
+        affected = _text(props.get("affected_service"))
+        description = f"Affects {affected}" if affected else "Known issue linked to investigation"
+    event = _event(
+        event_type="KNOWN_ISSUE_MATCHED",
+        source=SOURCE_CONFLUENCE,
+        title=title,
+        timestamp=_text(props.get("updated_at")),
+        description=description,
+        severity=_text(props.get("severity")),
+        metadata={
+            "known_issue_id": _text(props.get("id")),
+            "affected_service": _text(props.get("affected_service")),
+            "url": _text(props.get("url")),
+            "space_key": _text(props.get("space_key")),
+        },
+    )
+    return [event] if event else []
+
+
 def _events_from_feedback_record(record: Any) -> list[InvestigationTimelineEvent]:
     fields = _feedback_fields(record)
     feedback_type = _text(fields.get("feedback_type"))
@@ -556,6 +604,10 @@ def _map_graph_node(
         return _events_from_incident(props)
     if label == "Runbook":
         return _events_from_runbook(props)
+    if label == "KnownIssue":
+        return _events_from_known_issue(props)
+    if label == "ArchitectureDocument":
+        return _events_from_architecture_document(props)
     if label == "Feedback":
         return _events_from_feedback_record(props)
     return []

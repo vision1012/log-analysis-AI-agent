@@ -23,11 +23,13 @@ def test_fetch_context_attaches_coverage_when_mcp_disabled(mock_validate, mock_e
 
 @patch("mcp.orchestrator.mcp_enabled", return_value=True)
 @patch("mcp.orchestrator.registered_sources", return_value=["jira"])
+@patch("mcp.orchestrator.resolve_runtime_connection", return_value=None)
 @patch("mcp.orchestrator.get_provider_class")
 @patch("mcp.evidence_coverage.validate_all_connections")
 def test_fetch_context_attaches_coverage_after_provider_fetch(
     mock_validate,
     mock_get_provider_class,
+    mock_resolve,
     mock_sources,
     mock_enabled,
 ) -> None:

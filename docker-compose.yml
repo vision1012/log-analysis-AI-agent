@@ -11,6 +11,13 @@ services:
     environment:
       # Local Compose: Redis hostname is service name `redis` (override in untracked .env)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Neo4j hostname inside Compose network (override in .env for host-local uvicorn)
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+    # Dev: mount full repo so mounted api/integrations code matches host (avoids stale image).
+    # Python deps remain in the image (/usr/local); only /app source is overlaid.
+    volumes:
+      - .:/app
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     # Allow API container to reach Ollama on the host (Linux Docker; Desktop includes this by default).
     extra_hosts:
       - "host.docker.internal:host-gateway"

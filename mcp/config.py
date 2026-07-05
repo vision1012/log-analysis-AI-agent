@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from mcp.schemas.common import MCPSourceName
 
@@ -52,6 +52,16 @@ def confluence_mcp_enabled() -> bool:
     return mcp_enabled() and _env_bool("CONFLUENCE_MCP_ENABLED", default=False)
 
 
+def github_lookback_days() -> int:
+    """Days of GitHub commit/PR history to include relative to investigation time."""
+    raw = (os.environ.get("MCP_GITHUB_LOOKBACK_DAYS") or "14").strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        days = 14
+    return max(1, min(days, 90))
+
+
 def default_enabled_sources() -> List[MCPSourceName]:
     sources: List[MCPSourceName] = []
     if jira_mcp_enabled():
@@ -78,9 +88,11 @@ class MCPFetchParams:
     ticket_key: str
     service_name: str = ""
     repo_name: str = ""
+    workspace_id: str = ""
+    provider_connection_ids: Dict[str, str] = field(default_factory=dict)
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    enabled_sources: List[MCPSourceName] = field(default_factory=default_enabled_sources)
+    enabled_sources: Optional[List[MCPSourceName]] = None
 
     def resolved_repo_name(self) -> str:
         explicit = (self.repo_name or "").strip()

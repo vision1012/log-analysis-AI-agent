@@ -13,6 +13,7 @@ from typing import Any, Optional
 from graph.neo4j_client import Neo4jClient
 from graph.retrieval_models import (
     GraphAlertRecord,
+    GraphArchitectureDocumentRecord,
     GraphCommitRecord,
     GraphDeploymentRecord,
     GraphIncidentRecord,
@@ -39,6 +40,16 @@ def _row_str(row: dict[str, Any], key: str, default: str = "") -> str:
     return str(value)
 
 
+def _row_float(row: dict[str, Any], key: str, default: float = 0.0) -> float:
+    value = row.get(key)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _row_int(row: dict[str, Any], key: str, default: int = 0) -> int:
     value = row.get(key)
     if value is None:
@@ -49,14 +60,7 @@ def _row_int(row: dict[str, Any], key: str, default: int = 0) -> int:
         return default
 
 
-def _row_float(row: dict[str, Any], key: str, default: float = 0.0) -> float:
-    value = row.get(key)
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+TRAVERSAL_MAX_HOPS = 10
 
 
 class InvestigationGraphRetriever:
@@ -369,6 +373,106 @@ class InvestigationGraphRetriever:
         )
         return [_runbook_from_row(row) for row in rows]
 
+    def get_architecture_documents(
+        self,
+        *,
+        investigation_id: str = "",
+        service_name: str = "",
+        limit: int | None = None,
+    ) -> list[GraphArchitectureDocumentRecord]:
+        """Return architecture documents linked to an investigation and/or service."""
+        max_rows = limit or _env_int("INVESTIGATION_GRAPH_ARCHITECTURE_LIMIT", 10)
+        by_id: dict[str, GraphArchitectureDocumentRecord] = {}
+        service = (service_name or "").strip()
+
+        if investigation_id:
+            rows = self._client.execute_read(
+                f"""
+                MATCH (i:Investigation {{id: $investigation_id}})
+                OPTIONAL MATCH (i)-[*1..{TRAVERSAL_MAX_HOPS}]-(a:ArchitectureDocument)
+                WHERE a IS NOT NULL
+                OPTIONAL MATCH (linked:Service)-[:HAS_ARCHITECTURE_DOC]->(a)
+                RETURN DISTINCT
+                       coalesce(a.document_id, a.id) AS document_id,
+                       a.title AS title,
+                       a.summary AS summary,
+                       coalesce(a.service_name, linked.name) AS service_name,
+                       a.subsystem AS subsystem,
+                       a.components AS components,
+                       a.url AS url,
+                       CASE
+                         WHEN $service_name <> ''
+                           AND toLower(coalesce(a.service_name, linked.name, '')) = toLower($service_name)
+                         THEN 1.0
+                         ELSE 0.85
+                       END AS relevance,
+                       a.updated_at AS updated_at
+                ORDER BY relevance DESC, a.updated_at DESC
+                LIMIT $limit
+                """,
+                {"investigation_id": investigation_id, "service_name": service, "limit": max_rows},
+            )
+            for row in rows:
+                record = _architecture_from_row(row)
+                if record.document_id:
+                    by_id[record.document_id] = record
+
+        if service:
+            rows = self._client.execute_read(
+                """
+                MATCH (s:Service {name: $service_name})-[:HAS_ARCHITECTURE_DOC]->(a:ArchitectureDocument)
+                RETURN coalesce(a.document_id, a.id) AS document_id,
+                       a.title AS title,
+                       a.summary AS summary,
+                       coalesce(a.service_name, s.name) AS service_name,
+                       a.subsystem AS subsystem,
+                       a.components AS components,
+                       a.url AS url,
+                       1.0 AS relevance,
+                       a.updated_at AS updated_at
+                ORDER BY a.updated_at DESC
+                LIMIT $limit
+                """,
+                {"service_name": service, "limit": max_rows},
+            )
+            for row in rows:
+                record = _architecture_from_row(row)
+                if not record.document_id:
+                    continue
+                existing = by_id.get(record.document_id)
+                if existing is None or record.relevance > existing.relevance:
+                    by_id[record.document_id] = record
+
+        if not by_id and service:
+            rows = self._client.execute_read(
+                """
+                MATCH (a:ArchitectureDocument)
+                WHERE toLower(coalesce(a.service_name, '')) = toLower($service_name)
+                RETURN coalesce(a.document_id, a.id) AS document_id,
+                       a.title AS title,
+                       a.summary AS summary,
+                       a.service_name AS service_name,
+                       a.subsystem AS subsystem,
+                       a.components AS components,
+                       a.url AS url,
+                       0.75 AS relevance,
+                       a.updated_at AS updated_at
+                ORDER BY a.updated_at DESC
+                LIMIT $limit
+                """,
+                {"service_name": service, "limit": max_rows},
+            )
+            for row in rows:
+                record = _architecture_from_row(row)
+                if record.document_id and record.document_id not in by_id:
+                    by_id[record.document_id] = record
+
+        ordered = sorted(
+            by_id.values(),
+            key=lambda item: (-item.relevance, item.document_id),
+        )
+        return ordered[:max_rows]
+
     def get_previous_similar_investigations(
         self,
         *,
@@ -507,6 +611,38 @@ def _runbook_from_row(row: dict[str, Any]) -> GraphRunbookRecord:
         url=_row_str(row, "url"),
         space_key=_row_str(row, "space_key"),
         updated_at=row.get("updated_at"),
+    )
+
+
+def _architecture_from_row(row: dict[str, Any]) -> GraphArchitectureDocumentRecord:
+    subsystem = _row_str(row, "subsystem")
+    if not subsystem:
+        components = _row_str(row, "components")
+        if components:
+            subsystem = components.split(",")[0].strip()
+    return GraphArchitectureDocumentRecord(
+        document_id=_row_str(row, "document_id"),
+        title=_row_str(row, "title"),
+        summary=_row_str(row, "summary"),
+        service=_row_str(row, "service_name"),
+        subsystem=subsystem,
+        document_url=_row_str(row, "url"),
+        relevance=_row_float(row, "relevance", 0.0),
+    )
+
+
+def get_architecture_documents(
+    client: Neo4jClient,
+    *,
+    investigation_id: str = "",
+    service_name: str = "",
+    limit: int | None = None,
+) -> list[GraphArchitectureDocumentRecord]:
+    """Return architecture documents for an investigation and/or service."""
+    return InvestigationGraphRetriever(client).get_architecture_documents(
+        investigation_id=investigation_id,
+        service_name=service_name,
+        limit=limit,
     )
 
 

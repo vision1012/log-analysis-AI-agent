@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from mcp.config import MCPFetchParams, mcp_enabled
+from mcp.config import MCPFetchParams, default_enabled_sources, mcp_enabled
 from mcp.context.alert_incident_correlator import correlate_alert_incident_and_attach_metadata
 from mcp.context.build_commit_correlator import correlate_and_attach_metadata
 from mcp.context.deployment_kubernetes_correlator import (
@@ -16,6 +16,7 @@ from mcp.context.deployment_observability_correlator import (
 from mcp.context.knowledge_context_correlator import correlate_knowledge_and_attach_metadata
 from mcp.context.investigation_context import UnifiedInvestigationContext
 from mcp.evidence_coverage import attach_evidence_coverage
+from mcp.integration_resolver import resolve_runtime_connection, resolve_workspace_mcp_sources
 from mcp.registry import get_provider_class, registered_sources
 from mcp.schemas.common import ProviderHealth
 
@@ -35,13 +36,36 @@ class MCPOrchestrator:
         if not mcp_enabled():
             return attach_evidence_coverage(UnifiedInvestigationContext())
 
+        ws = (params.workspace_id or "").strip()
+        database_only = bool(ws)
+        if params.enabled_sources is not None:
+            enabled_sources = list(params.enabled_sources)
+            require_db_connection = False
+        elif ws:
+            enabled_sources = resolve_workspace_mcp_sources(ws) or []
+            require_db_connection = True
+        else:
+            enabled_sources = default_enabled_sources()
+            require_db_connection = False
+
         context = UnifiedInvestigationContext()
-        for source in params.enabled_sources:
+        for source in enabled_sources:
             if source not in registered_sources():
                 logger.warning("mcp.orchestrator.skip unknown source=%s", source)
                 continue
+            runtime_connection = resolve_runtime_connection(params, source)
+            if require_db_connection and database_only and runtime_connection is None:
+                logger.info(
+                    "mcp.orchestrator.skip unconfigured workspace source=%s workspace_id=%s",
+                    source,
+                    ws,
+                )
+                continue
             provider_cls = get_provider_class(source)
-            provider = provider_cls()
+            provider = provider_cls(
+                runtime_connection=runtime_connection,
+                database_only=database_only,
+            )
             if not provider.is_enabled():
                 continue
             try:
@@ -58,9 +82,9 @@ class MCPOrchestrator:
                 )
             )
         )
-        return attach_evidence_coverage(context)
+        return attach_evidence_coverage(context, workspace_id=params.workspace_id)
 
-    def health_status(self) -> list[ProviderHealth]:
+    def health_status(self, *, workspace_id: str = "") -> list[ProviderHealth]:
         if not mcp_enabled():
             return [
                 ProviderHealth(
@@ -73,8 +97,17 @@ class MCPOrchestrator:
                 for src in registered_sources()
             ]
         out: list[ProviderHealth] = []
+        ws = (workspace_id or "").strip()
         for source in registered_sources():
-            provider = get_provider_class(source)()
+            runtime_connection = None
+            if ws:
+                from mcp.integration_resolver import resolve_runtime_connection_for_workspace
+
+                runtime_connection = resolve_runtime_connection_for_workspace(ws, source)
+            provider = get_provider_class(source)(
+                runtime_connection=runtime_connection,
+                database_only=bool(ws),
+            )
             out.append(provider.health_check())
         return out
 

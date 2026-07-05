@@ -25,3 +25,4 @@ class McpPullRequest(BaseModel):
     merged_at: Optional[str] = None
     changed_files: List[str] = Field(default_factory=list)
     url: str = ""
+    reviewers: List[str] = Field(default_factory=list)

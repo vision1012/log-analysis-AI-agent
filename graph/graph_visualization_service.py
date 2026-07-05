@@ -24,6 +24,7 @@ VISUALIZATION_NODE_TYPES = frozenset(
         "PagerDutyIncident",
         "Runbook",
         "KnownIssue",
+        "ArchitectureDocument",
         "Service",
         "Pod",
         "Node",
@@ -48,8 +49,8 @@ RELATIONSHIP_TYPE_MAP: dict[str, str] = {
     "HAS_CONTAINER": "PART_OF",
     "RUNS_ON": "PART_OF",
     "HAS_RUNBOOK": "HAS_RUNBOOK",
+    "HAS_ARCHITECTURE_DOC": "HAS_ARCHITECTURE_DOC",
     "MATCHES_KNOWN_ISSUE": "MATCHES_KNOWN_ISSUE",
-    "HAS_ARCHITECTURE_DOC": "RELATED_TO",
     "HAS_FEEDBACK": "HAS_FEEDBACK",
     "TARGETS_CANDIDATE": "TARGETS_CANDIDATE",
 }
@@ -92,6 +93,8 @@ def _node_key(node_type: str, props: dict[str, Any]) -> str:
         return str(props.get("feedback_id") or props.get("id") or "")
     if node_type == "RCACandidate":
         return str(props.get("candidate_id") or props.get("id") or "")
+    if node_type == "ArchitectureDocument":
+        return str(props.get("document_id") or props.get("id") or "")
     return str(props.get("id") or props.get("sha") or props.get("issue_key") or props.get("name") or "")
 
 

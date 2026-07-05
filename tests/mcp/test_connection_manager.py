@@ -79,7 +79,9 @@ def test_validate_provider_unknown_name_raises(mock_get_provider_class) -> None:
 
 
 @patch("mcp.connection_manager.get_provider_class")
-def test_validate_all_connections_returns_all_providers(mock_get_provider_class) -> None:
+def test_validate_all_connections_without_workspace_uses_env_providers(
+    mock_get_provider_class,
+) -> None:
     def _provider_for(source: str):
         provider = MagicMock()
         provider.health_check.return_value = _health(source)
@@ -100,6 +102,52 @@ def test_validate_all_connections_returns_all_providers(mock_get_provider_class)
         "pagerduty",
         "confluence",
     }
+
+
+@patch("mcp.connection_manager._validate_runtime")
+@patch("mcp.connection_manager.runtime_connection_from_row")
+@patch("mcp.connection_manager._list_enabled_workspace_connections")
+def test_validate_all_connections_with_workspace_uses_db_rows(
+    mock_list_rows,
+    mock_runtime_from_row,
+    mock_validate_runtime,
+) -> None:
+    row_jira = MagicMock()
+    row_jira.id = "conn-jira"
+    row_jira.provider = "jira"
+    row_jira.display_name = "Jira Prod"
+    row_jira.is_enabled = True
+
+    row_github = MagicMock()
+    row_github.id = "conn-github"
+    row_github.provider = "github"
+    row_github.display_name = "GitHub Prod"
+    row_github.is_enabled = True
+
+    mock_list_rows.return_value = [row_jira, row_github]
+    mock_runtime_from_row.return_value = MagicMock()
+    mock_validate_runtime.side_effect = [
+        MagicMock(provider="jira", configured=True, healthy=True, last_checked="t1"),
+        MagicMock(provider="github", configured=True, healthy=True, last_checked="t2"),
+    ]
+
+    statuses = validate_all_connections(workspace_id="ws-1", force_refresh=True)
+
+    assert len(statuses) == 2
+    mock_list_rows.assert_called_once_with("ws-1")
+    assert mock_validate_runtime.call_count == 2
+
+
+@patch("mcp.connection_manager.resolve_runtime_connection_for_workspace")
+def test_validate_provider_with_workspace_missing_connection(mock_resolve) -> None:
+    mock_resolve.return_value = None
+
+    status = validate_provider("jira", workspace_id="ws-1")
+
+    assert status.provider == "jira"
+    assert status.configured is False
+    assert status.healthy is False
+    assert status.error_message == "no integration connection configured"
 
 
 @patch("mcp.connection_manager.get_provider_class")
