@@ -817,8 +817,9 @@ class InvestigationGraphWriter:
         if context.ticket_context:
             ticket_key_ref = self.upsert_jira_ticket(context.ticket_context, _batch=batch)
             counts["nodes"] += 1
+            self.link_investigation_jira_ticket(investigation_id, ticket_key_ref, _batch=batch)
             self.link_investigation_references_ticket(investigation_id, ticket_key_ref, _batch=batch)
-            counts["relationships"] += 1
+            counts["relationships"] += 2
 
         commit_shas: list[str] = []
         for commit in context.commits:

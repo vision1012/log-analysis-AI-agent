@@ -144,7 +144,7 @@ async def mcp_context_preview(
         provider_connection_ids=dict(body.provider_connection_ids or {}),
         start_time=body.start_time,
         end_time=body.end_time,
-        enabled_sources=body.enabled_sources or default_enabled_sources(),
+        enabled_sources=body.enabled_sources,
     )
     context = orchestrator.fetch_context(params)
     return context.model_dump()

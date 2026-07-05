@@ -38,11 +38,15 @@ class MCPOrchestrator:
 
         ws = (params.workspace_id or "").strip()
         database_only = bool(ws)
-        if ws:
-            workspace_sources = resolve_workspace_mcp_sources(ws)
-            enabled_sources = workspace_sources or []
+        if params.enabled_sources is not None:
+            enabled_sources = list(params.enabled_sources)
+            require_db_connection = False
+        elif ws:
+            enabled_sources = resolve_workspace_mcp_sources(ws) or []
+            require_db_connection = True
         else:
-            enabled_sources = list(params.enabled_sources or default_enabled_sources())
+            enabled_sources = default_enabled_sources()
+            require_db_connection = False
 
         context = UnifiedInvestigationContext()
         for source in enabled_sources:
@@ -50,7 +54,7 @@ class MCPOrchestrator:
                 logger.warning("mcp.orchestrator.skip unknown source=%s", source)
                 continue
             runtime_connection = resolve_runtime_connection(params, source)
-            if database_only and runtime_connection is None:
+            if require_db_connection and database_only and runtime_connection is None:
                 logger.info(
                     "mcp.orchestrator.skip unconfigured workspace source=%s workspace_id=%s",
                     source,

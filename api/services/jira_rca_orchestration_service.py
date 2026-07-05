@@ -653,7 +653,7 @@ def _fetch_mcp_context_and_enrich_hints(
     Returns enriched hints and the raw MCP context (when fetched).
     """
     try:
-        from mcp.config import MCPFetchParams, default_enabled_sources, mcp_enabled
+        from mcp.config import MCPFetchParams, mcp_enabled
         from mcp.context.context_builder import enrich_ticket_hints
         from mcp.context.investigation_context import UnifiedInvestigationContext
         from mcp.orchestrator import MCPOrchestrator
@@ -676,7 +676,6 @@ def _fetch_mcp_context_and_enrich_hints(
         provider_connection_ids=dict(provider_connection_ids or {}),
         start_time=tw.get("start"),
         end_time=tw.get("end"),
-        enabled_sources=default_enabled_sources(),
     )
     try:
         context = MCPOrchestrator().fetch_context(params)

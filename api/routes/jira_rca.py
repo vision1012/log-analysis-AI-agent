@@ -1,12 +1,11 @@
 """JIRA-first RCA run endpoint (ticket + logs -> deterministic RCA)."""
 
-from __future__ import annotations
-
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import ValidationError
+from starlette.requests import Request
 
 from api.deps.auth import get_current_user
 from api.services.jira_rca_orchestration_service import NoUsefulSignalsError, run_jira_rca

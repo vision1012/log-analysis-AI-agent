@@ -92,7 +92,7 @@ class MCPFetchParams:
     provider_connection_ids: Dict[str, str] = field(default_factory=dict)
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    enabled_sources: List[MCPSourceName] = field(default_factory=default_enabled_sources)
+    enabled_sources: Optional[List[MCPSourceName]] = None
 
     def resolved_repo_name(self) -> str:
         explicit = (self.repo_name or "").strip()
