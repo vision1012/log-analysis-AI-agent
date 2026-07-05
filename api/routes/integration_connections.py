@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from api.deps.auth import get_current_user
 from integrations.connection_models import (
@@ -70,12 +70,17 @@ async def put_integration_connection(
     return connection_service.update_connection(current_user, connection_id, body)
 
 
-@router.delete("/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/connections/{connection_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
 async def delete_integration_connection(
     connection_id: str,
     current_user: UserResponse = Depends(get_current_user),
-) -> None:
+) -> Response:
     connection_service.delete_connection(current_user, connection_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
