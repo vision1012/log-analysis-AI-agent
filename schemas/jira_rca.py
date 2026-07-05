@@ -100,6 +100,11 @@ class JiraRcaExplanationPayload(BaseModel):
     explanation: str = ""
     remediation_suggestions: List[str] = Field(default_factory=list)
     confidence_note: str = ""
+    mcp_context_summary: Dict[str, object] = Field(default_factory=dict)
+    signal_contributions: List[Dict[str, object]] = Field(
+        default_factory=list,
+        description="MCP Signal Engine v2 contributions (value, weight, contribution, evidence)",
+    )
 
 
 class RelationshipReadyBundle(BaseModel):

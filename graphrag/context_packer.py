@@ -115,16 +115,30 @@ def _get_bundle_cached(
 def _signal_summary_from_bundle(bundle: dict[str, Any], max_signal_entries: int) -> list[dict[str, float | str]]:
     scores = bundle.get("signal_scores") or {}
     weights = bundle.get("weights_used") or DEFAULT_WEIGHTS
-    if not isinstance(scores, dict):
-        return []
-    items = sorted(
-        (
-            (str(k), _to_float(v), _to_float(weights.get(k, 0.0)))
-            for k, v in scores.items()
-        ),
-        key=lambda x: (-x[1], x[0]),
-    )[:max_signal_entries]
-    return [{"name": n, "score": s, "weight_used": w} for n, s, w in items]
+    out: list[dict[str, float | str]] = []
+    if isinstance(scores, dict):
+        items = sorted(
+            (
+                (str(k), _to_float(v), _to_float(weights.get(k, 0.0)))
+                for k, v in scores.items()
+            ),
+            key=lambda x: (-x[1], x[0]),
+        )[:max_signal_entries]
+        out.extend([{"name": n, "score": s, "weight_used": w} for n, s, w in items])
+    v2_block = bundle.get("mcp_signal_engine_v2")
+    if isinstance(v2_block, dict):
+        for entry in (v2_block.get("signals") or [])[:max_signal_entries]:
+            if not isinstance(entry, dict) or not entry.get("name"):
+                continue
+            out.append(
+                {
+                    "name": f"mcp_v2_{entry['name']}",
+                    "score": _to_float(entry.get("value")),
+                    "weight_used": _to_float(entry.get("weight")),
+                    "contribution": _to_float(entry.get("contribution")),
+                }
+            )
+    return out[:max_signal_entries]
 
 
 def _candidate_sort_key(c: dict[str, Any]) -> tuple[Any, ...]:

@@ -22,6 +22,11 @@ from rca_engine.mcp_signal_config import (
     known_issue_match_points,
     mcp_rca_signals_enabled,
 )
+from rca_engine.mcp_context_signals import (
+    MCP_CONTEXT_SIGNAL_NAMES,
+    compute_mcp_context_signals_for_path,
+    mcp_context_has_data,
+)
 
 # Decay window for recency signals (seconds)
 DECAY_WINDOW_SEC = 7 * 24 * 3600  # 7 days
@@ -463,6 +468,53 @@ def compute_signals(
                 result[fid].update(mcp_signals[fid])
             if fid in mcp_breakdowns:
                 result[fid]["score_breakdown"] = mcp_breakdowns[fid]
+
+    if mcp_context_has_data(unified_investigation_context):
+        from rca_engine.mcp_signal_engine_v2 import (
+            compute_mcp_signal_engine_v2,
+            contributions_to_bundle_fields,
+            contributions_to_signal_values,
+        )
+        from rca_engine.mcp_signal_v2_config import mcp_signal_v2_enabled
+
+        for fid in file_ids:
+            ctx_signals, ctx_refs = compute_mcp_context_signals_for_path(
+                path_by_file.get(fid, ""),
+                unified_investigation_context,
+            )
+            if any(v > 0 for v in ctx_signals.values()):
+                result[fid].update(ctx_signals)
+                result[fid]["mcp_artifact_refs"] = ctx_refs
+                existing_breakdown = result[fid].get("score_breakdown")
+                if not isinstance(existing_breakdown, dict):
+                    existing_breakdown = {}
+                for name, value in ctx_signals.items():
+                    if value > 0:
+                        existing_breakdown[f"mcp_ctx_{name}"] = round(float(value) * 3.0, 2)
+                result[fid]["score_breakdown"] = existing_breakdown
+
+            if mcp_signal_v2_enabled():
+                v2 = compute_mcp_signal_engine_v2(
+                    path_by_file.get(fid, ""),
+                    unified_investigation_context,
+                    mcp_graph_context=mcp_graph_context,
+                    service_name=str(ctx.get("service_ref") or ""),
+                    anomaly_timestamp=str(ctx.get("anomaly_ts") or "") or None,
+                    error_keywords=ticket_keywords,
+                )
+                v2_values = contributions_to_signal_values(v2)
+                if any(v > 0 for v in v2_values.values()):
+                    result[fid].update(v2_values)
+                    result[fid]["mcp_v2_contributions"] = contributions_to_bundle_fields(
+                        v2, candidate_path=path_by_file.get(fid, "")
+                    )
+                    existing_breakdown = result[fid].get("score_breakdown")
+                    if not isinstance(existing_breakdown, dict):
+                        existing_breakdown = {}
+                    for name, contrib in v2.items():
+                        if contrib.value > 0:
+                            existing_breakdown[f"mcp_v2_{name}"] = round(contrib.contribution * 100.0, 2)
+                    result[fid]["score_breakdown"] = existing_breakdown
 
     print(f"[RCA] Signals: {result}")
     return result

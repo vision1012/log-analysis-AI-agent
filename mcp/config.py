@@ -52,6 +52,16 @@ def confluence_mcp_enabled() -> bool:
     return mcp_enabled() and _env_bool("CONFLUENCE_MCP_ENABLED", default=False)
 
 
+def github_lookback_days() -> int:
+    """Days of GitHub commit/PR history to include relative to investigation time."""
+    raw = (os.environ.get("MCP_GITHUB_LOOKBACK_DAYS") or "14").strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        days = 14
+    return max(1, min(days, 90))
+
+
 def default_enabled_sources() -> List[MCPSourceName]:
     sources: List[MCPSourceName] = []
     if jira_mcp_enabled():

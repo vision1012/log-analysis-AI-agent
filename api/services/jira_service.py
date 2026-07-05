@@ -127,7 +127,7 @@ def search_tickets(
     )
     payload = _post_json_to_jira(
         cfg,
-        "/rest/api/3/search",
+        "/rest/api/3/search/jql",
         {
             "jql": jql_used,
             "maxResults": n,

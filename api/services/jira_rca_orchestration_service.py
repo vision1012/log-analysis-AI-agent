@@ -22,11 +22,25 @@ import tempfile
 import uuid
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from artifacts.investigation_store import LocalFileInvestigationStore
+from artifacts.evidence_store import LocalFileEvidenceStore
 from api.services.jira_service import fetch_ticket_context
 from api.services.rca_service import get_rca_explanation, get_rca_result_view, trigger_manual_rca
+from rca_engine.mcp_context_signals import (
+    build_mcp_evidence_bundle_fields,
+    compute_mcp_context_signals_for_path,
+    jira_log_mcp_boost,
+    mcp_context_has_data,
+)
+from rca_engine.mcp_signal_engine_v2 import (
+    compute_mcp_signal_engine_v2,
+    contributions_to_bundle_fields,
+    format_v2_explanation_snippet,
+    jira_log_v2_boost,
+)
 from rca_engine.signal_computation import extract_keyword_signals, extract_signals
 from schemas.jira import JiraExtractedHints, JiraNormalizedTicket
 from schemas.jira_rca import (
@@ -211,6 +225,8 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         rca_view=rca_view,
         log_signals=log_signals,
         run_id=str(rca_run.get("run_id") or run_id),
+        mcp_context=mcp_context,
+        ticket=ticket,
     )
     relationship_bundle = _build_relationship_bundle(
         ticket=ticket,
@@ -230,6 +246,18 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         investigation_id=investigation_id,
     )
     evidence_summary["investigation_id"] = investigation_id
+    evidence_summary["signal_contributions"] = _extract_signal_contributions(
+        _select_root_cause(rca_view)
+    )
+    _persist_mcp_v2_signals_graph(
+        investigation_id=investigation_id,
+        rca_view=rca_view,
+    )
+    _persist_matched_github_prs_graph(
+        investigation_id=investigation_id,
+        mcp_context=mcp_context,
+        rca_view=rca_view,
+    )
     logger.info(
         "jira_rca.run.success anomaly_id=%s run_id=%s investigation_id=%s",
         anomaly_id,
@@ -242,6 +270,7 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         ticket_hints=ticket_hints,
         log_signals=log_signals,
         rca_view=rca_view,
+        mcp_context=mcp_context,
     )
     return JiraRcaRunResponse(
         ticket_summary={
@@ -265,6 +294,98 @@ def run_jira_rca(request: JiraRcaRunRequest) -> JiraRcaRunResponse:
         explanation_payload=explanation_payload,
         relationship_bundle=relationship_bundle,
     )
+
+
+def _persist_matched_github_prs_graph(
+    *,
+    investigation_id: str,
+    mcp_context: object,
+    rca_view: dict[str, object],
+) -> None:
+    """Persist PR nodes/edges for MCP-matched pull requests (PR-only evidence path)."""
+    try:
+        from graph.investigation_graph_service import investigation_graph_enabled
+        from graph.investigation_writer import InvestigationGraphWriter
+        from graph.neo4j_client import Neo4jClient
+        from mcp.context.investigation_context import UnifiedInvestigationContext
+        from mcp.schemas.github_models import McpPullRequest
+        from rca_engine.mcp_context_signals import (
+            _path_matches_changed_files,
+            _pr_changed_files,
+            compute_mcp_context_signals_for_path,
+        )
+    except ImportError:
+        return
+
+    if not investigation_graph_enabled() or not isinstance(mcp_context, UnifiedInvestigationContext):
+        return
+    candidates = rca_view.get("candidate_root_causes") or []
+    if not candidates or not isinstance(candidates[0], dict):
+        return
+    path = str(candidates[0].get("path") or "")
+    if not path:
+        return
+
+    _, refs = compute_mcp_context_signals_for_path(path, mcp_context)
+    matched_numbers = {
+        str(item.get("number"))
+        for item in (refs.get("matched_pull_requests") or [])
+        if isinstance(item, dict) and item.get("number")
+    }
+    prs_to_persist: list[McpPullRequest] = []
+    if matched_numbers:
+        for pr in mcp_context.pull_requests:
+            if str(pr.number) in matched_numbers:
+                prs_to_persist.append(pr)
+    else:
+        for pr in mcp_context.pull_requests:
+            if _path_matches_changed_files(path, _pr_changed_files(pr)):
+                prs_to_persist.append(pr)
+
+    if not prs_to_persist:
+        return
+
+    client = Neo4jClient.from_env()
+    client.connect()
+    try:
+        writer = InvestigationGraphWriter(client)
+        batch: list[tuple[str, dict[str, object]]] = []
+        for pr in prs_to_persist:
+            pr_id = writer.upsert_pull_request(pr, _batch=batch)
+            writer.link_investigation_pull_request(investigation_id, pr_id, _batch=batch)
+        if batch:
+            writer.write_atomic(batch)
+    except Exception as exc:
+        logger.warning(
+            "jira_rca.graph.matched_prs_failed investigation_id=%s err=%s",
+            investigation_id,
+            exc,
+        )
+    finally:
+        client.close()
+
+
+def _persist_mcp_v2_signals_graph(
+    *,
+    investigation_id: str,
+    rca_view: dict[str, object],
+) -> None:
+    """Persist MCP Signal Engine v2 contributions for top ranked candidates."""
+    from graph.investigation_signal_persistence import persist_investigation_v2_signals_safe
+
+    candidates = rca_view.get("candidate_root_causes") or []
+    for cand in candidates[:3]:
+        if not isinstance(cand, dict):
+            continue
+        payload = cand.get("mcp_v2_contributions")
+        if not isinstance(payload, dict):
+            continue
+        path = str(cand.get("path") or "")
+        persist_investigation_v2_signals_safe(
+            investigation_id,
+            candidate_path=path,
+            contributions_payload=payload,
+        )
 
 
 def _run_deterministic_rca_for_input(ctx: RcaInputContext) -> dict[str, object]:
@@ -294,6 +415,7 @@ def _run_jira_log_deterministic_rca(ctx: RcaInputContext) -> dict[str, object]:
         file_paths=ctx.merged_signals.get("file_paths", []),
         log_content=ctx.log_content,
         run_id=ctx.run_id,
+        mcp_context=ctx.mcp_context,
     )
     if not candidates:
         fallback = _build_log_keyword_fallback_candidates(
@@ -330,6 +452,7 @@ def _rank_jira_log_candidates(
     file_paths: list[str],
     log_content: str,
     run_id: str,
+    mcp_context: object | None = None,
 ) -> list[dict[str, object]]:
     """Rank candidate file paths from deterministic log evidence."""
     unique_paths = _uniq([p for p in file_paths if p])
@@ -354,7 +477,7 @@ def _rank_jira_log_candidates(
     log_services = {svc.lower() for svc in log_signals.service_names}
     merged_services = ticket_services | log_services
 
-    scored: list[tuple[str, float, dict[str, float]]] = []
+    scored: list[tuple[str, float, dict[str, float], dict[str, object], dict[str, object]]] = []
     for path in unique_paths:
         mentions = sum(1 for ln in lines if path in ln)
         stack_mentions = sum(1 for ln in stack_lines if path in ln)
@@ -399,8 +522,30 @@ def _rank_jira_log_candidates(
             + (0.13 * last_frame_bonus)
             + (0.12 * exception_raising_frame_bonus)
         )
+        mcp_signals: dict[str, float] = {}
+        mcp_refs: dict[str, object] = {}
+        mcp_v2: dict[str, object] = {}
+        if mcp_context_has_data(mcp_context):
+            mcp_signals, mcp_refs = compute_mcp_context_signals_for_path(path, mcp_context)
+            score += jira_log_mcp_boost(mcp_signals)
+            service = next(iter(merged_services), "") if merged_services else ""
+            v2_contribs = compute_mcp_signal_engine_v2(
+                path,
+                mcp_context,
+                service_name=service,
+                anomaly_timestamp=(log_signals.time_window or {}).get("end"),
+                error_keywords=list(log_signals.error_keywords or []),
+            )
+            score += jira_log_v2_boost(v2_contribs)
+            mcp_v2 = contributions_to_bundle_fields(v2_contribs, candidate_path=path)
         signals["exception_raising_frame"] = exception_raising_frame_bonus
-        scored.append((path, score, signals))
+        if mcp_signals:
+            signals.update({f"mcp_{k}": v for k, v in mcp_signals.items() if v > 0})
+        if mcp_v2:
+            for entry in (mcp_v2.get("mcp_signal_engine_v2") or {}).get("signals") or []:
+                if isinstance(entry, dict) and entry.get("name"):
+                    signals[f"mcp_v2_{entry['name']}"] = float(entry.get("value") or 0)
+        scored.append((path, score, signals, mcp_refs, mcp_v2))
 
     scored.sort(key=lambda item: (-item[1], item[0]))
     top = scored[:3]
@@ -409,21 +554,29 @@ def _rank_jira_log_candidates(
 
     max_score = max(item[1] for item in top) or 1.0
     out: list[dict[str, object]] = []
-    for idx, (path, score, signals) in enumerate(top):
+    for idx, item in enumerate(top):
+        path = item[0]
+        score = item[1]
+        signals = item[2]
+        mcp_refs = item[3] if len(item) > 3 else {}
+        mcp_v2 = item[4] if len(item) > 4 else {}
         confidence = round(min(0.99, score / max_score), 4)
         stack_evidence = next((ln for ln in stack_lines if path in ln), "")
-        out.append(
-            {
-                "file_id": f"jira-log:{hashlib.sha1(path.encode('utf-8')).hexdigest()[:12]}",
-                "path": path,
-                "confidence": confidence,
-                "run_id": run_id,
-                "evidence_ref": None,
-                "rank": idx + 1,
-                "signal_scores": signals,
-                "stack_evidence": stack_evidence,
-            }
-        )
+        candidate: dict[str, object] = {
+            "file_id": f"jira-log:{hashlib.sha1(path.encode('utf-8')).hexdigest()[:12]}",
+            "path": path,
+            "confidence": confidence,
+            "run_id": run_id,
+            "evidence_ref": None,
+            "rank": idx + 1,
+            "signal_scores": signals,
+            "stack_evidence": stack_evidence,
+        }
+        if isinstance(mcp_refs, dict) and mcp_refs:
+            candidate["mcp_artifact_refs"] = mcp_refs
+        if isinstance(mcp_v2, dict) and mcp_v2:
+            candidate["mcp_v2_contributions"] = mcp_v2
+        out.append(candidate)
     return out
 
 
@@ -848,6 +1001,7 @@ def _build_explanation_payload(
     ticket_hints: JiraExtractedHints,
     log_signals: LogSignals,
     rca_view: dict[str, object],
+    mcp_context: object | None = None,
 ) -> JiraRcaExplanationPayload:
     root = _select_root_cause(rca_view)
     confidence = float(root.get("confidence") or 0.0)
@@ -858,11 +1012,18 @@ def _build_explanation_payload(
     base_explanation = str(expl.get("explanation_summary") or "").strip()
     if not base_explanation:
         if jira_log_mode:
-            base_explanation = (
-                "Deterministic JIRA/log RCA ranked file-path candidates from uploaded logs using "
-                "stack traces, repeated errors, keyword/path co-occurrence, and traceback depth. "
-                "JIRA text is contextual only; log-derived signals are authoritative."
-            )
+            if mcp_context_has_data(mcp_context):
+                base_explanation = (
+                    "Deterministic JIRA/log RCA ranked file-path candidates from uploaded logs using "
+                    "stack traces, repeated errors, keyword/path co-occurrence, and traceback depth. "
+                    "Log-derived signals remain authoritative; MCP Jira/GitHub context provided additive confidence."
+                )
+            else:
+                base_explanation = (
+                    "Deterministic JIRA/log RCA ranked file-path candidates from uploaded logs using "
+                    "stack traces, repeated errors, keyword/path co-occurrence, and traceback depth. "
+                    "JIRA text is contextual only; log-derived signals are authoritative."
+                )
         else:
             base_explanation = (
                 "Deterministic RCA selected the top candidate from graph evidence. "
@@ -890,7 +1051,11 @@ def _build_explanation_payload(
         root=root,
         base_explanation=base_explanation,
         confidence=confidence,
+        mcp_context=mcp_context,
+        root_mcp_refs=root.get("mcp_artifact_refs") if isinstance(root.get("mcp_artifact_refs"), dict) else {},
     )
+    mcp_summary = _build_mcp_context_summary(mcp_context, root)
+    signal_contributions = _extract_signal_contributions(root)
     return JiraRcaExplanationPayload(
         root_cause=root,
         assist_status=assist_status,
@@ -914,7 +1079,27 @@ def _build_explanation_payload(
         explanation=explanation,
         remediation_suggestions=remediation_suggestions,
         confidence_note=confidence_note,
+        mcp_context_summary=mcp_summary,
+        signal_contributions=signal_contributions,
     )
+
+
+def _extract_signal_contributions(root: dict[str, object]) -> list[dict[str, object]]:
+    """Flatten MCP v2 signal contributions from top candidate for API exposure."""
+    payload = root.get("mcp_v2_contributions")
+    if not isinstance(payload, dict):
+        return []
+    block = payload.get("mcp_signal_engine_v2")
+    if not isinstance(block, dict):
+        return []
+    signals = block.get("signals")
+    if not isinstance(signals, list):
+        return []
+    out: list[dict[str, object]] = []
+    for entry in signals:
+        if isinstance(entry, dict) and entry.get("name"):
+            out.append(dict(entry))
+    return out
 
 
 def _safe_get_rca_explanation(anomaly_id: str | None) -> dict[str, object]:
@@ -939,6 +1124,7 @@ def _select_root_cause(rca_view: dict[str, object]) -> dict[str, object]:
             "confidence": float(accepted.get("confidence") or 0.0),
             "run_id": accepted.get("run_id"),
             "evidence_ref": accepted.get("evidence_ref"),
+            "mcp_artifact_refs": accepted.get("mcp_artifact_refs"),
         }
     candidates = rca_view.get("candidate_root_causes")
     if isinstance(candidates, list) and candidates:
@@ -951,8 +1137,40 @@ def _select_root_cause(rca_view: dict[str, object]) -> dict[str, object]:
             "run_id": top.get("run_id"),
             "evidence_ref": top.get("evidence_ref"),
             "stack_evidence": top.get("stack_evidence"),
+            "mcp_artifact_refs": top.get("mcp_artifact_refs"),
         }
     return {"source": "unavailable", "confidence": 0.0}
+
+
+def _build_mcp_context_summary(
+    mcp_context: object | None,
+    root: dict[str, object],
+) -> dict[str, object]:
+    if not mcp_context_has_data(mcp_context):
+        return {}
+    path = str(root.get("path") or "")
+    _, refs = compute_mcp_context_signals_for_path(path, mcp_context)
+    commits = getattr(mcp_context, "commits", None) or []
+    prs = getattr(mcp_context, "pull_requests", None) or []
+    ticket = getattr(mcp_context, "ticket_context", None)
+    similar: list[str] = []
+    for doc in getattr(mcp_context, "known_issue_documents", None) or []:
+        title = str(getattr(doc, "title", "") or "")
+        if title:
+            similar.append(title[:120])
+    return {
+        "sources_used": list(refs.get("mcp_sources_used") or []),
+        "jira_ticket_key": refs.get("jira_ticket_key") or getattr(ticket, "issue_key", "") or "",
+        "jira_ticket_summary": refs.get("jira_ticket_summary") or getattr(ticket, "summary", "") or "",
+        "jira_status": refs.get("jira_status") or getattr(ticket, "status", "") or "",
+        "jira_labels": list(refs.get("jira_labels") or getattr(ticket, "labels", None) or []),
+        "recent_commits_count": len(commits),
+        "recent_prs_count": len(prs),
+        "matched_commits": list(refs.get("matched_commits") or []),
+        "matched_pull_requests": list(refs.get("matched_pull_requests") or []),
+        "matched_changed_files": list(refs.get("matched_changed_files") or []),
+        "similar_known_issues": similar[:5],
+    }
 
 
 def _compose_grounded_explanation(
@@ -961,14 +1179,66 @@ def _compose_grounded_explanation(
     root: dict[str, object],
     base_explanation: str,
     confidence: float,
+    mcp_context: object | None = None,
+    root_mcp_refs: dict[str, object] | None = None,
 ) -> str:
     target = str(root.get("path") or root.get("file_id") or "unknown target")
     stack_evidence = ""
     if isinstance(root.get("stack_evidence"), str) and str(root.get("stack_evidence")).strip():
         stack_evidence = f" Stack evidence: {str(root.get('stack_evidence')).strip()}."
+
+    mcp_note = ""
+    refs = root_mcp_refs or {}
+    if not refs and mcp_context_has_data(mcp_context):
+        _, refs = compute_mcp_context_signals_for_path(target, mcp_context)
+    if refs:
+        bits: list[str] = []
+        if refs.get("jira_ticket_key"):
+            bits.append(f"Jira ticket {refs['jira_ticket_key']}")
+        matched_commits = refs.get("matched_commits") or []
+        if matched_commits:
+            shas = ", ".join(str(c.get("sha", "")) for c in matched_commits[:3] if isinstance(c, dict))
+            if shas:
+                bits.append(f"recent commits ({shas})")
+        matched_prs = refs.get("matched_pull_requests") or []
+        if matched_prs:
+            pr_nums = ", ".join(
+                f"#{c.get('number')}" for c in matched_prs[:3] if isinstance(c, dict) and c.get("number")
+            )
+            if pr_nums:
+                bits.append(f"pull requests {pr_nums}")
+        matched_files = refs.get("matched_changed_files") or []
+        if matched_files:
+            bits.append(f"changed files including {matched_files[0]}")
+        if bits:
+            mcp_note = f" MCP context supports the candidate via {'; '.join(bits)}."
+
+    v2_note = ""
+    v2_payload = root.get("mcp_v2_contributions")
+    if isinstance(v2_payload, dict):
+        signals = (v2_payload.get("mcp_signal_engine_v2") or {}).get("signals") or []
+        if signals and mcp_context_has_data(mcp_context):
+            from rca_engine.mcp_signal_engine_v2 import SignalContribution, format_v2_explanation_snippet
+
+            contribs = {
+                str(s.get("name")): SignalContribution(
+                    name=str(s.get("name")),
+                    value=float(s.get("value") or 0),
+                    weight=float(s.get("weight") or 0),
+                    contribution=float(s.get("contribution") or 0),
+                    evidence=dict(s.get("evidence") or {}),
+                )
+                for s in signals
+                if isinstance(s, dict) and s.get("name")
+            }
+            snippet = format_v2_explanation_snippet(contribs)
+            if snippet:
+                v2_note = f" {snippet}"
+
     return (
         f"Ticket {ticket.ticket_key} context and uploaded log signals were processed, then deterministic RCA ranked "
-        f"{target} as the leading root-cause candidate (confidence {confidence:.2f}). {base_explanation}{stack_evidence}"
+        f"{target} as the leading root-cause candidate (confidence {confidence:.2f}). {base_explanation}"
+        f"{stack_evidence}{mcp_note}{v2_note}"
     ).strip()
 
 
@@ -1043,8 +1313,10 @@ def _build_evidence_summary(
     rca_view: dict[str, object],
     log_signals: LogSignals,
     run_id: str,
+    mcp_context: object | None = None,
+    ticket: JiraNormalizedTicket | None = None,
 ) -> dict[str, object]:
-    evidence_refs = rca_view.get("evidence_refs") or []
+    evidence_refs = list(rca_view.get("evidence_refs") or [])
     highlights: list[str] = []
     if log_signals.repeated_error_lines:
         highlights.append(f"Repeated error lines detected: {len(log_signals.repeated_error_lines)}")
@@ -1061,12 +1333,76 @@ def _build_evidence_summary(
         )
         if first_stack_line:
             highlights.append(f"Stack trace present: {first_stack_line[:180]}")
+
+    if rca_view.get("mode") == "jira_log" and not evidence_refs:
+        store = _get_evidence_store()
+        candidates = rca_view.get("candidate_root_causes") or []
+        for cand in candidates[:3]:
+            if not isinstance(cand, dict):
+                continue
+            mcp_refs = cand.get("mcp_artifact_refs") if isinstance(cand.get("mcp_artifact_refs"), dict) else {}
+            mcp_signals = {
+                k.replace("mcp_", ""): float(v)
+                for k, v in (cand.get("signal_scores") or {}).items()
+                if isinstance(k, str) and k.startswith("mcp_") and isinstance(v, (int, float))
+            }
+            bundle_payload: dict[str, object] = {
+                "rca_run_id": run_id,
+                "method": "jira_log_deterministic",
+                "attributed_path": cand.get("path"),
+                "signal_scores": cand.get("signal_scores") or {},
+                "schema_version": "1.1.0",
+                "ticket_key": ticket.ticket_key if ticket else "",
+            }
+            if mcp_refs or mcp_signals:
+                bundle_payload.update(
+                    build_mcp_evidence_bundle_fields(mcp_refs, mcp_signal_scores=mcp_signals)
+                )
+            mcp_v2 = cand.get("mcp_v2_contributions")
+            if isinstance(mcp_v2, dict) and mcp_v2:
+                bundle_payload.update(mcp_v2)
+            bundle_id = store.create_bundle(bundle_payload)
+            evidence_refs.append(bundle_id)
+            cand["evidence_ref"] = bundle_id
+            if mcp_refs.get("matched_commits"):
+                highlights.append(
+                    "MCP matched commits: "
+                    + ", ".join(
+                        str(c.get("sha", ""))
+                        for c in mcp_refs.get("matched_commits", [])[:3]
+                        if isinstance(c, dict)
+                    )
+                )
+            if mcp_refs.get("matched_pull_requests"):
+                highlights.append(
+                    "MCP matched PRs: "
+                    + ", ".join(
+                        f"#{c.get('number')}"
+                        for c in mcp_refs.get("matched_pull_requests", [])[:3]
+                        if isinstance(c, dict)
+                    )
+                )
+
+    if mcp_context_has_data(mcp_context) and not any("MCP" in h for h in highlights):
+        sources = [
+            str(getattr(m, "source", "") or "")
+            for m in (getattr(mcp_context, "source_metadata", None) or [])
+            if getattr(m, "ok", False)
+        ]
+        if sources:
+            highlights.append(f"MCP sources used: {', '.join(sorted(set(sources)))}")
+
     return {
         "bundle_count": len(evidence_refs),
         "evidence_refs": evidence_refs,
         "latest_run_id": rca_view.get("latest_run_id") or run_id,
         "evidence_highlights": highlights,
     }
+
+
+def _get_evidence_store() -> LocalFileEvidenceStore:
+    base = os.environ.get("EVIDENCE_STORE_DIR") or tempfile.gettempdir()
+    return LocalFileEvidenceStore(Path(base) / "evidence_bundles")
 
 
 def _get_investigation_store() -> LocalFileInvestigationStore:
