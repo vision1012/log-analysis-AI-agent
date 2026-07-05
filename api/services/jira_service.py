@@ -97,10 +97,11 @@ def search_tickets(
     workspace_id: str | None = None,
 ) -> JiraTicketSearchResponse:
     """
-    Search JIRA issues via ``POST /rest/api/3/search``.
+    Search JIRA issues via ``POST /rest/api/3/search/jql``.
 
-    Pass **jql** for a raw JQL query, or **q** for a simple text search (mapped to
-    ``text ~ "..." ORDER BY updated DESC``). If both are set, **jql** wins.
+    Pass **jql** for a raw JQL query, or **q** for a simple search. When **q** looks
+    like a ticket key (e.g. ``ABC-123``), it is mapped to ``issuekey = ABC-123``;
+    otherwise it uses ``text ~ "..." ORDER BY updated DESC``. If both are set, **jql** wins.
     """
     raw_jql = (jql or "").strip()
     raw_q = (q or "").strip()
@@ -112,17 +113,18 @@ def search_tickets(
             raise JiraInvalidSearchError(
                 f"search text must be at most {_MAX_SEARCH_TEXT_LEN} characters",
             )
-        escaped = _escape_jql_literal(raw_q)
-        jql_used = f'text ~ "{escaped}" ORDER BY updated DESC'
+        jql_used, search_mode = _build_search_jql_from_q(raw_q)
     else:
         raise JiraInvalidSearchError("provide query parameter q (text) or jql")
 
     cfg = _jira_config(workspace_id=workspace_id)
     n = max(1, min(int(max_results), _MAX_SEARCH_RESULTS))
 
+    if raw_jql:
+        search_mode = "jql"
     logger.info(
         "jira.ticket_search.start mode=%s max_results=%d",
-        "jql" if raw_jql else "text",
+        search_mode,
         n,
     )
     payload = _post_json_to_jira(
@@ -147,6 +149,25 @@ def search_tickets(
 def _escape_jql_literal(value: str) -> str:
     """Escape a string for use inside JQL double-quoted literals."""
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _looks_like_ticket_key(value: str) -> bool:
+    """Return True when *value* matches a JIRA issue key (e.g. ABC-123)."""
+    return bool(_TICKET_KEY_RE.fullmatch((value or "").strip().upper()))
+
+
+def _build_search_jql_from_q(q: str) -> tuple[str, str]:
+    """
+    Map a simple ``q`` parameter to JQL.
+
+    Exact ticket keys use ``issuekey = KEY``; everything else uses text search.
+  """
+    trimmed = (q or "").strip()
+    key = trimmed.upper()
+    if _looks_like_ticket_key(trimmed):
+        return f"issuekey = {key}", "issuekey"
+    escaped = _escape_jql_literal(trimmed)
+    return f'text ~ "{escaped}" ORDER BY updated DESC', "text"
 
 
 def _issue_to_search_hit(issue: dict[str, Any]) -> JiraTicketSearchHit:
@@ -176,29 +197,47 @@ def _normalize_ticket_key(ticket_key: str) -> str:
 
 
 def _jira_config(*, workspace_id: str | None = None) -> dict[str, str]:
-    """Resolve Jira config from workspace connection or fall back to environment."""
-    if workspace_id:
-        try:
-            from integrations.connection_service import resolve_connection_for_provider
+    """Resolve Jira config from workspace DB connection or fall back to environment."""
+    ws = (workspace_id or "").strip()
+    if ws:
+        from mcp.integration_resolver import resolve_runtime_connection_for_workspace
 
-            resolved = resolve_connection_for_provider(workspace_id, "jira")
-            if resolved:
-                credentials = resolved.get("credentials") or {}
-                base_url = str(resolved.get("base_url") or "").strip().rstrip("/")
-                email = str(credentials.get("email") or "").strip()
-                api_token = str(credentials.get("api_token") or "").strip()
-                if base_url and email and api_token:
-                    parsed = parse.urlparse(base_url)
-                    if parsed.scheme in {"http", "https"} and parsed.netloc:
-                        if _EMAIL_RE.fullmatch(email):
-                            return {
-                                "base_url": base_url,
-                                "email": email,
-                                "api_token": api_token,
-                            }
-        except Exception:
-            logger.debug("jira.config.db_resolution_failed workspace_id=%s", workspace_id, exc_info=True)
+        runtime = resolve_runtime_connection_for_workspace(ws, "jira")
+        if runtime is None:
+            raise JiraConfigError(f"no enabled Jira integration connection for workspace {ws}")
+        return _jira_config_from_runtime(runtime, workspace_id=ws)
     return _jira_config_from_env()
+
+
+def _jira_config_from_runtime(runtime: object, *, workspace_id: str) -> dict[str, str]:
+    """Build Jira REST config from a decrypted ProviderRuntimeConnection."""
+    base_url = str(getattr(runtime, "base_url", None) or "").strip().rstrip("/")
+    credentials = getattr(runtime, "credentials", None) or {}
+    email = str(credentials.get("email") or "").strip()
+    api_token = str(credentials.get("api_token") or "").strip()
+    connection_id = str(getattr(runtime, "connection_id", "") or "").strip()
+
+    if not base_url or not email or not api_token:
+        raise JiraConfigError(
+            f"Jira integration connection for workspace {workspace_id} is missing credentials",
+        )
+    parsed = parse.urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise JiraConfigError(
+            f"Jira integration connection for workspace {workspace_id} has invalid base URL",
+        )
+    if not _EMAIL_RE.fullmatch(email):
+        raise JiraConfigError(
+            f"Jira integration connection for workspace {workspace_id} has invalid email",
+        )
+
+    logger.info(
+        "jira.config.resolved workspace_id=%s connection_id=%s base_url=%s",
+        workspace_id,
+        connection_id or "unknown",
+        base_url,
+    )
+    return {"base_url": base_url, "email": email, "api_token": api_token}
 
 
 def _jira_config_from_env() -> dict[str, str]:
