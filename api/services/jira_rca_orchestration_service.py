@@ -1234,11 +1234,63 @@ def _compose_grounded_explanation(
             if snippet:
                 v2_note = f" {snippet}"
 
-    return (
-        f"Ticket {ticket.ticket_key} context and uploaded log signals were processed, then deterministic RCA ranked "
-        f"{target} as the leading root-cause candidate (confidence {confidence:.2f}). {base_explanation}"
-        f"{stack_evidence}{mcp_note}{v2_note}"
-    ).strip()
+    base = (base_explanation or "").strip()
+    # Prefer a substantive LLM explanation_summary as the user-facing narrative so we do not
+    # compress a multi-paragraph grounded summary into a single robotic template sentence.
+    if _is_substantive_llm_explanation(base, target=target):
+        extras = ""
+        lowered = base.lower()
+        if stack_evidence and "stack evidence" not in lowered and str(root.get("stack_evidence") or "").lower() not in lowered:
+            extras += stack_evidence
+        if mcp_note and "mcp context" not in lowered:
+            extras += mcp_note
+        if v2_note and v2_note.strip().lower() not in lowered:
+            extras += v2_note
+        return f"{base}{extras}".strip()
+
+    ticket_key = str(getattr(ticket, "ticket_key", "") or "").strip()
+    if not ticket_key or ticket_key.upper() == "UNKNOWN":
+        lead = (
+            "Analysis is primarily based on uploaded log and stack-trace evidence because usable "
+            f"ticket context was unavailable. Deterministic RCA ranked {target} as the leading "
+            f"root-cause candidate (confidence {confidence:.2f})."
+        )
+    else:
+        lead = (
+            f"Ticket {ticket_key} context and uploaded log signals were processed, then deterministic "
+            f"RCA ranked {target} as the leading root-cause candidate (confidence {confidence:.2f})."
+        )
+    return f"{lead} {base}{stack_evidence}{mcp_note}{v2_note}".strip()
+
+
+def _is_substantive_llm_explanation(text: str, *, target: str) -> bool:
+    """True when assistive explanation already looks like a full grounded narrative."""
+    body = (text or "").strip()
+    if len(body) < 240:
+        return False
+    words = [w for w in body.split() if w]
+    if len(words) < 80:
+        return False
+    paragraphs = [p for p in body.split("\n\n") if p.strip()]
+    if len(paragraphs) < 2 and len(words) < 120:
+        return False
+    lowered = body.lower()
+    # Reject known compressed/fallback stubs.
+    stub_markers = (
+        "could not produce a validated model explanation",
+        "validated fallback explanation generated",
+        "llm response unavailable",
+        "explanation detail is limited because assistive explanation text is unavailable",
+        "ticket unknown context and uploaded log signals were processed",
+    )
+    if any(marker in lowered for marker in stub_markers):
+        return False
+    target_l = (target or "").replace("\\", "/").lower().strip()
+    if target_l and target_l != "unknown target":
+        base = target_l.rsplit("/", 1)[-1]
+        if target_l not in lowered and base not in lowered:
+            return False
+    return True
 
 
 def _build_remediation_suggestions(

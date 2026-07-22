@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Mapping, Optional
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,27 @@ _ABSOLUTE_WORDS = (
     "100%",
 )
 
+# Extremely short summaries fail quality gates and fall back to deterministic text.
+_MIN_EXPLANATION_CHARS = 120
+_MIN_EXPLANATION_WORDS = 40
+
+_PATH_LIKE_RE = re.compile(
+    r"(?:(?:[A-Za-z]:)?(?:/|\\)[\w.\-]+(?:/(?:[\w.\-]+))+|(?:[\w.\-]+/){2,}[\w.\-]+\.[\w]+)"
+)
+_CONFIDENCE_RE = re.compile(
+    r"\bconfidence(?:\s+(?:score|of|is|at))?\s*[:=]?\s*(0?\.\d+|1(?:\.0+)?|\d{1,3}%)\b",
+    re.IGNORECASE,
+)
+_RERANK_PHRASES = (
+    "instead the root cause is",
+    "actual root cause is",
+    "more likely root cause",
+    "rerank",
+    "re-rank",
+    "should be ranked first",
+    "true root cause is",
+)
+
 
 def _as_float(v: Any) -> Optional[float]:
     if isinstance(v, (int, float)):
@@ -35,6 +57,20 @@ def _as_float(v: Any) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _word_count(text: str) -> int:
+    return len([w for w in re.split(r"\s+", text.strip()) if w])
+
+
+def _parse_confidence_token(token: str) -> Optional[float]:
+    raw = token.strip()
+    if raw.endswith("%"):
+        try:
+            return float(raw[:-1]) / 100.0
+        except ValueError:
+            return None
+    return _as_float(raw)
 
 
 def _allowed_candidates(context_pack: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -47,6 +83,84 @@ def _allowed_candidates(context_pack: Mapping[str, Any]) -> list[dict[str, Any]]
             out.append(c)
     out.sort(key=lambda c: int(c.get("rank") or 10_000))
     return out
+
+
+def _context_corpus(context_pack: Mapping[str, Any], *, limit: int = 400) -> str:
+    """Flatten context strings for grounded entity membership checks."""
+    chunks: list[str] = []
+
+    def _walk(value: Any, depth: int = 0) -> None:
+        if len(chunks) >= limit or depth > 6:
+            return
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                chunks.append(text.lower())
+            return
+        if isinstance(value, Mapping):
+            for item in value.values():
+                _walk(item, depth + 1)
+            return
+        if isinstance(value, list):
+            for item in value[:50]:
+                _walk(item, depth + 1)
+
+    _walk(context_pack)
+    return "\n".join(chunks)
+
+
+def _allowed_entity_tokens(context_pack: Mapping[str, Any]) -> set[str]:
+    """Collect normalized path/id tokens that may appear in a grounded explanation."""
+    tokens: set[str] = set()
+
+    def _add(value: Any) -> None:
+        text = str(value or "").strip()
+        if not text:
+            return
+        tokens.add(text.lower())
+        tokens.add(text.lower().replace("\\", "/"))
+        base = text.replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if base:
+            tokens.add(base)
+
+    for c in _allowed_candidates(context_pack):
+        _add(c.get("path"))
+        _add(c.get("file_id"))
+        cde = c.get("commit_deployment_evidence") or {}
+        if isinstance(cde, Mapping):
+            _add(cde.get("last_touch_commit_sha"))
+            _add(cde.get("deployment_id"))
+
+    jira = context_pack.get("jira_ticket_context") or {}
+    if isinstance(jira, Mapping):
+        _add(jira.get("issue_key"))
+
+    inv = context_pack.get("investigation_context") or {}
+    if isinstance(inv, Mapping):
+        for key in (
+            "related_deployments",
+            "related_alerts",
+            "related_incidents",
+            "recent_commits",
+            "previous_investigations",
+        ):
+            for item in inv.get(key) or []:
+                if not isinstance(item, Mapping):
+                    continue
+                for field in ("id", "name", "sha", "investigation_id", "ticket_key", "path"):
+                    _add(item.get(field))
+
+    similar = context_pack.get("similar_incident_context") or {}
+    if isinstance(similar, Mapping):
+        for item in similar.get("previous_investigation_summaries") or []:
+            if isinstance(item, Mapping):
+                _add(item.get("investigation_id"))
+
+    # Also harvest path-like tokens already present anywhere in packed context.
+    for match in _PATH_LIKE_RE.finditer(_context_corpus(context_pack)):
+        _add(match.group(0))
+
+    return tokens
 
 
 def _safe_fallback(
@@ -97,6 +211,70 @@ def _safe_fallback(
 def _contains_overstatement(text: str) -> bool:
     lowered = text.lower()
     return any(word in lowered for word in _ABSOLUTE_WORDS)
+
+
+def _validate_explanation_quality(
+    summary: str,
+    *,
+    context_pack: Optional[Mapping[str, Any]],
+) -> list[str]:
+    errors: list[str] = []
+    text = summary.strip()
+    if not text:
+        errors.append("explanation_summary is empty")
+        return errors
+    if len(text) < _MIN_EXPLANATION_CHARS or _word_count(text) < _MIN_EXPLANATION_WORDS:
+        errors.append("explanation_summary is extremely short")
+
+    lowered = text.lower()
+    if any(phrase in lowered for phrase in _RERANK_PHRASES):
+        errors.append("explanation_summary attempts to rerank or replace the selected candidate")
+
+    if not context_pack:
+        return errors
+
+    deterministic = _allowed_candidates(context_pack)
+    top = deterministic[0] if deterministic else {}
+    top_path = str(top.get("path") or "").strip()
+    top_conf = _as_float(top.get("confidence"))
+
+    if top_path:
+        path_norm = top_path.replace("\\", "/").lower()
+        basename = path_norm.rsplit("/", 1)[-1]
+        if path_norm not in lowered and basename not in lowered:
+            other_named = False
+            for c in deterministic[1:]:
+                other = str(c.get("path") or "").strip().replace("\\", "/").lower()
+                other_base = other.rsplit("/", 1)[-1] if other else ""
+                if other and (other in lowered or (other_base and other_base in lowered)):
+                    other_named = True
+                    break
+            if other_named:
+                errors.append("explanation_summary contradicts the selected RCA candidate")
+
+    if top_conf is not None:
+        for match in _CONFIDENCE_RE.finditer(text):
+            parsed = _parse_confidence_token(match.group(1))
+            if parsed is None:
+                continue
+            if abs(parsed - top_conf) > 0.02:
+                errors.append("explanation_summary includes a different confidence score")
+                break
+
+    allowed = _allowed_entity_tokens(context_pack)
+    corpus = _context_corpus(context_pack)
+    if allowed or corpus:
+        for match in _PATH_LIKE_RE.finditer(text):
+            token = match.group(0).strip().lower().replace("\\", "/")
+            base = token.rsplit("/", 1)[-1]
+            if token in allowed or base in allowed or token in corpus or base in corpus:
+                continue
+            if token.count("/") < 1 and "\\" not in match.group(0):
+                continue
+            errors.append("explanation_summary mentions entities not present in deterministic context")
+            break
+
+    return errors
 
 
 def validate_output(
@@ -150,6 +328,10 @@ def validate_output(
                 out_path = str(primary.get("path") or "").strip()
                 if det_path and out_path and out_path != det_path:
                     errors.append("primary_candidate.path does not match deterministic RCA top candidate")
+                det_conf = _as_float(top_det.get("confidence"))
+                out_conf = _as_float(primary.get("confidence"))
+                if det_conf is not None and out_conf is not None and abs(det_conf - out_conf) > 0.001:
+                    errors.append("primary_candidate.confidence does not match deterministic confidence")
 
         out_ranks: list[Any] = []
         for h in ranked:
@@ -172,6 +354,9 @@ def validate_output(
     align = output.get("confidence_alignment_note")
     if isinstance(align, str) and _contains_overstatement(align):
         errors.append("confidence_alignment_note overstates confidence")
+
+    if isinstance(summary, str):
+        errors.extend(_validate_explanation_quality(summary, context_pack=context_pack))
 
     # Advisory patch-direction check.
     if isinstance(patch, str) and patch.strip():
