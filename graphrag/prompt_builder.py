@@ -6,19 +6,27 @@ import json
 from typing import Any, Mapping, Optional
 
 MINIMAL_DETERMINISTIC_SYSTEM_PROMPT = (
-    "You are an RCA explanation assistant. You receive ONLY the deterministic JSON block "
-    "under deterministic_context. Do not invent files, commits, deployments, incidents, or candidates. "
-    "Do not re-rank or change confidence. "
-    "When provided, you may reference Ticket Context, Historical Feedback, Historical Incidents, "
-    "and Multi-Agent Findings (Agent Findings) only as written in deterministic_context; "
-    "do not invent additional history. "
-    "Write an assistive narrative that explains the top candidate in plain language. "
+    "You are an incident RCA explanation assistant. The deterministic RCA engine has already "
+    "selected the authoritative root-cause candidate. Your task is to explain that result using "
+    "only the supplied evidence. You must not replace, rerank, or contradict the selected "
+    "candidate. Distinguish observed evidence from reasonable interpretation. Do not invent "
+    "technical details, files, services, commits, deployments, tickets, functions, or historical "
+    "incidents that are not present in the supplied context. "
+    "Write a professional, evidence-grounded explanation_summary of approximately 180-300 words "
+    "in 2-4 readable paragraphs of plain text (no Markdown headings, no remediation bullets, "
+    "no JSON inside explanation_summary). Cover: (1) incident context from ticket/logs/stack "
+    "without overemphasizing missing ticket data; (2) the selected candidate with normalized "
+    "path/component and deterministic confidence when provided; (3) why it ranked first using "
+    "the strongest 2-4 available signals in natural language; (4) a grounded interpretation of "
+    "what likely happened, clearly labeled as interpretation where needed; (5) relevant "
+    "uncertainty or missing evidence without fabricating facts. "
+    "Keep remediation out of explanation_summary. "
     "Output strict JSON only, with exactly these keys and no others: "
     "explanation_summary, evidence_highlights, confidence_alignment_note, optional_patch_direction, limitations. "
-    "evidence_highlights must be a list of strings; each string must be copied verbatim from "
-    "deterministic_context.evidence_highlights or be a short paraphrase that does not add new facts. "
+    "evidence_highlights must be a list of strings copied verbatim from the SUPPORTING SIGNALS / "
+    "evidence highlight lines in the user prompt, or short paraphrases that add no new facts. "
     "optional_patch_direction must be advisory (use words like advisory, consider, or suggest). "
-    "If context is insufficient, say so in limitations."
+    "If context is insufficient, say so in limitations and in the uncertainty portion of the summary."
 )
 
 
@@ -123,6 +131,23 @@ def _evidence_bullet_strings(summarized_evidence: list[Mapping[str, Any]] | list
             t = item
         else:
             t = None
+        if isinstance(t, str) and t.strip() and t not in out:
+            out.append(t)
+    return out
+
+
+def _bullets_by_category(
+    summarized_evidence: list[Mapping[str, Any]] | list[str],
+    categories: set[str],
+) -> list[str]:
+    out: list[str] = []
+    for item in summarized_evidence:
+        if not isinstance(item, Mapping):
+            continue
+        cat = str(item.get("category") or "").strip().lower()
+        if cat not in categories:
+            continue
+        t = item.get("text")
         if isinstance(t, str) and t.strip() and t not in out:
             out.append(t)
     return out
@@ -248,15 +273,138 @@ def _ticket_context_block(context_pack: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _signal_lines_from_primary(primary_full: Mapping[str, Any] | None) -> list[str]:
+    if not isinstance(primary_full, Mapping):
+        return []
+    lines: list[str] = []
+    for entry in primary_full.get("signal_summary") or []:
+        if not isinstance(entry, Mapping):
+            continue
+        name = str(entry.get("name") or "").strip()
+        score = entry.get("score")
+        if not name:
+            continue
+        if score is None:
+            lines.append(name)
+        else:
+            lines.append(f"{name}={score}")
+    assessment = primary_full.get("confidence_assessment") or {}
+    if isinstance(assessment, Mapping):
+        for factor in assessment.get("supporting_factors") or []:
+            text = str(factor).strip()
+            if text and text not in lines:
+                lines.append(text)
+    return lines[:8]
+
+
+def _deployment_commit_block(primary_full: Mapping[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(primary_full, Mapping):
+        return {}
+    cde = primary_full.get("commit_deployment_evidence") or {}
+    if not isinstance(cde, Mapping):
+        return {}
+    out = {k: v for k, v in cde.items() if v not in (None, "", False, [], {})}
+    return out
+
+
+def _graph_context_lines(context_pack: Mapping[str, Any], *, limit: int = 8) -> list[str]:
+    lines: list[str] = []
+    inv = context_pack.get("investigation_context") or {}
+    if not isinstance(inv, dict):
+        return lines
+    for key, label in (
+        ("related_deployments", "deployment"),
+        ("related_alerts", "alert"),
+        ("related_incidents", "incident"),
+        ("recent_commits", "commit"),
+        ("runbooks", "runbook"),
+        ("previous_investigations", "prior investigation"),
+    ):
+        for item in inv.get(key) or []:
+            if not isinstance(item, dict):
+                continue
+            name = (
+                item.get("name")
+                or item.get("id")
+                or item.get("sha")
+                or item.get("title")
+                or item.get("investigation_id")
+                or item.get("ticket_key")
+                or ""
+            )
+            detail = item.get("summary") or item.get("match_reason") or item.get("status") or ""
+            text = f"{label}: {name}"
+            if detail:
+                text = f"{text} — {detail}"
+            text = str(text).strip()
+            if text and text not in lines:
+                lines.append(text)
+            if len(lines) >= limit:
+                return lines
+    return lines
+
+
+def _missing_evidence_lines(
+    *,
+    ticket_context: Mapping[str, Any],
+    stack_lines: list[str],
+    log_lines: list[str],
+    deploy_block: Mapping[str, Any],
+    historical_incidents: list[str],
+    graph_lines: list[str],
+) -> list[str]:
+    missing: list[str] = []
+    if not ticket_context or not (ticket_context.get("issue_key") or ticket_context.get("summary")):
+        missing.append(
+            "No usable JIRA ticket summary is present; base the incident context primarily on "
+            "uploaded log and stack-trace evidence."
+        )
+    if not stack_lines:
+        missing.append("No stack-trace evidence bullets were supplied.")
+    if not log_lines:
+        missing.append("No explicit log-evidence bullets were supplied.")
+    if not deploy_block:
+        missing.append("No deployment or commit linkage was supplied for the selected candidate.")
+    if not historical_incidents:
+        missing.append("No historical incident matches were supplied.")
+    if not graph_lines:
+        missing.append("No additional graph relationship context was supplied.")
+    return missing
+
+
+def _format_labeled_user_prompt(sections: Mapping[str, Any]) -> str:
+    """Render labeled sections for the LLM user message (still followed by JSON output contract)."""
+    lines: list[str] = [
+        "Explain the deterministic RCA result using ONLY the sections below.",
+        "Return JSON with keys: explanation_summary, evidence_highlights, "
+        "confidence_alignment_note, optional_patch_direction, limitations.",
+        "explanation_summary must be 180-300 words across 2-4 paragraphs of plain text.",
+        "",
+    ]
+    for title, value in sections.items():
+        lines.append(f"## {title}")
+        if value is None or value == "" or value == [] or value == {}:
+            lines.append("(none provided)")
+        elif isinstance(value, list):
+            for item in value:
+                lines.append(f"- {item}")
+        elif isinstance(value, Mapping):
+            lines.append(json.dumps(value, ensure_ascii=True, indent=2))
+        else:
+            lines.append(str(value))
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def build_minimal_deterministic_prompt(
     context_pack: Mapping[str, Any],
     summarized_evidence: list[Mapping[str, Any]] | list[str],
 ) -> dict[str, str]:
     """
-    Ollama/local-LLM prompt: user message contains only deterministic fields.
+    Ollama/local-LLM prompt: structured labeled sections from deterministic context only.
 
     Included: anomaly_id, primary file path, primary confidence, evidence highlight strings,
-    limitations_context (optional operator note; empty if none).
+    ticket/log/stack/deployment/graph context, and missing-evidence notes.
     """
     ranked = _extract_ranked_candidates(context_pack, max_candidates=3)
     primary = ranked[0] if ranked else {}
@@ -270,7 +418,88 @@ def build_minimal_deterministic_prompt(
     historical_incidents = _historical_incident_lines(context_pack)
     multi_agent_findings = _multi_agent_prompt_block(context_pack)
 
-    payload = {
+    primary_full = None
+    raw_candidates = context_pack.get("candidates") or []
+    if isinstance(raw_candidates, list) and raw_candidates and isinstance(raw_candidates[0], Mapping):
+        primary_full = raw_candidates[0]
+
+    stack_lines = _bullets_by_category(summarized_evidence, {"stack"})
+    log_lines = _bullets_by_category(summarized_evidence, {"log", "keyword", "path", "error"})
+    if not log_lines:
+        # Fall back to non-stack/non-candidate evidence phrasing that often carries log facts.
+        log_lines = _bullets_by_category(
+            summarized_evidence,
+            {"candidate", "commit", "deployment", "recurrence", "signal", "jira"},
+        )
+    supporting_signals = _signal_lines_from_primary(primary_full)
+    if not supporting_signals:
+        supporting_signals = bullets[:8]
+    deploy_block = _deployment_commit_block(primary_full)
+    graph_lines = _graph_context_lines(context_pack)
+    missing = _missing_evidence_lines(
+        ticket_context=ticket_context,
+        stack_lines=stack_lines,
+        log_lines=log_lines,
+        deploy_block=deploy_block,
+        historical_incidents=historical_incidents,
+        graph_lines=graph_lines,
+    )
+    if limitations_context:
+        missing.append(limitations_context)
+
+    incident_context: dict[str, Any] = {
+        "anomaly_id": context_pack.get("anomaly_id"),
+        "Ticket Context": ticket_context or jira_ticket_context or {},
+        "ticket_unavailable_guidance": (
+            "If ticket data is missing or UNKNOWN, state that analysis is primarily based on "
+            "uploaded log and stack-trace evidence; do not dwell on the missing ticket."
+        ),
+    }
+
+    sections = {
+        "INCIDENT CONTEXT": incident_context,
+        "SELECTED RCA CANDIDATE": {
+            "path": primary_path,
+            "file_id": primary.get("file_id"),
+            "rank": primary.get("rank", 1),
+            "evidence_ref": primary.get("evidence_ref"),
+        },
+        "CONFIDENCE": {
+            "deterministic_confidence": primary_confidence,
+            "note": "Use this confidence exactly when mentioning a score; do not invent another.",
+        },
+        "SUPPORTING SIGNALS": supporting_signals,
+        "STACK-TRACE EVIDENCE": stack_lines,
+        "LOG EVIDENCE": log_lines,
+        "DEPLOYMENT OR COMMIT CONTEXT": deploy_block,
+        "GRAPH CONTEXT": {
+            "relationships": graph_lines,
+            "Historical Feedback": historical_feedback,
+            "Historical Incidents": historical_incidents,
+            "Multi-Agent Findings": multi_agent_findings,
+            "Agent Findings": multi_agent_findings,
+        },
+        "MISSING EVIDENCE": missing,
+        "EVIDENCE HIGHLIGHTS (copy for evidence_highlights)": bullets[:12],
+        "OUTPUT CONTRACT": {
+            "json_only": True,
+            "required_keys": [
+                "explanation_summary",
+                "evidence_highlights",
+                "confidence_alignment_note",
+                "optional_patch_direction",
+                "limitations",
+            ],
+            "must_not_invent_entities": True,
+            "must_not_rerank": True,
+            "patch_direction_advisory_only": True,
+            "explanation_summary_words": "180-300",
+            "explanation_summary_paragraphs": "2-4",
+        },
+    }
+
+    # Preserve machine-readable keys expected by existing tests / consumers.
+    compact_json = {
         "deterministic_context": {
             "anomaly_id": context_pack.get("anomaly_id"),
             "primary_candidate_file_path": primary_path,
@@ -284,21 +513,15 @@ def build_minimal_deterministic_prompt(
             "Multi-Agent Findings": multi_agent_findings,
             "Agent Findings": multi_agent_findings,
         },
-        "output_contract": {
-            "json_only": True,
-            "required_keys": [
-                "explanation_summary",
-                "evidence_highlights",
-                "confidence_alignment_note",
-                "optional_patch_direction",
-                "limitations",
-            ],
-            "must_not_invent_entities": True,
-            "must_not_rerank": True,
-            "patch_direction_advisory_only": True,
-        },
+        "labeled_sections": list(sections.keys()),
     }
+
+    user_prompt = (
+        _format_labeled_user_prompt(sections)
+        + "\n\n## MACHINE-READABLE DETERMINISTIC CONTEXT\n"
+        + json.dumps(compact_json, ensure_ascii=True, separators=(",", ":"))
+    )
     return {
         "system": MINIMAL_DETERMINISTIC_SYSTEM_PROMPT,
-        "user": json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+        "user": user_prompt,
     }

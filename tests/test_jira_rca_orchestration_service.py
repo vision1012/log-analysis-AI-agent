@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from api.services.jira_rca_orchestration_service import (
+    _compose_grounded_explanation,
     _derive_log_signals,
     run_jira_rca,
 )
@@ -227,3 +228,67 @@ TimeoutError: OTP verification timed out
     assert resp.rca.rca_result.get("candidate_root_causes")
     assert resp.rca.evidence_summary.get("evidence_highlights")
     assert resp.explanation_payload.explanation
+
+
+def test_compose_prefers_substantive_llm_explanation() -> None:
+    ticket = JiraNormalizedTicket(
+        ticket_id="1",
+        ticket_key="UNKNOWN",
+        summary="",
+        description="",
+        comments_text="",
+        status=None,
+        priority=None,
+        labels=[],
+        created_at=None,
+        updated_at=None,
+        url="",
+        cleaned_text_body="",
+    )
+    long_summary = (
+        "Analysis is primarily based on uploaded log and stack-trace evidence. Repeated timeout "
+        "exceptions and traceback frames concentrate on /srv/auth/otp_service.py, which deterministic "
+        "RCA selected as the leading root-cause candidate with confidence 0.74.\n\n"
+        "The candidate ranked first because top-frame presence, traceback depth, and repeated error "
+        "co-occurrence reinforce the same execution path. Keyword and file-path signals align with "
+        "the same module, increasing confidence that the failure originates there rather than in "
+        "adjacent helpers.\n\n"
+        "Interpretation: during OTP verification the service likely exhausted its timeout budget "
+        "while waiting on a dependency. This is an evidence-grounded reading of the logs, not a "
+        "change to the deterministic ranking. Additional deployment and repository history should "
+        "be checked before a production code change."
+    )
+    out = _compose_grounded_explanation(
+        ticket=ticket,
+        root={"path": "/srv/auth/otp_service.py", "confidence": 0.74},
+        base_explanation=long_summary,
+        confidence=0.74,
+    )
+    assert out.startswith("Analysis is primarily based on uploaded log")
+    assert "Ticket UNKNOWN context and uploaded log signals were processed" not in out
+    assert out.count("confidence 0.74") == 1
+
+
+def test_compose_short_summary_keeps_deterministic_lead() -> None:
+    ticket = JiraNormalizedTicket(
+        ticket_id="1",
+        ticket_key="PROJ-9",
+        summary="timeout",
+        description="",
+        comments_text="",
+        status="Open",
+        priority="High",
+        labels=[],
+        created_at=None,
+        updated_at=None,
+        url="",
+        cleaned_text_body="timeout",
+    )
+    out = _compose_grounded_explanation(
+        ticket=ticket,
+        root={"path": "/srv/payments/handler.py", "confidence": 0.61},
+        base_explanation="Evidence points to deterministic candidate.",
+        confidence=0.61,
+    )
+    assert "Ticket PROJ-9 context and uploaded log signals were processed" in out
+    assert "/srv/payments/handler.py" in out

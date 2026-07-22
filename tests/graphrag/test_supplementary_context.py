@@ -212,6 +212,17 @@ def test_summarize_and_prompt_include_historical_context(
     assert "Ticket Context" in prompt["user"]
     assert "Agent Findings" in prompt["user"]
     assert "ticket_context" in prompt["user"] or "jira_ticket_context" in prompt["user"]
+    assert "## INCIDENT CONTEXT" in prompt["user"]
+    assert "## SELECTED RCA CANDIDATE" in prompt["user"]
+    assert "## CONFIDENCE" in prompt["user"]
+    assert "## SUPPORTING SIGNALS" in prompt["user"]
+    assert "## STACK-TRACE EVIDENCE" in prompt["user"]
+    assert "## LOG EVIDENCE" in prompt["user"]
+    assert "## DEPLOYMENT OR COMMIT CONTEXT" in prompt["user"]
+    assert "## GRAPH CONTEXT" in prompt["user"]
+    assert "## MISSING EVIDENCE" in prompt["user"]
+    assert "180-300" in prompt["system"]
+    assert "must not replace, rerank, or contradict" in prompt["system"].lower()
 
 
 def test_narrative_includes_supplementary_context() -> None:
@@ -258,3 +269,74 @@ def test_narrative_includes_supplementary_context() -> None:
     assert "Historical incident" in joined
     assert "Agent Findings" in joined
     assert any("Historical remediation" in item for item in narrative.remediation_candidates)
+
+
+def test_validate_output_rejects_short_or_contradicting_summary() -> None:
+    from graphrag.output_validator import validate_output
+
+    context = {
+        "anomaly_id": "an-1",
+        "candidates": [
+            {"rank": 1, "file_id": "f1", "path": "/srv/auth/handler.py", "confidence": 0.8},
+            {"rank": 2, "file_id": "f2", "path": "/srv/auth/other.py", "confidence": 0.4},
+        ],
+    }
+    base = {
+        "anomaly_id": "an-1",
+        "primary_candidate": {
+            "rank": 1,
+            "file_id": "f1",
+            "path": "/srv/auth/handler.py",
+            "confidence": 0.8,
+            "evidence_ref": "b1",
+        },
+        "ranked_hypotheses": [
+            {
+                "rank": 1,
+                "file_id": "f1",
+                "path": "/srv/auth/handler.py",
+                "confidence": 0.8,
+                "evidence_ref": "b1",
+            }
+        ],
+        "evidence_highlights": ["Candidate rank 1: /srv/auth/handler.py (confidence 0.80)."],
+        "confidence_alignment_note": "Deterministic ranking remains source of truth.",
+        "optional_patch_direction": "Advisory: inspect handler timeouts.",
+        "limitations": "",
+    }
+
+    short = dict(base)
+    short["explanation_summary"] = "Too short."
+    ok, errors = validate_output(short, context_pack=context)
+    assert not ok
+    assert any("extremely short" in e for e in errors)
+
+    wrong_conf = dict(base)
+    wrong_conf["explanation_summary"] = (
+        "The incident centers on /srv/auth/handler.py. Deterministic RCA selected this path with "
+        "confidence 0.55 even though the engine score is different. Stack frames and repeated "
+        "timeouts support this candidate. Interpretation suggests a dependency delay. Additional "
+        "deployment history should be reviewed before production changes are made to the service."
+    )
+    ok2, errors2 = validate_output(wrong_conf, context_pack=context)
+    assert not ok2
+    assert any("different confidence" in e for e in errors2)
+
+    invent = dict(base)
+    invent["explanation_summary"] = (
+        "The failure is explained by /totally/invented/service/module.py rather than the selected "
+        "candidate. Stack evidence and log keywords were reviewed. Interpretation points to a new "
+        "component never seen in context. Confidence remains aligned with deterministic ranking at "
+        "confidence 0.80 for the investigation narrative completeness requirements."
+    )
+    ok3, errors3 = validate_output(invent, context_pack=context)
+    assert not ok3
+    assert any("not present in deterministic context" in e for e in errors3)
+
+
+def test_llm_config_keeps_low_temperature_and_token_budget() -> None:
+    from graphrag.llm_client import LLMConfig
+
+    cfg = LLMConfig.from_env()
+    assert 0.1 <= cfg.temperature <= 0.3
+    assert cfg.max_tokens >= 256

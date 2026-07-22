@@ -31,7 +31,9 @@ class LLMConfig:
     timeout_sec: float = 30.0
     base_url: str = "http://localhost:11434"  # used by ollama
     api_key: Optional[str] = None  # used by openai
-    temperature: float = 0.1
+    temperature: float = 0.2
+    # Enough headroom for a 180-300 word explanation_summary plus JSON envelope.
+    max_tokens: int = 900
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
@@ -45,18 +47,33 @@ class LLMConfig:
         timeout_raw = os.getenv("GRAPHRAG_LLM_TIMEOUT_SEC", os.getenv("OLLAMA_TIMEOUT_SEC", "30"))
         base_url = os.getenv("GRAPHRAG_LLM_BASE_URL", os.getenv("OLLAMA_HOST", "http://localhost:11434"))
         api_key = os.getenv("GRAPHRAG_LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
+        temp_raw = os.getenv("GRAPHRAG_LLM_TEMPERATURE", "0.2")
+        tokens_raw = os.getenv("GRAPHRAG_LLM_MAX_TOKENS", "900")
         try:
             timeout = float(timeout_raw)
         except ValueError:
             timeout = 30.0
         # Avoid zero/negative timeouts; cap to keep callers from hanging unbounded.
         timeout = max(1.0, min(600.0, timeout))
+        try:
+            temperature = float(temp_raw)
+        except ValueError:
+            temperature = 0.2
+        # Keep generation consistent: low-temp band only.
+        temperature = max(0.1, min(0.3, temperature))
+        try:
+            max_tokens = int(tokens_raw)
+        except ValueError:
+            max_tokens = 900
+        max_tokens = max(256, min(2048, max_tokens))
         return cls(
             provider=provider,
             model=model,
             timeout_sec=timeout,
             base_url=base_url,
             api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
 
 
@@ -164,7 +181,10 @@ class GraphRAGLLMClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "options": {"temperature": self.config.temperature},
+            "options": {
+                "temperature": self.config.temperature,
+                "num_predict": self.config.max_tokens,
+            },
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -203,6 +223,7 @@ class GraphRAGLLMClient:
         response = client.chat.completions.create(
             model=self.config.model,
             temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
