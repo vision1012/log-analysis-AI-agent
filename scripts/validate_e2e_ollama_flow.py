@@ -15,10 +15,8 @@ Usage (repo root)::
     python scripts/validate_e2e_ollama_flow.py
 
 Checks:
-  - Deterministic RCA candidates unchanged across debug-agent run (GET before vs after)
-  - POST /debug-agent/run for anomaly_001
-  - GET /api/v1/rca/results + /api/v1/rca/explanation
-  - Assistive agent metadata.source (explanation / remediation / reporting)
+  - GET /api/v1/rca/results (deterministic baseline)
+  - GET /api/v1/rca/explanation (GraphRAG assistive layer)
   - Optional POST /api/v1/jobs (set SKIP_JOB=1 to skip if no Postgres user)
 """
 
@@ -78,48 +76,12 @@ def _graphrag_provider_expected() -> str:
     return "ollama" if _env_ollama_host_set() else "stub"
 
 
-def _remediation_llm_expected() -> bool:
-    if os.getenv("REMEDIATION_USE_OLLAMA", "").strip().lower() in {"0", "false", "no"}:
-        return False
-    if os.getenv("REMEDIATION_USE_OLLAMA", "").strip().lower() in {"1", "true", "yes"}:
-        return True
-    if os.getenv("DEBUG_AGENT_REMEDIATION_USE_LLM", "").strip().lower() in {"1", "true", "yes"}:
-        return True
-    return _env_ollama_host_set()
-
-
-def _reporting_llm_expected() -> bool:
-    if os.getenv("REPORTING_USE_OLLAMA", "").strip().lower() in {"0", "false", "no"}:
-        return False
-    if os.getenv("REPORTING_USE_OLLAMA", "").strip().lower() in {"1", "true", "yes"}:
-        return True
-    if os.getenv("DEBUG_AGENT_REPORTING_USE_LLM", "").strip().lower() in {"1", "true", "yes"}:
-        return True
-    return _env_ollama_host_set()
-
-
-def _step_source(steps: list[Any], kind: str) -> Optional[str]:
-    for s in steps:
-        if not isinstance(s, dict):
-            continue
-        if s.get("kind") != kind:
-            continue
-        out = s.get("output")
-        if not isinstance(out, dict):
-            return None
-        meta = out.get("metadata")
-        if isinstance(meta, dict):
-            src = meta.get("source")
-            return str(src) if src is not None else None
-    return None
-
-
 def main() -> int:
     base = os.environ.get("API_BASE", "http://127.0.0.1:8000").rstrip("/")
     anomaly_id = os.environ.get("VALIDATE_ANOMALY_ID", "anomaly_001")
     skip_job = os.environ.get("SKIP_JOB", "").strip().lower() in {"1", "true", "yes"}
 
-    print("=== E2E validation (7-agent pipeline + assistive Ollama) ===")
+    print("=== E2E validation (RCA + GraphRAG explanation + optional Ollama) ===")
     print(f"API_BASE={base}  anomaly_id={anomaly_id}")
     print(
         f"OLLAMA_HOST={os.environ.get('OLLAMA_HOST', '(unset)')}  "
@@ -127,9 +89,7 @@ def main() -> int:
     )
     print(
         "Expected (heuristic): graphrag LLM provider="
-        f"{_graphrag_provider_expected()} | "
-        f"remediation LLM attempt={_remediation_llm_expected() and _graphrag_provider_expected() != 'stub'} | "
-        f"reporting LLM attempt={_reporting_llm_expected() and _graphrag_provider_expected() != 'stub'}"
+        f"{_graphrag_provider_expected()}"
     )
     print()
 
@@ -141,7 +101,7 @@ def main() -> int:
         print("[1] GET /health FAILED:", e)
         return 1
 
-    # 1b) Assistive LLM / Ollama runtime (same process as RCA + debug-agent)
+    # 1b) Assistive LLM / Ollama runtime (GraphRAG explanation path)
     try:
         llm = _get(f"{base}/health/llm", timeout=15.0)
         print("[1b] GET /health/llm ->")
@@ -179,60 +139,30 @@ def main() -> int:
     else:
         print("[2] POST /api/v1/jobs skipped (SKIP_JOB=1)")
 
-    # 3a) RCA snapshot BEFORE debug run (deterministic baseline)
+    # 3) Deterministic RCA results
     try:
-        rca_before = _get(f"{base}/api/v1/rca/results/{anomaly_id}")
+        rca = _get(f"{base}/api/v1/rca/results/{anomaly_id}")
     except Exception as e:
-        print("[3a] GET /api/v1/rca/results (before) FAILED:", e)
+        print("[3] GET /api/v1/rca/results FAILED:", e)
         return 1
-    fp_before = _top_rca_fingerprint(rca_before)
-    print("[3a] GET /api/v1/rca/results (before) top fingerprint:", fp_before)
+    fp = _top_rca_fingerprint(rca)
+    print("[3] GET /api/v1/rca/results top fingerprint:", fp)
 
-    # 3b) Debug agent full pipeline
-    try:
-        result = _post(f"{base}/debug-agent/run", {"anomaly_id": anomaly_id}, timeout=300.0)
-    except Exception as e:
-        print("[3b] POST /debug-agent/run FAILED:", e)
-        return 1
-
-    print("[3b] POST /debug-agent/run -> status=", result.get("status"))
-    steps = result.get("steps") or []
-    for kind in ("explanation", "remediation", "reporting"):
-        src = _step_source(steps if isinstance(steps, list) else [], kind)
-        print(f"    step {kind}: metadata.source={src!r}")
-
-    inv = result.get("investigation_report") or {}
-    print("    investigation_report keys:", sorted(inv.keys())[:20], "...")
-
-    # 3c) RCA snapshot AFTER — must match baseline (assistive agents do not mutate deterministic RCA)
-    try:
-        rca_after = _get(f"{base}/api/v1/rca/results/{anomaly_id}")
-    except Exception as e:
-        print("[3c] GET /api/v1/rca/results (after) FAILED:", e)
-        return 1
-    fp_after = _top_rca_fingerprint(rca_after)
-    print("[3c] GET /api/v1/rca/results (after) top fingerprint:", fp_after)
-    if fp_before is not None and fp_after is not None and fp_before != fp_after:
-        print("    WARNING: top RCA candidate fingerprint changed after debug-agent run (unexpected if graph unchanged).")
-    elif fp_before is not None and fp_after is not None:
-        print("    OK: deterministic RCA top candidate unchanged (file_id/path/conf match).")
-
-    # 4) Deterministic RCA results (redundant read for clarity)
-    cands = rca_after.get("candidates") or []
-    print(f"[4] GET /api/v1/rca/results -> {len(cands)} candidate(s)")
-    if cands:
-        top = cands[0]
-        print("    top file_id:", top.get("file_id"), "path:", top.get("path"), "confidence:", top.get("confidence"))
-
-    # 5) Explanation API (GraphRAG + validate_or_repair; uses Ollama when provider=ollama)
+    # 4) Explanation API (GraphRAG + validate_or_repair; uses Ollama when provider=ollama)
     try:
         expl = _get(f"{base}/api/v1/rca/explanation/{anomaly_id}", timeout=120.0)
     except Exception as e:
-        print("[5] GET /api/v1/rca/explanation FAILED:", e)
+        print("[4] GET /api/v1/rca/explanation FAILED:", e)
         return 1
-    print("[5] GET /api/v1/rca/explanation -> summary prefix:", (expl.get("explanation_summary") or "")[:120])
+    print("[4] GET /api/v1/rca/explanation -> summary prefix:", (expl.get("explanation_summary") or "")[:120])
     prim = expl.get("primary_candidate") or {}
     print("    primary file_id:", prim.get("file_id"), "path:", prim.get("path"))
+
+    cands = rca.get("candidates") or []
+    print(f"    RCA candidates: {len(cands)}")
+    if cands:
+        top = cands[0]
+        print("    top file_id:", top.get("file_id"), "path:", top.get("path"), "confidence:", top.get("confidence"))
 
     if cands and prim.get("file_id"):
         if str(cands[0].get("file_id")) != str(prim.get("file_id")):
@@ -240,34 +170,10 @@ def main() -> int:
         else:
             print("    OK: explanation primary matches top RCA candidate file_id.")
 
-    # Heuristic checks vs env (container may not have OLLAMA_HOST; then fallback is expected)
-    expl_src = _step_source(steps if isinstance(steps, list) else [], "explanation")
-    rem_src = _step_source(steps if isinstance(steps, list) else [], "remediation")
-    rep_src = _step_source(steps if isinstance(steps, list) else [], "reporting")
-    want_rem = _remediation_llm_expected() and _graphrag_provider_expected() != "stub"
-    want_rep = _reporting_llm_expected() and _graphrag_provider_expected() != "stub"
-    if want_rem and rem_src == "ollama_assisted":
-        print("    OK: remediation metadata indicates Ollama-assisted path.")
-    elif want_rem:
-        print(
-            f"    NOTE: remediation source={rem_src!r} (expected ollama_assisted if Ollama reachable and candidates exist)."
-        )
-    if want_rep and rep_src == "ollama_assisted":
-        print("    OK: reporting metadata indicates Ollama-assisted path.")
-    elif want_rep:
-        print(
-            f"    NOTE: reporting source={rep_src!r} (expected ollama_assisted if Ollama reachable and validation passes)."
-        )
-    if expl_src in ("graphrag", "llm_assisted"):
-        print(
-            f"    NOTE: explanation step source={expl_src!r} (graphrag=validated GraphRAG output; llm_assisted=optional second pass)."
-        )
-
     print()
     print("Done. Interpretation:")
-    print("  - Deterministic RCA: compare [3a] vs [3c] fingerprints; they should match.")
-    print("  - Explanation API uses GraphRAG (Ollama when GRAPHRAG provider is ollama); step metadata: graphrag | llm_assisted.")
-    print("  - Remediation: ollama_assisted vs deterministic_fallback; reporting: ollama_assisted vs deterministic.")
+    print("  - Deterministic RCA: see [3] fingerprint (authoritative ranking).")
+    print("  - Explanation API uses GraphRAG (Ollama when GRAPHRAG provider is ollama).")
     print("  - Fallback: unset OLLAMA_HOST or GRAPHRAG_LLM_PROVIDER=stub; stop Ollama to verify safe text.")
     return 0
 

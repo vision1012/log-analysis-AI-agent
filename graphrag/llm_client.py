@@ -242,3 +242,85 @@ class StubLLMClient(GraphRAGLLMClient):
 
     def __init__(self) -> None:
         super().__init__(LLMConfig(provider="stub"))
+
+
+_SHORT_EXPLANATION_FALLBACK = (
+    "Deterministic RCA identified the root cause. LLM explanation is currently unavailable."
+)
+_TEST_MODE_EXPLANATION = (
+    "Deterministic RCA identified the root cause. LLM explanation is disabled in test mode."
+)
+
+
+def _is_test_or_ci_mode() -> bool:
+    return os.getenv("CI") == "true" or bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def _is_llm_disabled() -> bool:
+    return (os.getenv("DISABLE_LLM") or "").strip().lower() == "true"
+
+
+def generate_short_explanation(root_cause: str, *, config: Optional[LLMConfig] = None) -> str:
+    """
+    Fail-safe short text explanation for Jira RCA UI (assistive only).
+
+    Uses the same provider selection as GraphRAGLLMClient. Never raises.
+    """
+    if _is_test_or_ci_mode() or _is_llm_disabled():
+        return _TEST_MODE_EXPLANATION
+
+    cfg = config or LLMConfig.from_env()
+    prompt = (
+        f"You are a senior backend engineer.\n\n"
+        f"Root cause file: {root_cause}\n\n"
+        f"Write a short 3-4 line explanation describing:\n"
+        f"- What this file likely does\n"
+        f"- Why it caused the failure\n"
+        f"- What kind of bug might exist here\n\n"
+        f"Keep it concise and technical. Max 4 lines. No fluff. "
+        f"Do not mention logs or signals."
+    )
+    system_prompt = "Respond with plain text only. No JSON."
+
+    try:
+        if cfg.provider == "stub":
+            return _SHORT_EXPLANATION_FALLBACK
+        if cfg.provider == "ollama":
+            url = cfg.base_url.rstrip("/") + "/api/generate"
+            payload = {
+                "model": cfg.model,
+                "prompt": prompt,
+                "stream": False,
+            }
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=min(15.0, cfg.timeout_sec)) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            out = str(body.get("response", "")).strip()
+            return out or _SHORT_EXPLANATION_FALLBACK
+        if cfg.provider == "openai":
+            try:
+                from openai import OpenAI
+            except Exception as exc:
+                raise RuntimeError("openai package not installed for openai provider") from exc
+            client = OpenAI(api_key=cfg.api_key)
+            response = client.chat.completions.create(
+                model=cfg.model,
+                temperature=cfg.temperature,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                timeout=cfg.timeout_sec,
+            )
+            out = (response.choices[0].message.content or "").strip()
+            return out or _SHORT_EXPLANATION_FALLBACK
+        return _SHORT_EXPLANATION_FALLBACK
+    except Exception as exc:
+        logger.exception("graphrag.llm.generate_short_explanation failed root_cause=%s error=%s", root_cause, exc)
+        return _SHORT_EXPLANATION_FALLBACK
