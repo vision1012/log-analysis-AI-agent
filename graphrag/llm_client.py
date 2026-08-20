@@ -271,16 +271,20 @@ def generate_short_explanation(root_cause: str, *, config: Optional[LLMConfig] =
 
     cfg = config or LLMConfig.from_env()
     prompt = (
-        f"You are a senior backend engineer.\n\n"
-        f"Root cause file: {root_cause}\n\n"
-        f"Write a short 3-4 line explanation describing:\n"
-        f"- What this file likely does\n"
-        f"- Why it caused the failure\n"
-        f"- What kind of bug might exist here\n\n"
-        f"Keep it concise and technical. Max 4 lines. No fluff. "
-        f"Do not mention logs or signals."
+        f"You are a senior backend engineer writing an assistive RCA explanation.\n\n"
+        f"Root cause candidate: {root_cause}\n\n"
+        f"Write a clear 4-5 sentence explanation (about 4-5 short lines) that covers:\n"
+        f"1) What this file/component likely does in the system\n"
+        f"2) How the failure likely surfaces through this candidate\n"
+        f"3) What class of defect is plausible (null handling, timeout, bad config, regression, etc.)\n"
+        f"4) Why this candidate is a reasonable place to investigate next\n"
+        f"5) One caveat that this is assistive only and should be verified against evidence\n\n"
+        f"Requirements: plain prose, exactly 4 or 5 sentences, technical but readable, "
+        f"no bullet lists, no JSON, no Markdown headings, no invented file names."
     )
-    system_prompt = "Respond with plain text only. No JSON."
+    system_prompt = (
+        "Respond with plain text only. Write 4-5 complete sentences. No JSON, no bullets."
+    )
 
     try:
         if cfg.provider == "stub":

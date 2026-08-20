@@ -64,7 +64,17 @@ These checks must run after generation and before returning output:
 7. **Uncertainty check**
    - limitations/uncertainty note is present when evidence completeness is low.
 
-## 8) Failure Handling Policy
+## 8) Explanation Length and Substance Guardrails
+
+1. `explanation_summary` MUST be a substantive narrative, not a terse label or single sentence.
+2. **Target:** 4–5 complete sentences (~80–120 words) in one plain-text paragraph.
+3. **Minimum quality:** outputs below ~60 words or ~240 characters are considered too short for UI display and MAY trigger fallback handling.
+4. The model MUST still satisfy all candidate-integrity, ranking, and evidence-scope guardrails regardless of length.
+5. Length targets MUST NOT be used as an excuse to invent entities, signals, or confidence claims absent from context.
+
+See [`explanation_output_contract.md`](explanation_output_contract.md) for the full `explanation_summary` field specification.
+
+## 9) Failure Handling Policy
 
 If any mandatory validation check fails:
 

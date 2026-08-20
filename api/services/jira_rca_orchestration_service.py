@@ -1013,20 +1013,27 @@ def _build_explanation_payload(
         if jira_log_mode:
             if mcp_context_has_data(mcp_context):
                 base_explanation = (
-                    "Deterministic JIRA/log RCA ranked file-path candidates from uploaded logs using "
-                    "stack traces, repeated errors, keyword/path co-occurrence, and traceback depth. "
-                    "Log-derived signals remain authoritative; MCP Jira/GitHub context provided additive confidence."
+                    "Deterministic JIRA/log RCA ranked file-path candidates from the uploaded logs. "
+                    "Ranking used stack traces, repeated error lines, keyword/path co-occurrence, and traceback depth. "
+                    "Log-derived signals remain authoritative for attribution. "
+                    "MCP Jira/GitHub context only added supporting confidence where it matched the same candidate. "
+                    "Treat the LLM narrative as assistive guidance and verify against the evidence bundle before changing code."
                 )
             else:
                 base_explanation = (
-                    "Deterministic JIRA/log RCA ranked file-path candidates from uploaded logs using "
-                    "stack traces, repeated errors, keyword/path co-occurrence, and traceback depth. "
-                    "JIRA text is contextual only; log-derived signals are authoritative."
+                    "Deterministic JIRA/log RCA ranked file-path candidates from the uploaded logs. "
+                    "Ranking used stack traces, repeated error lines, keyword/path co-occurrence, and traceback depth. "
+                    "JIRA ticket text is contextual only; log-derived signals are authoritative. "
+                    "The top candidate should be inspected around the failing execution path and recent changes. "
+                    "Treat this narrative as assistive guidance and confirm with the stored evidence before remediation."
                 )
         else:
             base_explanation = (
-                "Deterministic RCA selected the top candidate from graph evidence. "
-                "Explanation detail is limited because assistive explanation text is unavailable."
+                "Deterministic RCA selected the top candidate from graph and evidence context. "
+                "Assistive explanation text was unavailable, so this summary stays limited to ranking facts. "
+                "Inspect the leading candidate around the failing path and compare it with recent deployments or commits. "
+                "Cross-check evidence-bundle highlights before applying fixes. "
+                "LLM narration did not alter the deterministic ranking."
             )
     confidence_note = str(expl.get("confidence_alignment_note") or "").strip()
     if not confidence_note:
@@ -1252,13 +1259,21 @@ def _compose_grounded_explanation(
     if not ticket_key or ticket_key.upper() == "UNKNOWN":
         lead = (
             "Analysis is primarily based on uploaded log and stack-trace evidence because usable "
-            f"ticket context was unavailable. Deterministic RCA ranked {target} as the leading "
-            f"root-cause candidate (confidence {confidence:.2f})."
+            f"ticket context was unavailable. Deterministic RCA ranked `{target}` as the leading "
+            f"root-cause candidate with confidence {confidence:.2f}. "
+            "Focus investigation on the failing execution path inside that candidate and any "
+            "recent related changes. "
+            "This explanation is assistive only and does not replace the deterministic ranking."
         )
     else:
         lead = (
-            f"Ticket {ticket_key} context and uploaded log signals were processed, then deterministic "
-            f"RCA ranked {target} as the leading root-cause candidate (confidence {confidence:.2f})."
+            f"Ticket {ticket_key} context and uploaded log signals were processed together. "
+            f"Deterministic RCA ranked `{target}` as the leading root-cause candidate "
+            f"with confidence {confidence:.2f}. "
+            "The ranking reflects graph and log evidence rather than LLM judgment. "
+            "Inspect that candidate around the failing path, then validate with the evidence bundle "
+            "before applying a fix. "
+            "This narrative is assistive only and must not override the deterministic result."
         )
     return f"{lead} {base}{stack_evidence}{mcp_note}{v2_note}".strip()
 

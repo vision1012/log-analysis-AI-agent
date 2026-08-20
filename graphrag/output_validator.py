@@ -190,6 +190,13 @@ def _safe_fallback(
                 highlights.append(t)
     if not highlights:
         highlights = ["Explanation fallback used deterministic RCA evidence only."]
+    path = str(primary.get("path") or primary.get("file_id") or "the top candidate")
+    confidence = primary.get("confidence", 0.0)
+    try:
+        conf_txt = f"{float(confidence):.2f}"
+    except (TypeError, ValueError):
+        conf_txt = str(confidence)
+    evidence_note = highlights[0] if highlights else "deterministic graph and evidence context"
     return {
         "anomaly_id": context_pack.get("anomaly_id") or "",
         "primary_candidate": {
@@ -200,7 +207,14 @@ def _safe_fallback(
             "evidence_ref": primary.get("evidence_ref", ""),
         },
         "ranked_hypotheses": ranked_hypotheses,
-        "explanation_summary": "Validated fallback explanation generated from deterministic RCA context.",
+        "explanation_summary": (
+            f"Validated fallback explanation generated from deterministic RCA context. "
+            f"The engine ranked `{path}` as the leading root-cause candidate "
+            f"(confidence {conf_txt}). "
+            f"Supporting evidence includes: {evidence_note}. "
+            "Inspect this candidate around the failing execution path and recent related changes. "
+            "This assistive summary does not replace or re-rank the deterministic RCA result."
+        ),
         "evidence_highlights": highlights[:8],
         "confidence_alignment_note": "Deterministic ranking remains source of truth.",
         "optional_patch_direction": "Advisory: investigate the top candidate in the latest deterministic run.",

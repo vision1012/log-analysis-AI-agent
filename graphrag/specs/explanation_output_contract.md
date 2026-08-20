@@ -56,8 +56,18 @@ Optional: a short human-readable rendering may be generated downstream from this
   - `confidence` must match or round from deterministic candidate confidence.
 
 - `explanation_summary`:
-  - Required concise summary of why top candidate is most likely.
-  - Recommended max length: 800 characters.
+  - Required narrative summary of why the deterministic top candidate is most likely.
+  - **Target length:** 4–5 complete sentences (~80–120 words) in **one short paragraph** of plain text.
+  - **Recommended bounds:** minimum ~60 words / ~240 characters for UI quality; maximum ~800 characters.
+  - **Format:** plain text only — no Markdown headings, bullet lists, or embedded JSON inside this field.
+  - **Required coverage (in order):**
+    1. Incident context from ticket, logs, and stack trace (do not overemphasize missing ticket data).
+    2. Selected candidate with normalized path/component and deterministic confidence when provided.
+    3. Why it ranked first, citing the strongest 2–4 available signals in natural language.
+    4. A grounded interpretation of what likely happened, clearly labeled as interpretation where needed.
+    5. Relevant uncertainty or missing evidence without fabricating facts.
+  - **Must not include:** remediation steps, patch instructions, or reranking language (those belong in `optional_patch_direction` or `limitations`).
+  - Downstream UI and orchestration may treat summaries below the minimum bounds as non-substantive and fall back to deterministic template text.
 
 - `evidence_highlights`:
   - Required list of concise factual bullets from graph-derived evidence.
